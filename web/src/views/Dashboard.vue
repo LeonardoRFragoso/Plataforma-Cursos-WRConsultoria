@@ -51,17 +51,6 @@
           </div>
         </AppCard>
 
-        <!-- Card de Cursos do Instrutor (INSTRUCTOR) -->
-        <AppCard v-if="isInstructor">
-          <template #header>
-            <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
-          </template>
-          <p class="text-gray-600 mb-4">Você não tem cursos atribuídos ainda.</p>
-          <AppLink to="/courses">
-            Ver todos os cursos →
-          </AppLink>
-        </AppCard>
-
         <!-- Card de Cursos do Aluno (STUDENT) -->
         <AppCard v-if="isStudent">
           <template #header>
@@ -112,7 +101,6 @@ const authStore = useAuthStore()
 
 const roleMap = {
   'admin': 'Administrador',
-  'instructor': 'Instrutor',
   'student': 'Aluno'
 }
 
@@ -122,10 +110,6 @@ const userRoleDisplay = computed(() => {
 
 const isAdmin = computed(() => {
   return authStore.userRole?.toLowerCase() === 'admin'
-})
-
-const isInstructor = computed(() => {
-  return authStore.userRole?.toLowerCase() === 'instructor'
 })
 
 const isStudent = computed(() => {

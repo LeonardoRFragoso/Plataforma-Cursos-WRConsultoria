@@ -39,7 +39,7 @@ const routes = [
     path: '/classes',
     name: 'Classes',
     component: () => import('../views/Classes.vue'),
-    meta: { requiresAuth: true, requiresInstructor: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
     path: '/students',
@@ -86,8 +86,6 @@ router.beforeEach((to, from, next) => {
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
       next('/login')
     } else if (to.meta.requiresAdmin && userRole !== 'admin') {
-      next('/dashboard')
-    } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
       next('/dashboard')
     } else {
       next()

@@ -16,12 +16,12 @@ async def seed_classes(db):
     """Popula o banco com turmas de teste."""
     print("\n📅 Populando turmas...")
 
-    # Buscar instrutor
-    stmt = select(User).where(User.email == "instructor@wrcursos.com.br")
+    # Buscar admin como responsável pelas turmas
+    stmt = select(User).where(User.email == "admin@wrcursos.com.br")
     result = await db.execute(stmt)
-    instructor = result.scalar_one_or_none()
-    if not instructor:
-        print("✗ Instrutor não encontrado, pulando turmas")
+    admin = result.scalar_one_or_none()
+    if not admin:
+        print("✗ Admin não encontrado, pulando turmas")
         return
 
     # Dados das turmas (código do curso -> dados)
@@ -80,7 +80,7 @@ async def seed_classes(db):
 
         new_class = Class(
             course_id=course.id,
-            instructor_id=instructor.id,
+            instructor_id=admin.id,
             start_date=class_data["start_date"],
             end_date=class_data["end_date"],
             max_students=class_data["max_students"],

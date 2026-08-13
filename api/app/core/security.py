@@ -63,10 +63,3 @@ async def get_current_admin(current_user: dict = Depends(get_current_user)) -> d
         )
     return current_user
 
-async def get_current_instructor(current_user: dict = Depends(get_current_user)) -> dict:
-    if current_user.get("role") not in ["admin", "instructor"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions",
-        )
-    return current_user

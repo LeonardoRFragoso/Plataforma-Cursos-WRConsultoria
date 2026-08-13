@@ -208,7 +208,7 @@ Router → View Component → Pinia Store → API Client → Backend
 
 ### User
 - Autenticação e autorização
-- Roles: admin, instructor, student
+- Roles: admin, student
 - Email único
 
 ### Course
@@ -218,7 +218,7 @@ Router → View Component → Pinia Store → API Client → Backend
 
 ### Class
 - Turma de um curso
-- Instrutor responsável
+- Responsável (admin)
 - Data início/fim, vagas, local/link EAD
 - Status: aberta, em_andamento, concluida, cancelada
 
@@ -256,7 +256,6 @@ Router → View Component → Pinia Store → API Client → Backend
 
 ### Autorização (RBAC)
 - **Admin:** Acesso total
-- **Instructor:** Gestão de turmas e presença
 - **Student:** Portal do aluno
 
 ### Validação

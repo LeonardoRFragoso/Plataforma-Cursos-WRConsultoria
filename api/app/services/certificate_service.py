@@ -113,7 +113,7 @@ class CertificateService:
         elements.append(Paragraph(f"Emitido em {formatted_date}", body_style))
         elements.append(Spacer(1, 0.4*inch))
         
-        elements.append(Paragraph(f"<b>Instrutor Responsável:</b> {instructor_name}", body_style))
+        elements.append(Paragraph(f"<b>Responsável:</b> {instructor_name}", body_style))
         elements.append(Spacer(1, 0.3*inch))
         
         elements.append(Paragraph(f"<b>Número do Certificado:</b> {certificate_number}", footer_style))
