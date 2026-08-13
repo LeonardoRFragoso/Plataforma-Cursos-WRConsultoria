@@ -1,11 +1,18 @@
-import mercado_pago
+import requests
 from app.core.config import settings
 
-sdk = mercado_pago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
-
 class MercadoPagoService:
+    BASE_URL = "https://api.mercadopago.com/v1"
+    
     @staticmethod
     async def create_preference(enrollment_id: str, amount: float, student_email: str, course_name: str):
+        """Cria uma preferência de pagamento no Mercado Pago"""
+        headers = {
+            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+            "X-Idempotency-Key": str(enrollment_id),
+        }
+        
         preference_data = {
             "items": [
                 {
@@ -26,23 +33,48 @@ class MercadoPagoService:
             "auto_return": "approved",
         }
         
-        request_options = mercado_pago.config.RequestOptions()
-        request_options.custom_headers = {
-            "X-Idempotency-Key": str(enrollment_id),
-        }
+        response = requests.post(
+            f"{MercadoPagoService.BASE_URL}/preferences",
+            json=preference_data,
+            headers=headers,
+        )
         
-        preference_response = sdk.preference().create(preference_data, request_options)
-        return preference_response
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Erro ao criar preferência: {response.text}")
     
     @staticmethod
     async def get_payment_info(payment_id: str):
-        payment_response = sdk.payment().get(payment_id)
-        return payment_response
+        """Obtém informações de um pagamento"""
+        headers = {
+            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+        }
+        
+        response = requests.get(
+            f"{MercadoPagoService.BASE_URL}/payments/{payment_id}",
+            headers=headers,
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Erro ao obter pagamento: {response.text}")
     
     @staticmethod
     async def refund_payment(payment_id: str):
-        refund_data = {
-            "id": payment_id,
+        """Reembolsa um pagamento"""
+        headers = {
+            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
         }
-        refund_response = sdk.refund().create(refund_data)
-        return refund_response
+        
+        response = requests.post(
+            f"{MercadoPagoService.BASE_URL}/payments/{payment_id}/refunds",
+            headers=headers,
+        )
+        
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Erro ao reembolsar pagamento: {response.text}")
