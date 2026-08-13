@@ -5,121 +5,149 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="flex justify-between items-center mb-8">
         <h1 class="text-3xl font-bold text-secondary-900">Cursos</h1>
-        <button
+        <AppButton
+          v-if="isAdmin || isInstructor"
           @click="showForm = true"
-          class="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
+          class="bg-primary-600 text-white"
         >
           + Novo Curso
-        </button>
+        </AppButton>
       </div>
 
-      <div v-if="showForm" class="bg-white p-6 rounded-lg shadow-md mb-8 border border-gray-200">
-        <h2 class="text-xl font-semibold text-secondary-900 mb-4">{{ editingId ? 'Editar' : 'Novo' }} Curso</h2>
+      <!-- Formulário de Curso -->
+      <AppCard v-if="showForm" class="mb-8">
+        <template #header>
+          <h2 class="text-xl font-semibold text-secondary-900">{{ editingId ? 'Editar' : 'Novo' }} Curso</h2>
+        </template>
         <form @submit.prevent="saveCourse" class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <input
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <AppInput
               v-model="form.code"
-              placeholder="Código (ex: NR-10)"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              label="Código (ex: NR-10)"
+              placeholder="NR-10"
               required
             />
-            <input
+            <AppInput
               v-model="form.name"
+              label="Nome do Curso"
               placeholder="Nome do Curso"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               required
             />
-            <input
+            <AppInput
               v-model="form.category"
+              label="Categoria"
               placeholder="Categoria"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               required
             />
-            <input
+            <AppInput
               v-model.number="form.carga_horaria"
+              label="Carga Horária"
               type="number"
-              placeholder="Carga Horária"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="40"
               required
             />
-            <input
+            <AppInput
               v-model.number="form.price"
+              label="Preço (R$)"
               type="number"
-              placeholder="Preço"
+              placeholder="0.00"
               step="0.01"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               required
             />
-            <select
-              v-model="form.modality"
-              class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              required
-            >
-              <option value="presencial">Presencial</option>
-              <option value="ead">EAD</option>
-              <option value="semipresencial">Semipresencial</option>
-            </select>
-          </div>
-          <textarea
-            v-model="form.description"
-            placeholder="Descrição"
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            rows="3"
-          ></textarea>
-          <div class="flex gap-2">
-            <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
-              Salvar
-            </button>
-            <button
-              type="button"
-              @click="showForm = false"
-              class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div v-for="course in courses" :key="course.id" class="bg-white p-6 rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-          <h3 class="text-lg font-semibold text-secondary-900">{{ course.name }}</h3>
-          <p class="text-gray-600 text-sm">{{ course.code }}</p>
-          <p class="text-gray-600 mt-2">{{ course.description }}</p>
-          <div class="mt-4 flex justify-between items-center">
-            <span class="text-primary-600 font-semibold">R$ {{ course.price }}</span>
-            <div class="space-x-2">
-              <button
-                @click="editCourse(course)"
-                class="text-blue-600 hover:text-blue-700"
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Modalidade</label>
+              <select
+                v-model="form.modality"
+                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
               >
-                Editar
-              </button>
-              <button
-                @click="deleteCourse(course.id)"
-                class="text-red-600 hover:text-red-700"
-              >
-                Deletar
-              </button>
+                <option value="presencial">Presencial</option>
+                <option value="ead">EAD</option>
+                <option value="semipresencial">Semipresencial</option>
+              </select>
             </div>
           </div>
-        </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea
+              v-model="form.description"
+              placeholder="Descrição do curso"
+              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              rows="3"
+            ></textarea>
+          </div>
+          <div class="flex gap-2">
+            <AppButton type="submit" class="bg-primary-600 text-white">
+              Salvar
+            </AppButton>
+            <AppButton
+              type="button"
+              @click="showForm = false"
+              class="bg-gray-300 text-gray-700"
+            >
+              Cancelar
+            </AppButton>
+          </div>
+        </form>
+      </AppCard>
+
+      <!-- Lista de Cursos -->
+      <div v-if="loading" class="text-center py-8">
+        <p class="text-gray-600">Carregando cursos...</p>
+      </div>
+
+      <div v-else-if="courses.length === 0" class="text-center py-8">
+        <p class="text-gray-600">Nenhum curso disponível</p>
+      </div>
+
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <AppCard v-for="course in courses" :key="course.id" class="hover:shadow-lg transition-shadow">
+          <template #header>
+            <h3 class="text-lg font-semibold text-secondary-900">{{ course.name }}</h3>
+          </template>
+          <div class="space-y-2 text-sm">
+            <p><strong>Código:</strong> {{ course.code }}</p>
+            <p><strong>Categoria:</strong> {{ course.category }}</p>
+            <p><strong>Carga Horária:</strong> {{ course.carga_horaria }}h</p>
+            <p><strong>Modalidade:</strong> {{ formatModality(course.modality) }}</p>
+            <p><strong>Preço:</strong> R$ {{ formatPrice(course.price) }}</p>
+            <p v-if="course.description" class="text-gray-600 mt-3">{{ course.description }}</p>
+          </div>
+          <div v-if="isAdmin || isInstructor" class="mt-4 flex gap-2">
+            <AppButton
+              @click="editCourse(course)"
+              class="bg-blue-600 text-white text-sm flex-1"
+            >
+              Editar
+            </AppButton>
+            <AppButton
+              @click="deleteCourse(course.id)"
+              class="bg-red-600 text-white text-sm flex-1"
+            >
+              Deletar
+            </AppButton>
+          </div>
+        </AppCard>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
+import AppCard from '../components/AppCard.vue'
+import AppButton from '../components/AppButton.vue'
+import AppInput from '../components/AppInput.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const courses = ref([])
+const loading = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
 const form = ref({
@@ -132,26 +160,46 @@ const form = ref({
   description: '',
 })
 
+const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
+const isInstructor = computed(() => authStore.userRole?.toLowerCase() === 'instructor')
+
+const formatModality = (modality) => {
+  const map = {
+    'presencial': 'Presencial',
+    'ead': 'EAD',
+    'semipresencial': 'Semipresencial'
+  }
+  return map[modality] || modality
+}
+
+const formatPrice = (price) => {
+  return parseFloat(price).toFixed(2).replace('.', ',')
+}
+
 const loadCourses = async () => {
+  loading.value = true
   try {
-    const response = await api.get('/courses/')
+    const response = await api.get('/api/v1/courses/')
     courses.value = response.data
   } catch (error) {
     console.error('Erro ao carregar cursos:', error)
+  } finally {
+    loading.value = false
   }
 }
 
 const saveCourse = async () => {
   try {
     if (editingId.value) {
-      await api.put(`/courses/${editingId.value}`, form.value)
+      await api.put(`/api/v1/courses/${editingId.value}`, form.value)
     } else {
-      await api.post('/courses/', form.value)
+      await api.post('/api/v1/courses/', form.value)
     }
     resetForm()
     loadCourses()
   } catch (error) {
     console.error('Erro ao salvar curso:', error)
+    alert('Erro ao salvar curso: ' + (error.response?.data?.detail || error.message))
   }
 }
 
@@ -162,12 +210,13 @@ const editCourse = (course) => {
 }
 
 const deleteCourse = async (id) => {
-  if (confirm('Tem certeza?')) {
+  if (confirm('Tem certeza que deseja deletar este curso?')) {
     try {
-      await api.delete(`/courses/${id}`)
+      await api.delete(`/api/v1/courses/${id}`)
       loadCourses()
     } catch (error) {
       console.error('Erro ao deletar curso:', error)
+      alert('Erro ao deletar curso')
     }
   }
 }
@@ -184,11 +233,6 @@ const resetForm = () => {
     description: '',
   }
   showForm.value = false
-}
-
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
 }
 
 onMounted(loadCourses)
