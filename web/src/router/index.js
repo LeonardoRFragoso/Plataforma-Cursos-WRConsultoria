@@ -89,26 +89,24 @@ const router = createRouter({
   routes,
 })
 
-export async function navigationGuard(to, from, next) {
+export async function navigationGuard(to) {
   const authStore = useAuthStore()
 
-  const proceed = () => {
-    const userRole = authStore.userRole?.toLowerCase()
-
-    if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-      next('/login')
-    } else if (to.meta.requiresAdmin && userRole !== 'admin') {
-      next('/dashboard')
-    } else {
-      next()
-    }
-  }
-
   if (authStore.token && !authStore.initialized) {
-    authStore.initializeUser().then(proceed)
-  } else {
-    proceed()
+    await authStore.initializeUser()
   }
+
+  const userRole = authStore.userRole?.toLowerCase()
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return { path: '/login' }
+  }
+
+  if (to.meta.requiresAdmin && userRole !== 'admin') {
+    return { path: '/dashboard' }
+  }
+
+  return true
 }
 
 router.beforeEach(navigationGuard)
