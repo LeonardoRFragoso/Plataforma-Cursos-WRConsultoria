@@ -2,9 +2,8 @@
   <div class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-        <router-link to="/dashboard" class="flex items-center space-x-2">
-          <div class="text-2xl font-bold text-primary-600">WR</div>
-          <div class="text-sm text-gray-600">Consultoria</div>
+        <router-link to="/dashboard" class="flex items-center space-x-3">
+          <img src="../assets/logo-wr.png" alt="WR Consultoria" class="h-10 w-auto" />
         </router-link>
         <button @click="handleLogout" class="text-red-600 hover:text-red-700 transition-colors">Sair</button>
       </div>

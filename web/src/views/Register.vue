@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gradient-to-br from-primary-50 to-gray-50 flex items-center justify-center">
     <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md border border-gray-200">
       <div class="text-center mb-6">
-        <div class="text-3xl font-bold text-primary-600 mb-2">WR</div>
+        <img src="../assets/logo-wr.png" alt="WR Consultoria" class="h-16 w-auto mx-auto mb-4" />
         <h2 class="text-2xl font-bold text-secondary-900">Cadastro</h2>
       </div>
       
