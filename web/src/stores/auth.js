@@ -6,7 +6,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('access_token') || null)
   const refreshToken = ref(localStorage.getItem('refresh_token') || null)
   const user = ref(null)
-  const userRole = ref(localStorage.getItem('user_role') || null)
+  const userRole = ref(null)
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -59,13 +59,19 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const initializeUser = async () => {
-    if (token.value && !user.value) {
+    if (token.value) {
       try {
         const meResponse = await api.get('/api/v1/auth/me')
         user.value = meResponse.data
         userRole.value = meResponse.data.role
         localStorage.setItem('user_role', userRole.value)
+        console.log('✓ User initialized from backend:', {
+          role: userRole.value,
+          name: user.value?.full_name,
+          email: user.value?.email
+        })
       } catch (error) {
+        console.error('✗ Failed to initialize user:', error)
         logout()
       }
     }
