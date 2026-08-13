@@ -5,11 +5,6 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 class="text-3xl font-bold text-secondary-900 mb-8">Dashboard</h1>
 
-      <!-- Debug Info -->
-      <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-        <strong>Debug:</strong> userRole={{ authStore.userRole }}, isAdmin={{ isAdmin }}, isInstructor={{ isInstructor }}, isStudent={{ isStudent }}
-      </div>
-
       <!-- Stats para ADMIN -->
       <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <AppCard>
@@ -105,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
@@ -126,9 +121,7 @@ const userRoleDisplay = computed(() => {
 })
 
 const isAdmin = computed(() => {
-  const result = authStore.userRole?.toLowerCase() === 'admin'
-  console.log('isAdmin computed:', { userRole: authStore.userRole, result })
-  return result
+  return authStore.userRole?.toLowerCase() === 'admin'
 })
 
 const isInstructor = computed(() => {
@@ -150,9 +143,4 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
-
-// Debug
-watch(() => authStore.userRole, (newRole) => {
-  console.log('Dashboard: userRole changed to', newRole)
-})
 </script>
