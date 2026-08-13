@@ -1,8 +1,9 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from app.models.user import UserRole
+import re
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -10,13 +11,22 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    cpf: Optional[str] = None
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    identifier: str
     password: str
+    
+    @field_validator('identifier')
+    @classmethod
+    def validate_identifier(cls, v):
+        if not v:
+            raise ValueError('identifier cannot be empty')
+        return v
 
 class UserResponse(UserBase):
     id: UUID
+    cpf: Optional[str] = None
     role: UserRole
     is_active: bool
     created_at: datetime
