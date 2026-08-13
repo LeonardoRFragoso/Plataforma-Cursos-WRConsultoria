@@ -6,98 +6,87 @@
         <router-link to="/" class="flex items-center">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
         </router-link>
-        <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
+        <AppLink to="/login" variant="primary">
           Login
-        </router-link>
+        </AppLink>
       </div>
     </header>
 
     <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
-      <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md border border-gray-200">
+      <AppCard class="w-full max-w-md">
         <div class="text-center mb-6">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-16 w-auto mx-auto mb-4" />
           <h2 class="text-2xl font-bold text-secondary-900">Cadastro</h2>
         </div>
       
-      <form @submit.prevent="handleRegister" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
-          <input
+        <form @submit.prevent="handleRegister" class="space-y-4">
+          <AppInput
             v-model="fullName"
             type="text"
-            required
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            label="Nome Completo"
             placeholder="Seu nome"
+            required
           />
-        </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
+          <AppInput
             v-model="email"
             type="email"
-            required
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            label="Email"
             placeholder="seu@email.com"
+            required
           />
-        </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-          <input
+          <AppInput
             v-model="password"
             type="password"
-            required
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            label="Senha"
             placeholder="••••••••"
+            required
           />
-        </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha</label>
-          <input
+          <AppInput
             v-model="confirmPassword"
             type="password"
-            required
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            label="Confirmar Senha"
             placeholder="••••••••"
+            required
+            :error="passwordError"
           />
+
+          <AppButton type="submit" :disabled="loading" class="w-full">
+            {{ loading ? 'Cadastrando...' : 'Cadastrar' }}
+          </AppButton>
+        </form>
+
+        <div v-if="error" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          {{ error }}
         </div>
 
-        <button
-          type="submit"
-          :disabled="loading"
-          class="w-full bg-primary-600 text-white py-2 rounded-md hover:bg-primary-700 disabled:opacity-50 font-semibold transition-colors"
-        >
-          {{ loading ? 'Cadastrando...' : 'Cadastrar' }}
-        </button>
-      </form>
+        <div v-if="success" class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
+          Cadastro realizado com sucesso! Faça login para continuar.
+        </div>
 
-      <div v-if="error" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-        {{ error }}
-      </div>
-
-      <div v-if="success" class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
-        Cadastro realizado com sucesso! Faça login para continuar.
-      </div>
-
-      <div class="mt-6 text-center">
-        <p class="text-gray-600">
-          Já tem conta?
-          <router-link to="/login" class="text-primary-600 hover:text-primary-700 font-semibold">
-            Faça login
-          </router-link>
-        </p>
-      </div>
-    </div>
+        <div class="mt-6 text-center">
+          <p class="text-gray-600">
+            Já tem conta?
+            <AppLink to="/login" variant="primary">
+              Faça login
+            </AppLink>
+          </p>
+        </div>
+      </AppCard>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import AppCard from '../components/AppCard.vue'
+import AppButton from '../components/AppButton.vue'
+import AppInput from '../components/AppInput.vue'
+import AppLink from '../components/AppLink.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -109,6 +98,13 @@ const confirmPassword = ref('')
 const loading = ref(false)
 const error = ref('')
 const success = ref(false)
+
+const passwordError = computed(() => {
+  if (confirmPassword.value && password.value !== confirmPassword.value) {
+    return 'As senhas não coincidem'
+  }
+  return ''
+})
 
 const handleRegister = async () => {
   if (password.value !== confirmPassword.value) {

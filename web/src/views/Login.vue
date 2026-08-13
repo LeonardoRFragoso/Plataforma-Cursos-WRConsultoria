@@ -6,49 +6,39 @@
         <router-link to="/" class="flex items-center">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
         </router-link>
-        <router-link to="/register" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
+        <AppLink to="/register" variant="primary">
           Cadastre-se
-        </router-link>
+        </AppLink>
       </div>
     </header>
 
     <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
-      <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md border border-gray-200">
+      <AppCard class="w-full max-w-md">
         <div class="text-center mb-6">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-16 w-auto mx-auto mb-4" />
           <h2 class="text-2xl font-bold text-secondary-900">Plataforma de Cursos</h2>
         </div>
         
         <form @submit.prevent="handleLogin" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">CPF ou E-mail</label>
-            <input
-              v-model="identifier"
-              type="text"
-              required
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="CPF (11 dígitos) ou seu@email.com"
-            />
-          </div>
+          <AppInput
+            v-model="identifier"
+            type="text"
+            label="CPF ou E-mail"
+            placeholder="CPF (11 dígitos) ou seu@email.com"
+            required
+          />
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-            <input
-              v-model="password"
-              type="password"
-              required
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="••••••••"
-            />
-          </div>
+          <AppInput
+            v-model="password"
+            type="password"
+            label="Senha"
+            placeholder="••••••••"
+            required
+          />
 
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full bg-primary-600 text-white py-2 rounded-md hover:bg-primary-700 disabled:opacity-50 font-semibold transition-colors"
-          >
+          <AppButton type="submit" :disabled="loading" class="w-full">
             {{ loading ? 'Entrando...' : 'Entrar' }}
-          </button>
+          </AppButton>
         </form>
 
         <div v-if="error" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
@@ -58,9 +48,9 @@
         <div class="mt-6 text-center space-y-4">
           <p class="text-gray-600">
             Não tem conta?
-            <router-link to="/register" class="text-primary-600 hover:text-primary-700 font-semibold">
+            <AppLink to="/register" variant="primary">
               Cadastre-se
-            </router-link>
+            </AppLink>
           </p>
           
           <div class="border-t border-gray-200 pt-4">
@@ -78,7 +68,7 @@
             </a>
           </div>
         </div>
-      </div>
+      </AppCard>
     </div>
   </div>
 </template>
@@ -87,6 +77,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import AppCard from '../components/AppCard.vue'
+import AppButton from '../components/AppButton.vue'
+import AppInput from '../components/AppInput.vue'
+import AppLink from '../components/AppLink.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
