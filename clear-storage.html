@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar localStorage</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #1B7A3A 0%, #047F37 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+        }
+        h1 {
+            color: #1B7A3A;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        button {
+            background: #1B7A3A;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #047F37;
+        }
+        .success {
+            color: #28a745;
+            margin-top: 20px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Limpar localStorage</h1>
+        <p>Clique no botão abaixo para limpar o localStorage e recarregar a página.</p>
+        <button onclick="clearAndReload()">Limpar e Recarregar</button>
+        <div class="success" id="success">✓ localStorage limpo! Redirecionando...</div>
+    </div>
+
+    <script>
+        function clearAndReload() {
+            localStorage.clear();
+            console.log('✓ localStorage limpo');
+            document.getElementById('success').style.display = 'block';
+            setTimeout(() => {
+                window.location.href = 'http://localhost:5174/login';
+            }, 1500);
+        }
+    </script>
+</body>
+</html>

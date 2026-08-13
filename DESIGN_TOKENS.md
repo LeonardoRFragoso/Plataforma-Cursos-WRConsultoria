@@ -1,15 +1,16 @@
-# Design Tokens - WR Plataforma de Cursos
+# Design Tokens — WR Plataforma de Cursos
 
 Paleta de cores e design tokens baseados na identidade visual da WR Consultoria e Soluções em QSMS.
 
+**Nota importante:** Todos os tokens foram alinhados com o `DESIGN_TOKENS.md` do site institucional (repositório `wrconsultoriaesolucoes`). A cor verde primária é `#1B7A3A`, conforme documentado oficialmente.
+
 ## Cores Primárias
 
-**Verde WR** - Cor principal da marca (extraída da logo)
+**Verde WR** - Cor principal da marca (conforme DESIGN_TOKENS.md do site institucional)
 ```
-#047F37 (verde WR - cor base da plataforma)
-#036B2E (verde escuro)
-#025725 (verde muito escuro)
-#E8F8EE (verde muito claro - fundo)
+#1B7A3A (verde WR - cor base da plataforma)
+#0F4620 (verde escuro)
+#E8F5E9 (verde muito claro - fundo)
 ```
 
 ## Cores Secundárias

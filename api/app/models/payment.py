@@ -1,22 +1,22 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, Enum, Float
 from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime, timezone
+from datetime import datetime
 import uuid
 from enum import Enum as PyEnum
 
 from app.core.database import Base
 
 class PaymentStatus(str, PyEnum):
-    PENDENTE = "pendente"
-    PROCESSANDO = "processando"
-    APROVADO = "aprovado"
-    RECUSADO = "recusado"
-    REEMBOLSADO = "reembolsado"
+    PENDENTE = "PENDENTE"
+    PROCESSANDO = "PROCESSANDO"
+    APROVADO = "APROVADO"
+    RECUSADO = "RECUSADO"
+    REEMBOLSADO = "REEMBOLSADO"
 
 class PaymentMethod(str, PyEnum):
-    CARTAO = "cartao"
-    BOLETO = "boleto"
-    PIX = "pix"
+    CARTAO = "CARTAO"
+    BOLETO = "BOLETO"
+    PIX = "PIX"
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -29,5 +29,5 @@ class Payment(Base):
     mercado_pago_id = Column(String, nullable=True, unique=True)
     installments = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

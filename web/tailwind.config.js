@@ -6,18 +6,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Primárias - Verde WR (#047F37)
+        // Primárias - Verde WR (#1B7A3A) conforme DESIGN_TOKENS.md do site institucional
         primary: {
-          50: '#E8F8EE',
-          100: '#C6EED4',
-          200: '#9EE0B3',
-          300: '#6BCE8E',
-          400: '#3FB86B',
-          500: '#047F37',
-          600: '#047F37',
-          700: '#036B2E',
-          800: '#025725',
-          900: '#01431C',
+          50: '#E8F5E9',
+          100: '#C8E6C9',
+          200: '#A5D6A7',
+          300: '#81C784',
+          400: '#66BB6A',
+          500: '#1B7A3A',
+          600: '#1B7A3A',
+          700: '#0F4620',
+          800: '#0D3A1A',
+          900: '#0A2E14',
         },
         // Secundárias - Azul Escuro
         secondary: {

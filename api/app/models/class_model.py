@@ -1,17 +1,17 @@
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone, date
+from datetime import datetime, date
 import uuid
 from enum import Enum as PyEnum
 
 from app.core.database import Base
 
 class ClassStatus(str, PyEnum):
-    ABERTA = "aberta"
-    EM_ANDAMENTO = "em_andamento"
-    CONCLUIDA = "concluida"
-    CANCELADA = "cancelada"
+    ABERTA = "ABERTA"
+    EM_ANDAMENTO = "EM_ANDAMENTO"
+    CONCLUIDA = "CONCLUIDA"
+    CANCELADA = "CANCELADA"
 
 class Class(Base):
     __tablename__ = "classes"
@@ -26,5 +26,5 @@ class Class(Base):
     ead_link = Column(String, nullable=True)
     status = Column(Enum(ClassStatus), default=ClassStatus.ABERTA, nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

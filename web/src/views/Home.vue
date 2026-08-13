@@ -1,18 +1,18 @@
 <template>
   <div class="min-h-screen flex flex-col">
-    <!-- Header com fundo verde escuro WR -->
-    <header class="bg-primary-700 shadow-lg">
+    <!-- Header branco com logo -->
+    <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link to="/" class="flex items-center">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
         </router-link>
         <nav class="flex items-center space-x-6">
-          <router-link to="/login" class="text-white/90 hover:text-white font-medium text-sm transition-colors">
+          <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
             Login
           </router-link>
           <router-link
             to="/register"
-            class="bg-white text-primary-700 px-5 py-2 rounded-md hover:bg-primary-50 font-semibold text-sm transition-colors"
+            class="bg-primary-600 text-white px-5 py-2 rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors"
           >
             Cadastro
           </router-link>
@@ -96,7 +96,7 @@
     <!-- Footer -->
     <footer class="bg-primary-700 text-white/80 py-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-10 w-auto mx-auto mb-4" />
+        <img src="../assets/brand/logo-wr-white.png" alt="WR Consultoria e Soluções em QSMS" class="h-10 w-auto mx-auto mb-4" />
         <p class="text-sm">WR Consultoria e Soluções em QSMS — Treinamentos NR com certificação</p>
         <p class="text-xs text-white/50 mt-2">&copy; 2026 WR Consultoria. Todos os direitos reservados.</p>
       </div>

@@ -80,14 +80,24 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-  } else if (to.meta.requiresAdmin && authStore.userRole !== 'admin') {
-    next('/dashboard')
-  } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(authStore.userRole)) {
-    next('/dashboard')
+  const proceed = () => {
+    const userRole = authStore.userRole?.toLowerCase()
+
+    if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+      next('/login')
+    } else if (to.meta.requiresAdmin && userRole !== 'admin') {
+      next('/dashboard')
+    } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
+      next('/dashboard')
+    } else {
+      next()
+    }
+  }
+
+  if (authStore.token && !authStore.initialized) {
+    authStore.initializeUser().then(proceed)
   } else {
-    next()
+    proceed()
   }
 })
 
