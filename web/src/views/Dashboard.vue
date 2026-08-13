@@ -5,6 +5,11 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 class="text-3xl font-bold text-secondary-900 mb-8">Dashboard</h1>
 
+      <!-- Debug Info -->
+      <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+        <strong>Debug:</strong> userRole={{ authStore.userRole }}, isAdmin={{ isAdmin }}, isInstructor={{ isInstructor }}, isStudent={{ isStudent }}
+      </div>
+
       <!-- Stats para ADMIN -->
       <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <AppCard>
@@ -121,7 +126,9 @@ const userRoleDisplay = computed(() => {
 })
 
 const isAdmin = computed(() => {
-  return authStore.userRole === 'ADMIN'
+  const result = authStore.userRole === 'ADMIN'
+  console.log('isAdmin computed:', { userRole: authStore.userRole, result })
+  return result
 })
 
 const isInstructor = computed(() => {
