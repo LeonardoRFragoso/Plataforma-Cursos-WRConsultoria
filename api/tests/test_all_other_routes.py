@@ -64,6 +64,9 @@ async def _create_class(client, admin_headers, course_id, admin_id):
 
 
 async def _create_student(client, admin_headers):
+    course_id = await _create_course(client, admin_headers)
+    admin_id = await _admin_id(client, admin_headers)
+    class_id = await _create_class(client, admin_headers, course_id, admin_id)
     payload = {
         "email": f"student_{uuid.uuid4().hex[:8]}@example.com",
         "full_name": "Aluno Teste",
@@ -75,6 +78,7 @@ async def _create_student(client, admin_headers):
         "city": "São Paulo",
         "state": "SP",
         "zip_code": "01000-000",
+        "class_id": class_id,
     }
     response = await client.post("/api/v1/students/", json=payload, headers=admin_headers)
     assert response.status_code == 201
@@ -359,12 +363,16 @@ class TestStudents:
         assert response.status_code == 404
 
     async def test_student_duplicate_cpf(self, client, admin_headers):
+        course_id = await _create_course(client, admin_headers)
+        admin_id = await _admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, admin_id)
         cpf = f"{uuid.uuid4().int % 10**11:011d}"
         payload = {
             "email": f"student1_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Aluno 1",
             "password": "student123",
             "cpf": cpf,
+            "class_id": class_id,
         }
         await client.post("/api/v1/students/", json=payload, headers=admin_headers)
         payload2 = {
@@ -372,6 +380,7 @@ class TestStudents:
             "full_name": "Aluno 2",
             "password": "student123",
             "cpf": cpf,
+            "class_id": class_id,
         }
         response = await client.post("/api/v1/students/", json=payload2, headers=admin_headers)
         assert response.status_code == 400
