@@ -341,6 +341,36 @@ VITE_API_URL=https://api.seu-dominio.com
 3. Push para a branch (`git push origin feature/AmazingFeature`)
 4. Abra um Pull Request
 
+## Vídeo-Aulas (Fase 3)
+
+As aulas (`Lesson`) pertencem a um `Course` e podem ter três tipos de conteúdo:
+- **UPLOAD**: vídeo hospedado em storage S3-compatível
+- **YOUTUBE**: embed via URL do vídeo
+- **VIMEO**: embed via URL do vídeo
+
+### Configuração do Storage
+
+Configure um bucket S3-compatível (Cloudflare R2, Backblaze B2, MinIO, AWS S3) e adicione ao `.env`:
+
+```env
+STORAGE_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+STORAGE_ACCESS_KEY=your-access-key
+STORAGE_SECRET_KEY=your-secret-key
+STORAGE_BUCKET=wr-videos
+STORAGE_REGION=auto
+STORAGE_WATCH_URL_EXPIRATION=7200
+```
+
+- Upload é feito **diretamente do navegador** para o storage via URL pré-assinada.
+- O backend só gera a URL e salva o `storage_key`.
+- Para assistir, o backend gera uma URL de leitura pré-assinada com expiração curta.
+
+### Acesso às Aulas
+
+- Alunos só acessam aulas após `Enrollment` com status `CONFIRMADA` ou `CONCLUIDA`.
+- Aulas `is_free_preview` podem ser acessadas sem matrícula.
+- Concluir todas as aulas obrigatórias dispara a criação automática do `Certificate`.
+
 ## Licença
 
 Propriedade da WR Consultoria e Soluções em QSMS.
