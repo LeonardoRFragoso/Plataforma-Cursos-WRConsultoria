@@ -58,6 +58,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const initializeUser = async () => {
+    if (token.value && !user.value) {
+      try {
+        const meResponse = await api.get('/api/v1/auth/me')
+        user.value = meResponse.data
+        userRole.value = meResponse.data.role
+        localStorage.setItem('user_role', userRole.value)
+      } catch (error) {
+        logout()
+      }
+    }
+  }
+
   return {
     token,
     refreshToken,
@@ -68,5 +81,6 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     refreshAccessToken,
+    initializeUser,
   }
 })
