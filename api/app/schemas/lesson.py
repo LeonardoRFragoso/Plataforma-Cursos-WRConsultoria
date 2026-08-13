@@ -1,19 +1,20 @@
-from pydantic import BaseModel
-from typing import Optional, List
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
 from app.models.lesson import LessonContentType
 
 
 class LessonBase(BaseModel):
     course_id: UUID
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     order: int = 0
     content_type: LessonContentType = LessonContentType.UPLOAD
-    video_url: Optional[str] = None
-    storage_key: Optional[str] = None
-    duration_seconds: Optional[int] = None
+    video_url: str | None = None
+    storage_key: str | None = None
+    duration_seconds: int | None = None
     is_free_preview: bool = False
 
 
@@ -22,14 +23,14 @@ class LessonCreate(LessonBase):
 
 
 class LessonUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    order: Optional[int] = None
-    content_type: Optional[LessonContentType] = None
-    video_url: Optional[str] = None
-    storage_key: Optional[str] = None
-    duration_seconds: Optional[int] = None
-    is_free_preview: Optional[bool] = None
+    title: str | None = None
+    description: str | None = None
+    order: int | None = None
+    content_type: LessonContentType | None = None
+    video_url: str | None = None
+    storage_key: str | None = None
+    duration_seconds: int | None = None
+    is_free_preview: bool | None = None
 
 
 class LessonResponse(LessonBase):
@@ -37,8 +38,7 @@ class LessonResponse(LessonBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LessonMaterialBase(BaseModel):
@@ -55,12 +55,10 @@ class LessonMaterialResponse(LessonMaterialBase):
     id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LessonProgressBase(BaseModel):
-    lesson_id: UUID
     watched_seconds: int = 0
     completed: bool = False
 
@@ -70,8 +68,8 @@ class LessonProgressCreate(LessonProgressBase):
 
 
 class LessonProgressUpdate(BaseModel):
-    watched_seconds: Optional[int] = None
-    completed: Optional[bool] = None
+    watched_seconds: int | None = None
+    completed: bool | None = None
 
 
 class LessonProgressResponse(BaseModel):
@@ -80,12 +78,11 @@ class LessonProgressResponse(BaseModel):
     lesson_id: UUID
     watched_seconds: int
     completed: bool
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseProgressResponse(BaseModel):

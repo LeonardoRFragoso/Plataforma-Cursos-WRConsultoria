@@ -1,9 +1,7 @@
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
-import pytest
-
-
+from app.core.utils import utc_now
 
 
 def _random_cpf() -> str:
@@ -37,11 +35,11 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     admin_id = me.json()["id"]
 
     # 3. Criar turma
-    start = date.today() + timedelta(days=1)
+    start = utc_now().date() + timedelta(days=1)
     end = start + timedelta(days=30)
     class_data = {
         "course_id": course_id,
-        "instructor_id": admin_id,
+        "responsible_admin_id": admin_id,
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
         "max_students": 30,

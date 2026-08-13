@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, DateTime
-from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
 import uuid
 
+from sqlalchemy import Column, DateTime, String
+from sqlalchemy.dialects.postgresql import UUID
+
 from app.core.database import Base
+from app.core.utils import utc_now
 
 
 class Company(Base):
@@ -20,5 +21,5 @@ class Company(Base):
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
     zip_code = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

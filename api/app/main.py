@@ -1,8 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import (
+    auth,
+    certificates,
+    classes,
+    companies,
+    courses,
+    enrollments,
+    lessons,
+    payments,
+    students,
+)
 from app.core.config import settings
-from app.api.routes import auth, courses, classes, students, enrollments, payments, certificates, companies, lessons
 
 app = FastAPI(
     title="WR Plataforma de Cursos",

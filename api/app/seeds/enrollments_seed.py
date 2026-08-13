@@ -5,9 +5,9 @@ Vincula alunos às turmas de exemplo.
 
 from sqlalchemy import select
 
+from app.models.class_model import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.student import Student
-from app.models.class_model import Class
 
 
 async def seed_enrollments(db):

@@ -1,10 +1,14 @@
+from uuid import UUID
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
-from uuid import UUID
 
 from app.core.config import settings
+
+ALLOWED_MIME_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/mpeg"}
+MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 
 
 def _get_s3_client():
@@ -24,13 +28,14 @@ def _get_s3_client():
 
 def _key_for_lesson(lesson_id: UUID, filename: str) -> str:
     """Gera a chave do objeto no bucket para uma aula."""
-    return f"lessons/{str(lesson_id)}/{filename}"
+    return f"lessons/{lesson_id!s}/{filename}"
 
 
 async def generate_upload_url(
     lesson_id: UUID,
     filename: str,
     content_type: str = "video/mp4",
+    content_length: int | None = None,
     expiration: int = 3600,
 ) -> tuple[str, str]:
     """Gera URL pré-assinada para upload direto de vídeo no storage."""
@@ -40,17 +45,32 @@ async def generate_upload_url(
             detail="Storage not configured",
         )
 
+    if content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Content type not allowed: {content_type}",
+        )
+
+    if content_length is not None and content_length > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size exceeds maximum of {MAX_UPLOAD_SIZE} bytes",
+        )
+
     s3 = _get_s3_client()
     key = _key_for_lesson(lesson_id, filename)
 
     try:
+        params = {
+            "Bucket": settings.STORAGE_BUCKET,
+            "Key": key,
+            "ContentType": content_type,
+        }
+        if content_length is not None:
+            params["ContentLength"] = content_length
         url = s3.generate_presigned_url(
             "put_object",
-            Params={
-                "Bucket": settings.STORAGE_BUCKET,
-                "Key": key,
-                "ContentType": content_type,
-            },
+            Params=params,
             ExpiresIn=expiration,
         )
     except ClientError as exc:
@@ -65,7 +85,7 @@ async def generate_upload_url(
 async def generate_watch_url(
     lesson_id: UUID,
     filename: str,
-    expiration: int = None,
+    expiration: int | None = None,
 ) -> str:
     """Gera URL pré-assinada temporária para assistir o vídeo."""
     if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:

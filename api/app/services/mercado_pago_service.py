@@ -1,5 +1,11 @@
-import requests
+import httpx
+
 from app.core.config import settings
+
+
+class MercadoPagoError(Exception):
+    pass
+
 
 class MercadoPagoService:
     BASE_URL = "https://api.mercadopago.com/v1"
@@ -33,16 +39,16 @@ class MercadoPagoService:
             "auto_return": "approved",
         }
         
-        response = requests.post(
-            f"{MercadoPagoService.BASE_URL}/preferences",
-            json=preference_data,
-            headers=headers,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{MercadoPagoService.BASE_URL}/preferences",
+                json=preference_data,
+                headers=headers,
+            )
         
         if response.status_code == 201:
             return response.json()
-        else:
-            raise Exception(f"Erro ao criar preferência: {response.text}")
+        raise MercadoPagoError(f"Erro ao criar preferência: {response.text}")
     
     @staticmethod
     async def get_payment_info(payment_id: str):
@@ -51,15 +57,15 @@ class MercadoPagoService:
             "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
         }
         
-        response = requests.get(
-            f"{MercadoPagoService.BASE_URL}/payments/{payment_id}",
-            headers=headers,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{MercadoPagoService.BASE_URL}/payments/{payment_id}",
+                headers=headers,
+            )
         
         if response.status_code == 200:
             return response.json()
-        else:
-            raise Exception(f"Erro ao obter pagamento: {response.text}")
+        raise MercadoPagoError(f"Erro ao obter pagamento: {response.text}")
     
     @staticmethod
     async def refund_payment(payment_id: str):
@@ -69,12 +75,12 @@ class MercadoPagoService:
             "Content-Type": "application/json",
         }
         
-        response = requests.post(
-            f"{MercadoPagoService.BASE_URL}/payments/{payment_id}/refunds",
-            headers=headers,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{MercadoPagoService.BASE_URL}/payments/{payment_id}/refunds",
+                headers=headers,
+            )
         
         if response.status_code == 201:
             return response.json()
-        else:
-            raise Exception(f"Erro ao reembolsar pagamento: {response.text}")
+        raise MercadoPagoError(f"Erro ao reembolsar pagamento: {response.text}")

@@ -1,11 +1,12 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Date
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from datetime import datetime, date
 import uuid
 from enum import Enum as PyEnum
 
+from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+
 from app.core.database import Base
+from app.core.utils import utc_now
+
 
 class ClassStatus(str, PyEnum):
     ABERTA = "ABERTA"
@@ -18,7 +19,7 @@ class Class(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False)
-    instructor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    responsible_admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     max_students = Column(Integer, nullable=False)
@@ -26,5 +27,5 @@ class Class(Base):
     ead_link = Column(String, nullable=True)
     status = Column(Enum(ClassStatus), default=ClassStatus.ABERTA, nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

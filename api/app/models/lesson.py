@@ -1,11 +1,21 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Enum, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import uuid
 from enum import Enum as PyEnum
 
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
+from app.core.utils import utc_now
 
 
 class LessonContentType(str, PyEnum):
@@ -27,8 +37,8 @@ class Lesson(Base):
     storage_key = Column(String, nullable=True)
     duration_seconds = Column(Integer, nullable=True)
     is_free_preview = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     course = relationship("Course", backref="lessons")
     materials = relationship("LessonMaterial", backref="lesson", cascade="all, delete-orphan")
@@ -42,7 +52,7 @@ class LessonMaterial(Base):
     lesson_id = Column(UUID(as_uuid=True), ForeignKey("lessons.id"), nullable=False)
     title = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class LessonProgress(Base):
@@ -54,8 +64,8 @@ class LessonProgress(Base):
     watched_seconds = Column(Integer, default=0, nullable=False)
     completed = Column(Boolean, default=False, nullable=False)
     completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("student_id", "lesson_id", name="uq_lesson_progress_student_lesson"),

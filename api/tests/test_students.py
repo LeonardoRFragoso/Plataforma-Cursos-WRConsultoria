@@ -1,5 +1,7 @@
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
+
+from app.core.utils import utc_now
 
 
 def _random_cpf() -> str:
@@ -29,11 +31,11 @@ async def test_admin_create_student_and_enroll(client, admin_headers):
     me = await client.get("/api/v1/auth/me", headers=admin_headers)
     admin_id = me.json()["id"]
 
-    start = date.today() + timedelta(days=1)
+    start = utc_now().date() + timedelta(days=1)
     end = start + timedelta(days=20)
     class_data = {
         "course_id": course_id,
-        "instructor_id": admin_id,
+        "responsible_admin_id": admin_id,
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
         "max_students": 25,

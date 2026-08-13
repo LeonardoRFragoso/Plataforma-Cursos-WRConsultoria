@@ -1,10 +1,13 @@
-import pytest
+import uuid
+
 import httpx
+import pytest
+
 from app.core.config import settings
 
 settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test"
 
-from app.core.database import Base, AsyncSessionLocal, engine
+from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.security import hash_password
 from app.main import app
 from app.models.user import User, UserRole
@@ -68,6 +71,43 @@ def test_user_data():
         "email": "test@example.com",
         "full_name": "Test User",
         "password": "testpassword123",
+    }
+
+
+@pytest.fixture
+async def student_user(client, admin_headers):
+    """Cria um aluno e faz login, retornando headers e student_id."""
+    email = f"student_{uuid.uuid4().hex[:8]}@example.com"
+    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    response = await client.post(
+        "/api/v1/students/",
+        json={
+            "email": email,
+            "full_name": "Aluno Teste",
+            "password": "student123",
+            "cpf": cpf,
+            "phone": "(11) 99999-9999",
+            "company": "Empresa Teste",
+            "address": "Rua do Aluno, 123",
+            "city": "São Paulo",
+            "state": "SP",
+            "zip_code": "01000-000",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    student_id = response.json()["id"]
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"identifier": email, "password": "student123"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    return {
+        "headers": {"Authorization": f"Bearer {token}"},
+        "student_id": student_id,
+        "email": email,
     }
 
 

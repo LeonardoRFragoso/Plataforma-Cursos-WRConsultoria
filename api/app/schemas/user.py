@@ -1,9 +1,10 @@
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+
 from app.models.user import UserRole
-import re
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -11,7 +12,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    cpf: Optional[str] = None
+    cpf: str | None = None
 
 class UserLogin(BaseModel):
     identifier: str
@@ -26,14 +27,13 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     id: UUID
-    cpf: Optional[str] = None
+    cpf: str | None = None
     role: UserRole
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TokenResponse(BaseModel):
     access_token: str

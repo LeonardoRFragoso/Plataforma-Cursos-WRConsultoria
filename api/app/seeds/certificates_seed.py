@@ -7,8 +7,8 @@ import uuid
 
 from sqlalchemy import select
 
-from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.certificate import Certificate
+from app.models.enrollment import Enrollment, EnrollmentStatus
 
 
 def generate_certificate_number() -> str:

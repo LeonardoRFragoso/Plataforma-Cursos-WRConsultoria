@@ -1,12 +1,19 @@
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from datetime import datetime
 import io
-from uuid import UUID
+from datetime import datetime
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+)
+
+from app.core.utils import utc_now
+
 
 class CertificateService:
     @staticmethod
@@ -17,11 +24,11 @@ class CertificateService:
         carga_horaria: int,
         certificate_number: str,
         validation_code: str,
-        instructor_name: str,
-        issued_date: datetime = None,
+        responsible_admin_name: str,
+        issued_date: datetime | None = None,
     ) -> bytes:
         if issued_date is None:
-            issued_date = datetime.now()
+            issued_date = utc_now()
         
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -35,15 +42,6 @@ class CertificateService:
             spaceAfter=30,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
-        )
-        
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=14,
-            textColor=colors.HexColor('#333333'),
-            spaceAfter=12,
-            alignment=TA_CENTER,
         )
         
         body_style = ParagraphStyle(
@@ -113,7 +111,7 @@ class CertificateService:
         elements.append(Paragraph(f"Emitido em {formatted_date}", body_style))
         elements.append(Spacer(1, 0.4*inch))
         
-        elements.append(Paragraph(f"<b>Responsável:</b> {instructor_name}", body_style))
+        elements.append(Paragraph(f"<b>Responsável:</b> {responsible_admin_name}", body_style))
         elements.append(Spacer(1, 0.3*inch))
         
         elements.append(Paragraph(f"<b>Número do Certificado:</b> {certificate_number}", footer_style))

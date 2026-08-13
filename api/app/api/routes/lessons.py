@@ -1,33 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
-from sqlalchemy.orm import selectinload
-from typing import List
 from uuid import UUID
-from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.routes.certificates import (
+    generate_certificate_number,
+    generate_validation_code,
+)
 from app.core.database import get_db
-from app.core.security import get_current_user, get_current_admin
+from app.core.security import get_current_admin, get_current_user
 from app.core.storage import generate_upload_url, generate_watch_url
-from app.models.lesson import Lesson, LessonMaterial, LessonProgress, LessonContentType
-from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.student import Student
+from app.core.utils import utc_now
+from app.models.certificate import Certificate
 from app.models.class_model import Class
 from app.models.course import Course
-from app.models.certificate import Certificate
+from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
+from app.models.student import Student
 from app.schemas.lesson import (
+    CourseProgressResponse,
     LessonCreate,
-    LessonUpdate,
-    LessonResponse,
     LessonMaterialCreate,
     LessonMaterialResponse,
     LessonProgressCreate,
     LessonProgressResponse,
-    CourseProgressResponse,
-)
-from app.api.routes.certificates import (
-    generate_certificate_number,
-    generate_validation_code,
+    LessonResponse,
+    LessonUpdate,
 )
 
 router = APIRouter()
@@ -96,14 +96,14 @@ async def create_lesson(
             detail="Course not found",
         )
 
-    lesson = Lesson(course_id=course_id, **lesson_data.model_dump())
+    lesson = Lesson(course_id=course_id, **lesson_data.model_dump(exclude={"course_id"}))
     db.add(lesson)
     await db.commit()
     await db.refresh(lesson)
     return lesson
 
 
-@router.get("/courses/{course_id}/lessons", response_model=List[LessonResponse])
+@router.get("/courses/{course_id}/lessons", response_model=list[LessonResponse])
 async def list_lessons(
     course_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -209,11 +209,12 @@ async def delete_lesson(
     await db.commit()
 
 
-@router.post("/lessons/{lesson_id}/upload-url")
+@router.post("/{lesson_id}/upload-url")
 async def generate_lesson_upload_url(
     lesson_id: UUID,
     filename: str,
     content_type: str = "video/mp4",
+    content_length: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
@@ -231,6 +232,7 @@ async def generate_lesson_upload_url(
         lesson_id=lesson_id,
         filename=filename,
         content_type=content_type,
+        content_length=content_length,
     )
 
     lesson.content_type = LessonContentType.UPLOAD
@@ -243,7 +245,7 @@ async def generate_lesson_upload_url(
     }
 
 
-@router.get("/lessons/{lesson_id}/watch-url")
+@router.get("/{lesson_id}/watch-url")
 async def get_lesson_watch_url(
     lesson_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -289,7 +291,7 @@ async def get_lesson_watch_url(
     return {"watch_url": watch_url}
 
 
-@router.post("/lessons/{lesson_id}/progress", response_model=LessonProgressResponse)
+@router.post("/{lesson_id}/progress", response_model=LessonProgressResponse)
 async def update_lesson_progress(
     lesson_id: UUID,
     progress_data: LessonProgressCreate,
@@ -314,6 +316,18 @@ async def update_lesson_progress(
                 detail="You don't have access to this lesson",
             )
 
+    if progress_data.watched_seconds < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="watched_seconds must be non-negative",
+        )
+
+    if lesson.duration_seconds is not None and progress_data.watched_seconds > lesson.duration_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="watched_seconds cannot exceed lesson duration",
+        )
+
     student_id = await _get_student_id(db, current_user.get("user_id"))
 
     stmt = select(LessonProgress).where(
@@ -334,12 +348,9 @@ async def update_lesson_progress(
         progress.watched_seconds = max(progress.watched_seconds, progress_data.watched_seconds)
 
     # Marca como concluído se atingiu 90% da duração ou veio completed=True
-    if progress_data.completed:
+    if progress_data.completed or lesson.duration_seconds and progress.watched_seconds >= int(lesson.duration_seconds * 0.9):
         progress.completed = True
-        progress.completed_at = datetime.utcnow()
-    elif lesson.duration_seconds and progress.watched_seconds >= int(lesson.duration_seconds * 0.9):
-        progress.completed = True
-        progress.completed_at = datetime.utcnow()
+        progress.completed_at = utc_now()
 
     await db.flush()
 
@@ -402,7 +413,7 @@ async def get_course_progress(
 
 # Materiais de apoio
 
-@router.post("/lessons/{lesson_id}/materials", response_model=LessonMaterialResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{lesson_id}/materials", response_model=LessonMaterialResponse, status_code=status.HTTP_201_CREATED)
 async def create_lesson_material(
     lesson_id: UUID,
     material_data: LessonMaterialCreate,
@@ -430,7 +441,7 @@ async def create_lesson_material(
     return material
 
 
-@router.get("/lessons/{lesson_id}/materials", response_model=List[LessonMaterialResponse])
+@router.get("/{lesson_id}/materials", response_model=list[LessonMaterialResponse])
 async def list_lesson_materials(
     lesson_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -505,14 +516,13 @@ async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_i
     enrollments = result.scalars().all()
 
     for enrollment in enrollments:
-        stmt = select(Certificate).where(Certificate.enrollment_id == enrollment.id)
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
-
-        if not existing:
-            certificate = Certificate(
+        stmt = (
+            insert(Certificate)
+            .values(
                 enrollment_id=enrollment.id,
                 certificate_number=generate_certificate_number(),
                 validation_code=generate_validation_code(),
             )
-            db.add(certificate)
+            .on_conflict_do_nothing(index_elements=["enrollment_id"])
+        )
+        await db.execute(stmt)

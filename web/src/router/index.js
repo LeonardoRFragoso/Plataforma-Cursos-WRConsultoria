@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
-const routes = [
+export const routes = [
   {
     path: '/',
     name: 'Home',
@@ -89,7 +89,7 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+export async function navigationGuard(to, from, next) {
   const authStore = useAuthStore()
 
   const proceed = () => {
@@ -109,6 +109,8 @@ router.beforeEach((to, from, next) => {
   } else {
     proceed()
   }
-})
+}
+
+router.beforeEach(navigationGuard)
 
 export default router

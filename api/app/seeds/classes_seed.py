@@ -3,10 +3,11 @@ Seed data para turmas.
 Cria turmas de exemplo vinculadas aos cursos e instrutor.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.core.utils import utc_now
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course
 from app.models.user import User
@@ -28,8 +29,8 @@ async def seed_classes(db):
     classes_data = [
         {
             "course_code": "NR-10-B",
-            "start_date": date.today() + timedelta(days=7),
-            "end_date": date.today() + timedelta(days=37),
+            "start_date": utc_now().date() + timedelta(days=7),
+            "end_date": utc_now().date() + timedelta(days=37),
             "max_students": 30,
             "location": "Sala 101 - WR",
             "ead_link": None,
@@ -38,8 +39,8 @@ async def seed_classes(db):
         },
         {
             "course_code": "NR-17-F",
-            "start_date": date.today() + timedelta(days=14),
-            "end_date": date.today() + timedelta(days=21),
+            "start_date": utc_now().date() + timedelta(days=14),
+            "end_date": utc_now().date() + timedelta(days=21),
             "max_students": 25,
             "location": None,
             "ead_link": "https://ead.wrconsultoria.com.br/nr-17",
@@ -48,8 +49,8 @@ async def seed_classes(db):
         },
         {
             "course_code": "NR-05-F",
-            "start_date": date.today() - timedelta(days=60),
-            "end_date": date.today() - timedelta(days=30),
+            "start_date": utc_now().date() - timedelta(days=60),
+            "end_date": utc_now().date() - timedelta(days=30),
             "max_students": 20,
             "location": "Sala 102 - WR",
             "ead_link": None,
@@ -80,7 +81,7 @@ async def seed_classes(db):
 
         new_class = Class(
             course_id=course.id,
-            instructor_id=admin.id,
+            responsible_admin_id=admin.id,
             start_date=class_data["start_date"],
             end_date=class_data["end_date"],
             max_students=class_data["max_students"],

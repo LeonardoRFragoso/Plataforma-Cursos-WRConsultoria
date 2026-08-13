@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
 from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin
 from app.models.course import Course
-from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
+from app.schemas.course import CourseCreate, CourseResponse, CourseUpdate
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ async def create_course(
     await db.refresh(course)
     return course
 
-@router.get("/", response_model=List[CourseResponse])
+@router.get("/", response_model=list[CourseResponse])
 async def list_courses(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,

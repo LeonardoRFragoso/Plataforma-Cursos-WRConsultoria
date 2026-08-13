@@ -1,4 +1,3 @@
-import pytest
 
 
 async def test_register_user(client, test_user_data):

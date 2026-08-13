@@ -1,7 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
 
 class CertificateCreate(BaseModel):
     enrollment_id: UUID
@@ -12,19 +13,18 @@ class CertificateResponse(BaseModel):
     certificate_number: str
     validation_code: str
     issued_at: datetime
-    pdf_path: Optional[str] = None
+    pdf_path: str | None = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CertificateValidationRequest(BaseModel):
     validation_code: str
 
 class CertificateValidationResponse(BaseModel):
     valid: bool
-    certificate_number: Optional[str] = None
-    student_name: Optional[str] = None
-    course_name: Optional[str] = None
-    issued_at: Optional[datetime] = None
+    certificate_number: str | None = None
+    student_name: str | None = None
+    course_name: str | None = None
+    issued_at: datetime | None = None

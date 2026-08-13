@@ -1,23 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from typing import List
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.security import get_current_user, get_current_admin
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.core.security import get_current_admin, get_current_user
 from app.models.class_model import Class
-from app.models.student import Student
-from app.models.payment import Payment, PaymentStatus
 from app.models.company import Company
+from app.models.enrollment import Enrollment
+from app.models.payment import Payment, PaymentStatus
+from app.models.student import Student
 from app.schemas.enrollment import (
-    EnrollmentCreate,
-    EnrollmentUpdate,
-    EnrollmentResponse,
     BulkEnrollmentCreate,
     BulkEnrollmentResponse,
+    EnrollmentCreate,
+    EnrollmentResponse,
+    EnrollmentUpdate,
 )
 
 router = APIRouter()
@@ -44,7 +43,7 @@ async def create_enrollment(
     await db.refresh(enrollment)
     return enrollment
 
-@router.get("/", response_model=List[EnrollmentResponse])
+@router.get("/", response_model=list[EnrollmentResponse])
 async def list_enrollments(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),

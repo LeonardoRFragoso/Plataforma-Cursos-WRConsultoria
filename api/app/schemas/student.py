@@ -1,41 +1,41 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, EmailStr
+
 
 class StudentBase(BaseModel):
     cpf: str
-    phone: Optional[str] = None
-    company: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
+    phone: str | None = None
+    company: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
 
 class StudentCreate(StudentBase):
     email: EmailStr
     full_name: str
-    password: Optional[str] = None
-    company_id: Optional[UUID] = None
+    password: str | None = None
+    company_id: UUID | None = None
 
 class StudentUpdate(BaseModel):
-    phone: Optional[str] = None
-    company: Optional[str] = None
-    company_id: Optional[UUID] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
+    phone: str | None = None
+    company: str | None = None
+    company_id: UUID | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
 
 class StudentResponse(StudentBase):
     id: UUID
     user_id: UUID
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    temp_password: Optional[str] = None
-    company_id: Optional[UUID] = None
+    email: str | None = None
+    full_name: str | None = None
+    temp_password: str | None = None
+    company_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
