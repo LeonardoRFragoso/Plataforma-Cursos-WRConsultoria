@@ -5,7 +5,7 @@ Uso: python seed_db.py
 """
 
 import asyncio
-from app.core.database import engine, get_db, Base
+from app.core.database import get_db
 from app.seeds.users_seed import seed_users
 from app.seeds.courses_seed import COURSES_DATA
 from app.models.course import Course, CourseModality, CourseType
@@ -13,11 +13,7 @@ from app.models.course import Course, CourseModality, CourseType
 
 async def main():
     print("🌱 Iniciando seed do banco de dados...\n")
-    
-    # Criar tabelas
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("✓ Tabelas criadas/verificadas\n")
+    print("⚠️  Execute 'alembic upgrade head' antes do seed para garantir as tabelas.\n")
     
     # Seed de usuários
     print("📝 Populando usuários...")
