@@ -25,6 +25,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
     ]
     
+    # Storage S3-compatível (Cloudflare R2 / Backblaze B2 / MinIO / AWS S3)
+    STORAGE_ENDPOINT: str = ""
+    STORAGE_ACCESS_KEY: str = ""
+    STORAGE_SECRET_KEY: str = ""
+    STORAGE_BUCKET: str = "wr-videos"
+    STORAGE_REGION: str = "auto"
+    STORAGE_WATCH_URL_EXPIRATION: int = 7200  # segundos
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
