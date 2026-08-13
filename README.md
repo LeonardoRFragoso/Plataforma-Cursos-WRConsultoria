@@ -73,6 +73,29 @@ Isso irá:
 - **API (Swagger):** http://localhost:8000/docs
 - **API (ReDoc):** http://localhost:8000/redoc
 
+## Migrations (Alembic)
+
+O banco de dados é versionado com Alembic. Para criar as tabelas (ou atualizá-las após uma mudança de model):
+
+```bash
+cd api
+source venv/bin/activate
+alembic upgrade head
+```
+
+Ou, com Docker:
+
+```bash
+docker-compose exec api alembic upgrade head
+```
+
+Para gerar uma nova migration após alterar os models:
+
+```bash
+cd api
+alembic revision --autogenerate -m "Nome da mudança"
+```
+
 ## Setup Local sem Docker
 
 ### Backend
@@ -84,7 +107,14 @@ source venv/bin/activate  # No Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Configure o banco de dados
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wr_cursos"
+export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos"
+
+# Crie/ative as tabelas
+alembic upgrade head
+
+# Popule o banco com dados de teste (opcional)
+python seed_db.py
+
 uvicorn app.main:app --reload
 ```
 
