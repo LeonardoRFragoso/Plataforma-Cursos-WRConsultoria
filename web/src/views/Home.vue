@@ -96,7 +96,7 @@
     <!-- Footer -->
     <footer class="bg-primary-700 text-white/80 py-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-10 w-auto mx-auto mb-4" />
+        <img src="../assets/brand/logo-wr-white.png" alt="WR Consultoria e Soluções em QSMS" class="h-10 w-auto mx-auto mb-4" />
         <p class="text-sm">WR Consultoria e Soluções em QSMS — Treinamentos NR com certificação</p>
         <p class="text-xs text-white/50 mt-2">&copy; 2026 WR Consultoria. Todos os direitos reservados.</p>
       </div>
