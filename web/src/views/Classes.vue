@@ -210,7 +210,7 @@ const saveClass = async () => {
   try {
     const payload = {
       ...form.value,
-      instructor_id: authStore.user?.id,
+      responsible_admin_id: authStore.user?.id,
       max_students: Number(form.value.max_students),
       location: form.value.location || null,
       ead_link: form.value.ead_link || null,
@@ -236,7 +236,9 @@ const saveClass = async () => {
     loadClasses()
   } catch (error) {
     console.error('Erro ao salvar turma:', error)
-    alert('Erro ao salvar turma: ' + (error.response?.data?.detail || error.message))
+    const detail = error.response?.data?.detail
+    const message = typeof detail === 'object' ? JSON.stringify(detail) : (detail || error.message)
+    alert('Erro ao salvar turma: ' + message)
   }
 }
 
