@@ -11,6 +11,8 @@ def _class_payload(course_id, admin_id):
         "start_date": today.isoformat(),
         "end_date": (today + timedelta(days=30)).isoformat(),
         "max_students": 20,
+        "location": "Sala de Teste",
+        "ead_link": None,
     }
 
 

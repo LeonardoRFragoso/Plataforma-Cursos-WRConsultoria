@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin
-from app.models.class_model import Class
-from app.models.course import Course
+from app.models.class_model import Class, ClassStatus
+from app.models.course import Course, CourseModality
+from app.models.user import User, UserRole
 from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
 
 router = APIRouter()
@@ -28,6 +29,49 @@ async def create_class(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Course must be active to create a class",
+        )
+
+    responsible = await db.get(User, class_data.responsible_admin_id)
+    if not responsible or not responsible.is_active or responsible.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Responsible user must be an active admin",
+        )
+
+    if class_data.start_date >= class_data.end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Start date must be before end date",
+        )
+
+    if class_data.max_students <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="max_students must be greater than zero",
+        )
+
+    if class_data.status == ClassStatus.CANCELADA:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a class with CANCELADA status",
+        )
+
+    if course.modality == CourseModality.PRESENCIAL and not class_data.location:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="In-person classes require a location",
+        )
+
+    if course.modality == CourseModality.EAD and not class_data.ead_link:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="EAD classes require an ead_link",
+        )
+
+    if course.modality == CourseModality.SEMIPRESENCIAL and not (class_data.location or class_data.ead_link):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Hybrid classes require a location or ead_link",
         )
 
     class_obj = Class(**class_data.model_dump())

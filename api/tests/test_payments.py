@@ -40,7 +40,7 @@ async def _create_test_enrollment(client, admin_headers):
         "max_students": 25,
         "location": None,
         "ead_link": "https://ead.wrconsultoria.com.br/test",
-        "status": "CONCLUIDA",
+        "status": "ABERTA",
         "description": "Turma para teste de pagamento",
     }
     class_response = await client.post("/api/v1/classes/", json=class_data, headers=admin_headers)
@@ -69,18 +69,22 @@ async def _create_test_enrollment(client, admin_headers):
     assert student.status_code == 201
     student_id = student.json()["id"]
 
-    enrollment = await client.post(
-        "/api/v1/enrollments/",
-        json={
-            "student_id": student_id,
-            "class_id": class_id,
-            "price": 199.90,
-            "status": "CONCLUIDA",
-        },
+    list_enrollments = await client.get("/api/v1/enrollments/", headers=admin_headers)
+    assert list_enrollments.status_code == 200
+    enrollment = next(
+        (e for e in list_enrollments.json() if e["student_id"] == student_id and e["class_id"] == class_id),
+        None,
+    )
+    assert enrollment is not None
+    enrollment_id = enrollment["id"]
+
+    update = await client.put(
+        f"/api/v1/enrollments/{enrollment_id}",
+        json={"status": "CONCLUIDA"},
         headers=admin_headers,
     )
-    assert enrollment.status_code == 201
-    return enrollment.json()["id"]
+    assert update.status_code == 200
+    return enrollment_id
 
 
 async def test_create_payment(client, admin_headers):

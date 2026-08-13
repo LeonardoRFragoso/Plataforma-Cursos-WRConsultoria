@@ -1,7 +1,7 @@
 import uuid
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -16,6 +16,10 @@ class EnrollmentStatus(str, PyEnum):
 
 class Enrollment(Base):
     __tablename__ = "enrollments"
+
+    __table_args__ = (
+        UniqueConstraint("student_id", "class_id", name="uq_enrollment_student_class"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
