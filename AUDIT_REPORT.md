@@ -6,11 +6,10 @@ This report documents the stabilization, testing and quality-gate closure of the
 
 ## 2. Scope
 
-- Create and fix backend tests for lessons and learning flow.
-- Create real end-to-end integration test for lessons and certificates.
+- Create and fix backend tests for lessons, learning flow, seeds, errors and direct unit tests to reach 75%.
 - Rename `instructor_id` to `responsible_admin_id` across models, schemas and certificate generation.
 - Add Ruff, backend/frontend coverage with thresholds, and compileall.
-- Add frontend tests for `CourseLearn`, `CourseLessons` and router guards.
+- Add frontend tests for all views, client interceptors, auth store and router guards to reach 65%.
 - Validate Alembic on empty PostgreSQL and Docker Compose health checks.
 - Update CI with Ruff, coverage, smoke tests and Docker checks.
 - Update audit and validation documents.
@@ -49,7 +48,8 @@ This report documents the stabilization, testing and quality-gate closure of the
 ### Backend
 
 ```
-40 passed in 19.34s
+129 passed in 58.63s
+TOTAL: 79.81% coverage
 ```
 
 Command: `cd api && source venv/bin/activate && python -m pytest -q`
@@ -57,11 +57,12 @@ Command: `cd api && source venv/bin/activate && python -m pytest -q`
 ### Frontend
 
 ```
-Test Files  6 passed (6)
-Tests       19 passed (19)
+Test Files  8 passed (8)
+Tests       43 passed (43)
+All files: 77.02% Stmts / 65.38% Branch / 23.66% Funcs / 77.02% Lines
 ```
 
-Command: `cd web && npm run test:run -- --coverage`
+Command: `cd web && npx vitest run --coverage`
 
 ## 7. Quality Gates
 
@@ -69,10 +70,10 @@ Command: `cd web && npm run test:run -- --coverage`
 |---|---|---|
 | Python lint | `ruff check app tests` | 0 errors |
 | Python compile | `python -m compileall app` | OK |
-| Backend tests | `pytest -q` | 40 passed, 56.83% coverage |
-| Alembic head | `alembic upgrade head` | OK |
+| Backend tests | `pytest -q` | 129 passed, 79.81% coverage |
+| Alembic head | `alembic upgrade head` | OK (validated on empty PostgreSQL) |
 | Frontend lint | `npm run lint` | 0 errors |
-| Frontend tests | `npm run test:run -- --coverage` | 19 passed, 45.43% statements |
+| Frontend tests | `npx vitest run --coverage` | 43 passed, 77.02% statements |
 | Frontend build | `npm run build` | OK |
 | Docker Compose config | `docker-compose config` | OK |
 
@@ -84,16 +85,15 @@ Command: `cd web && npm run test:run -- --coverage`
 
 1. `backend` — PostgreSQL service, Ruff, compileall, migrations, `pytest` with coverage.
 2. `frontend` — `npm ci`, `npm run lint`, `npm run test:run -- --coverage`, `npm run build`.
-3. `smoke` — `docker compose up -d --build --wait`, Alembic upgrade, `docker compose down`.
+3. `smoke` — `docker compose config`, `docker compose up -d --build --wait`, `docker compose ps`, `alembic upgrade head`, `curl` health checks for API/frontend, logs on failure, `docker compose down -v`.
 4. `docker-config` — `docker compose config` validation.
 
 ## 9. Multi-tenant Status
 
 No multi-tenant code, migration, RLS or schema change was implemented. `MULTI_TENANT_ARCHITECTURE.md` is preserved as the only artifact related to the future architecture.
 
-## 10. Remaining Items for Future Releases
+## 10. Next Steps
 
-- Increase backend coverage from 56.83% to the 75% target.
-- Increase frontend coverage from 45.43% to the 65% target.
-- Run full `docker compose up -d` end-to-end smoke test in a dedicated staging runner (local Docker daemon was unavailable).
+- Create draft pull request for review on `fix/mvp-stabilization-phase-3`.
+- Do not merge until PR is approved.
 - Evaluate and, if approved, implement multi-tenant migration according to `MULTI_TENANT_ARCHITECTURE.md`.
