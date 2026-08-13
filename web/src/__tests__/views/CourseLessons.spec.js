@@ -75,7 +75,7 @@ describe('CourseLessons View', () => {
     await router.push('/courses/course-1/lessons')
     await router.isReady()
 
-    const wrapper = mount(CourseLessons, {
+    mount(CourseLessons, {
       global: {
         plugins: [router],
       },

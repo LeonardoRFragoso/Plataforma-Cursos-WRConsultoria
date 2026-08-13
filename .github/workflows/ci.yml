@@ -68,12 +68,29 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SECRET_KEY: test-secret-key
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose up -d --build --wait
-      - run: docker compose ps
-      - run: docker compose exec -T api alembic upgrade head
-      - run: docker compose down
+      - name: Docker Compose config
+        run: docker compose config
+      - name: Build and start services
+        run: docker compose up -d --build --wait
+      - name: Verify running containers
+        run: docker compose ps
+      - name: Apply migrations on empty database
+        run: docker compose exec -T api alembic upgrade head
+      - name: Smoke API
+        run: |
+          curl --fail --retry 10 --retry-delay 3 --max-time 5 http://localhost:8000/docs || exit 1
+      - name: Smoke frontend
+        run: |
+          curl --fail --retry 10 --retry-delay 3 --max-time 5 http://localhost:5173/ || exit 1
+      - name: Print logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
 
   docker-config:
     runs-on: ubuntu-latest
