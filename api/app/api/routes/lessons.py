@@ -516,6 +516,8 @@ async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_i
     enrollments = result.scalars().all()
 
     for enrollment in enrollments:
+        enrollment.status = EnrollmentStatus.CONCLUIDA
+
         stmt = (
             insert(Certificate)
             .values(

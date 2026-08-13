@@ -67,7 +67,7 @@
           </div>
           <ul v-else class="space-y-3">
             <li v-for="enrollment in myEnrollments" :key="enrollment.id" class="border border-gray-200 rounded-md p-3 hover:bg-gray-50">
-              <AppLink :to="`/courses/${enrollment.course_id}`" class="block">
+              <AppLink :to="`/courses/${enrollment.course_id}/learn`" class="block">
                 <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
                 <div class="text-sm text-gray-600">
                   {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
