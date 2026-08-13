@@ -79,7 +79,10 @@ import AppLink from '../components/AppLink.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const isAdmin = computed(() => authStore.userRole === 'admin')
+const isAdmin = computed(() => {
+  const role = authStore.userRole?.toLowerCase()
+  return role === 'admin'
+})
 
 const stats = ref({
   totalStudents: 0,
