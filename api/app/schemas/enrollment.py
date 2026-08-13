@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -25,6 +25,19 @@ class EnrollmentResponse(EnrollmentBase):
     enrollment_date: datetime
     created_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MyEnrollmentResponse(BaseModel):
+    id: UUID
+    status: EnrollmentStatus
+    course_id: UUID
+    course_name: str
+    class_id: UUID
+    start_date: date
+    end_date: date
+    enrollment_date: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
