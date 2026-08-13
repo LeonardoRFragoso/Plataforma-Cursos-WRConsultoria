@@ -77,8 +77,12 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  // Sempre inicializar o usuário antes de decidir a navegação
+  await authStore.initializeUser()
+
   const userRole = authStore.userRole?.toLowerCase()
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

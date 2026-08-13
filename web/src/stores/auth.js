@@ -7,6 +7,8 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref(localStorage.getItem('refresh_token') || null)
   const user = ref(null)
   const userRole = ref(null)
+  const initialized = ref(false)
+  const initPromise = ref(null)
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -59,7 +61,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const initializeUser = async () => {
-    if (token.value && !user.value) {
+    if (initPromise.value) return initPromise.value
+    if (!token.value) {
+      initialized.value = true
+      return
+    }
+
+    initPromise.value = (async () => {
       try {
         const meResponse = await api.get('/api/v1/auth/me')
         user.value = meResponse.data
@@ -72,8 +80,12 @@ export const useAuthStore = defineStore('auth', () => {
         })
       } catch (error) {
         console.error('✗ Failed to initialize user:', error)
+      } finally {
+        initialized.value = true
       }
-    }
+    })()
+
+    return initPromise.value
   }
 
   return {
@@ -81,6 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken,
     user,
     userRole,
+    initialized,
     isAuthenticated,
     login,
     register,
