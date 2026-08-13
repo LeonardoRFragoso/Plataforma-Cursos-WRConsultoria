@@ -21,8 +21,8 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="relative bg-primary-700 text-white overflow-hidden">
-      <div class="absolute inset-0 opacity-20">
+    <section class="relative bg-primary-600 text-white overflow-hidden">
+      <div class="absolute inset-0 opacity-15">
         <img
           src="https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1920&q=80"
           alt="Treinamento de segurança do trabalho"
@@ -33,13 +33,13 @@
         <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
           Treinamentos NR com<br />certificação reconhecida
         </h1>
-        <p class="text-lg sm:text-xl text-white/80 mb-10 max-w-2xl mx-auto">
+        <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
           Plataforma de cursos da WR Consultoria e Soluções em QSMS.
           Segurança, qualidade e meio ambiente para sua empresa.
         </p>
         <router-link
           to="/register"
-          class="inline-block bg-accent-500 text-white px-8 py-3 rounded-md hover:bg-accent-600 transition-colors text-lg font-semibold shadow-lg"
+          class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
         >
           Comece Agora
         </router-link>
