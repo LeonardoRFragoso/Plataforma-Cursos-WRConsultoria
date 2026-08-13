@@ -116,27 +116,27 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const roleMap = {
-  'ADMIN': 'Administrador',
-  'INSTRUCTOR': 'Instrutor',
-  'STUDENT': 'Aluno'
+  'admin': 'Administrador',
+  'instructor': 'Instrutor',
+  'student': 'Aluno'
 }
 
 const userRoleDisplay = computed(() => {
-  return roleMap[authStore.userRole] || authStore.userRole
+  return roleMap[authStore.userRole?.toLowerCase()] || authStore.userRole
 })
 
 const isAdmin = computed(() => {
-  const result = authStore.userRole === 'ADMIN'
+  const result = authStore.userRole?.toLowerCase() === 'admin'
   console.log('isAdmin computed:', { userRole: authStore.userRole, result })
   return result
 })
 
 const isInstructor = computed(() => {
-  return authStore.userRole === 'INSTRUCTOR'
+  return authStore.userRole?.toLowerCase() === 'instructor'
 })
 
 const isStudent = computed(() => {
-  return authStore.userRole === 'STUDENT'
+  return authStore.userRole?.toLowerCase() === 'student'
 })
 
 const stats = ref({
