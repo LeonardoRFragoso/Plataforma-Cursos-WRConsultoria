@@ -6,9 +6,9 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('access_token') || null)
   const refreshToken = ref(localStorage.getItem('refresh_token') || null)
   const user = ref(null)
-  const userRole = ref(null)
+  const userRole = ref(localStorage.getItem('user_role') || null)
   const initialized = ref(false)
-  const initPromise = ref(null)
+  let initPromise = null
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -38,6 +38,8 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value = null
     user.value = null
     userRole.value = null
+    initPromise = null
+    initialized.value = false
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user_role')
@@ -61,13 +63,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const initializeUser = async () => {
-    if (initPromise.value) return initPromise.value
+    if (initPromise) return initPromise
     if (!token.value) {
       initialized.value = true
       return
     }
 
-    initPromise.value = (async () => {
+    initPromise = (async () => {
       try {
         const meResponse = await api.get('/api/v1/auth/me')
         user.value = meResponse.data
@@ -85,7 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     })()
 
-    return initPromise.value
+    return initPromise
   }
 
   return {
