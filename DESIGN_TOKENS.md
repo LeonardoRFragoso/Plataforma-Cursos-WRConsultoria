@@ -4,11 +4,12 @@ Paleta de cores e design tokens baseados na identidade visual da WR Consultoria 
 
 ## Cores Primárias
 
-**Verde WR** - Cor principal da marca
+**Verde WR** - Cor principal da marca (extraída da logo)
 ```
-#1B7A3A (verde escuro)
-#0F4620 (verde muito escuro)
-#E8F5E9 (verde muito claro - fundo)
+#047F37 (verde WR - cor base da plataforma)
+#036B2E (verde escuro)
+#025725 (verde muito escuro)
+#E8F8EE (verde muito claro - fundo)
 ```
 
 ## Cores Secundárias
@@ -59,13 +60,17 @@ Paleta de cores e design tokens baseados na identidade visual da WR Consultoria 
 
 As cores foram configuradas no `tailwind.config.js` com as seguintes escalas:
 
-### Primary (Verde WR)
-- 50: #E8F5E9
-- 100: #C8E6C9
-- 200: #A5D6A7
-- 300: #81C784
-- 400: #66BB6A
-- 500-900: #1B7A3A / #0F4620
+### Primary (Verde WR #047F37)
+- 50: #E8F8EE
+- 100: #C6EED4
+- 200: #9EE0B3
+- 300: #6BCE8E
+- 400: #3FB86B
+- 500: #047F37 (cor base da logo)
+- 600: #047F37
+- 700: #036B2E
+- 800: #025725
+- 900: #01431C
 
 ### Secondary (Azul Escuro)
 - 50: #F5F5F5

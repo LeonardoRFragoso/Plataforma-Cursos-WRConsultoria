@@ -12,10 +12,10 @@ A plataforma de cursos foi atualizada para usar a identidade visual oficial da *
 
 ### Cores Implementadas
 
-#### Primária - Verde WR
-- **#1B7A3A** - Verde escuro (botões, links, destaques)
-- **#0F4620** - Verde muito escuro (hover, ativo)
-- **#E8F5E9** - Verde muito claro (fundos, backgrounds)
+#### Primária - Verde WR (extraído da logo)
+- **#047F37** - Verde WR (cor base da plataforma, botões, links, destaques)
+- **#036B2E** - Verde escuro (hover, ativo)
+- **#E8F8EE** - Verde muito claro (fundos, backgrounds)
 
 #### Secundária - Azul Escuro
 - **#1E3A5F** - Azul escuro (títulos, headings)
@@ -71,19 +71,19 @@ Todas as views foram atualizadas com as cores corretas:
 
 ## Configuração Tailwind CSS
 
-### Escala de Cores Primária (Verde WR)
+### Escala de Cores Primária (Verde WR #047F37)
 ```javascript
 primary: {
-  50: '#E8F5E9',   // Fundo muito claro
-  100: '#C8E6C9',
-  200: '#A5D6A7',
-  300: '#81C784',
-  400: '#66BB6A',
-  500: '#1B7A3A',  // Verde principal
-  600: '#1B7A3A',  // Verde principal
-  700: '#0F4620',  // Verde escuro
-  800: '#0F4620',  // Verde escuro
-  900: '#0F4620',  // Verde muito escuro
+  50: '#E8F8EE',   // Fundo muito claro
+  100: '#C6EED4',
+  200: '#9EE0B3',
+  300: '#6BCE8E',
+  400: '#3FB86B',
+  500: '#047F37',  // Verde WR (cor base da logo)
+  600: '#047F37',  // Verde WR
+  700: '#036B2E',  // Verde escuro
+  800: '#025725',  // Verde escuro
+  900: '#01431C',  // Verde muito escuro
 }
 ```
 
@@ -181,7 +181,7 @@ feat: plataforma de cursos WR com design tokens e cores da marca
 - Integração com Mercado Pago para pagamentos
 - Geração de certificados em PDF
 - Design tokens baseados na identidade visual da WR Consultoria
-- Cores primárias (verde #1B7A3A), secundárias (azul #1E3A5F) e acentos (laranja #FF6B35)
+- Cores primárias (verde #047F37 extraído da logo), secundárias (azul #1E3A5F) e acentos (laranja #FF6B35)
 - Tailwind CSS com paleta completa
 - Docker + docker-compose para ambiente local
 - Testes com pytest (backend) e Vitest (frontend)
