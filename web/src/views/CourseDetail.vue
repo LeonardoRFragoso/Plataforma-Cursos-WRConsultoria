@@ -11,15 +11,5 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
-
-const router = useRouter()
-const authStore = useAuthStore()
-
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
 </script>

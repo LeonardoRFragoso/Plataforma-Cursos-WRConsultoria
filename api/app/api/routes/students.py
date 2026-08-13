@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from typing import List
-from uuid import UUID
 import secrets
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user, hash_password
 from app.models.student import Student
 from app.models.user import User, UserRole
-from app.schemas.student import StudentCreate, StudentUpdate, StudentResponse
+from app.schemas.student import StudentCreate, StudentResponse, StudentUpdate
 
 router = APIRouter()
 
@@ -71,7 +71,7 @@ async def create_student(
     await db.flush()
 
     # Criar Student vinculado ao User
-    student_payload = student_data.model_dump(exclude={"email", "full_name", "password"})
+    student_payload = student_data.model_dump(exclude={"email", "full_name", "password", "cpf"})
     student = Student(
         user_id=user.id,
         cpf=raw_cpf,
@@ -86,7 +86,7 @@ async def create_student(
 
     return student
 
-@router.get("/", response_model=List[StudentResponse])
+@router.get("/", response_model=list[StudentResponse])
 async def list_students(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),

@@ -6,7 +6,7 @@
       <div class="flex justify-between items-center mb-8">
         <h1 class="text-3xl font-bold text-secondary-900">Cursos</h1>
         <AppButton
-          v-if="isAdmin || isInstructor"
+          v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
         >
@@ -113,7 +113,7 @@
             <p><strong>Preço:</strong> R$ {{ formatPrice(course.price) }}</p>
             <p v-if="course.description" class="text-gray-600 mt-3">{{ course.description }}</p>
           </div>
-          <div v-if="isAdmin || isInstructor" class="mt-4 flex gap-2">
+          <div v-if="isAdmin" class="mt-4 flex gap-2">
             <AppButton
               @click="editCourse(course)"
               class="bg-blue-600 text-white text-sm flex-1"
@@ -135,7 +135,6 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
@@ -143,7 +142,6 @@ import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
 const courses = ref([])
@@ -161,7 +159,6 @@ const form = ref({
 })
 
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
-const isInstructor = computed(() => authStore.userRole?.toLowerCase() === 'instructor')
 
 const formatModality = (modality) => {
   const map = {

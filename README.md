@@ -161,7 +161,7 @@ WR-Plataforma-Cursos/
 
 ### Usuários (User)
 - Autenticação com JWT
-- Roles: admin, instructor, student
+- Roles: admin, student
 - Email único
 
 ### Cursos (Course)
@@ -171,7 +171,7 @@ WR-Plataforma-Cursos/
 
 ### Turmas (Class)
 - Vinculadas a cursos
-- Instrutor responsável
+- Responsável (admin)
 - Data início/fim, vagas, local/link EAD
 - Status: aberta, em_andamento, concluida, cancelada
 
@@ -218,7 +218,6 @@ WR-Plataforma-Cursos/
 ### Roles (RBAC)
 
 - **admin:** Acesso total (cursos, turmas, alunos, financeiro)
-- **instructor:** Gestão de turmas e presença
 - **student:** Portal do aluno (matrículas, certificados)
 
 ## Endpoints Principais
@@ -238,10 +237,10 @@ WR-Plataforma-Cursos/
 
 ### Turmas
 - `GET /api/v1/classes/` - Listar turmas
-- `POST /api/v1/classes/` - Criar turma (instructor/admin)
+- `POST /api/v1/classes/` - Criar turma (admin)
 - `GET /api/v1/classes/{id}` - Detalhes da turma
-- `PUT /api/v1/classes/{id}` - Atualizar turma (instructor/admin)
-- `DELETE /api/v1/classes/{id}` - Deletar turma (instructor/admin)
+- `PUT /api/v1/classes/{id}` - Atualizar turma (admin)
+- `DELETE /api/v1/classes/{id}` - Deletar turma (admin)
 
 ### Alunos
 - `GET /api/v1/students/` - Listar alunos (admin)
@@ -341,6 +340,36 @@ VITE_API_URL=https://api.seu-dominio.com
 2. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
 3. Push para a branch (`git push origin feature/AmazingFeature`)
 4. Abra um Pull Request
+
+## Vídeo-Aulas (Fase 3)
+
+As aulas (`Lesson`) pertencem a um `Course` e podem ter três tipos de conteúdo:
+- **UPLOAD**: vídeo hospedado em storage S3-compatível
+- **YOUTUBE**: embed via URL do vídeo
+- **VIMEO**: embed via URL do vídeo
+
+### Configuração do Storage
+
+Configure um bucket S3-compatível (Cloudflare R2, Backblaze B2, MinIO, AWS S3) e adicione ao `.env`:
+
+```env
+STORAGE_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+STORAGE_ACCESS_KEY=your-access-key
+STORAGE_SECRET_KEY=your-secret-key
+STORAGE_BUCKET=wr-videos
+STORAGE_REGION=auto
+STORAGE_WATCH_URL_EXPIRATION=7200
+```
+
+- Upload é feito **diretamente do navegador** para o storage via URL pré-assinada.
+- O backend só gera a URL e salva o `storage_key`.
+- Para assistir, o backend gera uma URL de leitura pré-assinada com expiração curta.
+
+### Acesso às Aulas
+
+- Alunos só acessam aulas após `Enrollment` com status `CONFIRMADA` ou `CONCLUIDA`.
+- Aulas `is_free_preview` podem ser acessadas sem matrícula.
+- Concluir todas as aulas obrigatórias dispara a criação automática do `Certificate`.
 
 ## Licença
 

@@ -88,13 +88,11 @@ async def main():
     print("\n✓ Seed concluído com sucesso!")
     print("\n📋 Usuários de teste:")
     print("  Admin:      admin@wrcursos.com.br / admin123")
-    print("  Instrutor:  instructor@wrcursos.com.br / instructor123")
     print("  Aluno:      student@wrcursos.com.br / student123")
     print("  Aluno 2:    student2@wrcursos.com.br / student123")
     print("  Aluno 3:    student3@wrcursos.com.br / student123")
     print("\n💡 Você também pode logar com CPF:")
     print("  Admin:      12345678901 / admin123")
-    print("  Instrutor:  98765432109 / instructor123")
     print("  Aluno:      11122233344 / student123")
 
 if __name__ == "__main__":

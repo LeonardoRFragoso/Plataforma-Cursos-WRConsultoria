@@ -1,9 +1,11 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Date
-from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime, timezone, date
 import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
+
 
 class Attendance(Base):
     __tablename__ = "attendances"
@@ -13,5 +15,5 @@ class Attendance(Base):
     class_id = Column(UUID(as_uuid=True), ForeignKey("classes.id"), nullable=False)
     attendance_date = Column(Date, nullable=False)
     present = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)

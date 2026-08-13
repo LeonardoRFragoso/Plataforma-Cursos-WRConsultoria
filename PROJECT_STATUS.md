@@ -27,7 +27,7 @@ A documentação foi atualizada em `README.md`, `QUICKSTART.md` e `PROJECT_STATU
 
 - **Autenticação & Autorização**
   - JWT com access token (30 min) + refresh token (7 dias)
-  - RBAC com 3 roles: admin, instructor, student
+  - RBAC com 2 roles: admin, student
   - Endpoints: login, register, refresh, me
 
 - **Endpoints REST Completos**
@@ -65,7 +65,7 @@ A documentação foi atualizada em `README.md`, `QUICKSTART.md` e `PROJECT_STATU
   - Register com confirmação de senha
   - Dashboard com stats (admin)
   - Gerenciamento de Cursos (admin)
-  - Gerenciamento de Turmas (instructor)
+  - Gerenciamento de Turmas (admin)
   - Gerenciamento de Alunos (admin)
   - Gerenciamento de Matrículas (admin)
   - Gerenciamento de Pagamentos (admin)

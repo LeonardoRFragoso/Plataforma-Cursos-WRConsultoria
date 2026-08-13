@@ -179,7 +179,6 @@ Os usuários de teste são criados automaticamente pelo `seed_db.py`:
 | Usuário | Senha | Role |
 |---|---|---|
 | `admin@wrcursos.com.br` | `admin123` | `admin` |
-| `instructor@wrcursos.com.br` | `instructor123` | `instructor` |
 | `student@wrcursos.com.br` | `student123` | `student` |
 
 Se precisar criar um admin manualmente, acesse o banco e atualize o `role`:

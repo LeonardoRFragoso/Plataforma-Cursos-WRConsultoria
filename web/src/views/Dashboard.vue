@@ -51,17 +51,6 @@
           </div>
         </AppCard>
 
-        <!-- Card de Cursos do Instrutor (INSTRUCTOR) -->
-        <AppCard v-if="isInstructor">
-          <template #header>
-            <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
-          </template>
-          <p class="text-gray-600 mb-4">Você não tem cursos atribuídos ainda.</p>
-          <AppLink to="/courses">
-            Ver todos os cursos →
-          </AppLink>
-        </AppCard>
-
         <!-- Card de Cursos do Aluno (STUDENT) -->
         <AppCard v-if="isStudent">
           <template #header>
@@ -100,19 +89,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppLink from '../components/AppLink.vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
 const roleMap = {
   'admin': 'Administrador',
-  'instructor': 'Instrutor',
   'student': 'Aluno'
 }
 
@@ -122,10 +108,6 @@ const userRoleDisplay = computed(() => {
 
 const isAdmin = computed(() => {
   return authStore.userRole?.toLowerCase() === 'admin'
-})
-
-const isInstructor = computed(() => {
-  return authStore.userRole?.toLowerCase() === 'instructor'
 })
 
 const isStudent = computed(() => {
@@ -138,9 +120,4 @@ const stats = ref({
   pendingEnrollments: 0,
   monthlyRevenue: 0,
 })
-
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
 </script>

@@ -1,0 +1,9 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["venv"]
+
+# FastAPI e dependências de autenticação usam `Depends` nos defaults de
+# argumentos; esta é a prática canônica do framework, portanto ignoramos a
+# regra B008 para evitar ruído de falsos positivos.
+lint.ignore = ["B008"]

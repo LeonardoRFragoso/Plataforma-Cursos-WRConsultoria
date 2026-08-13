@@ -1,7 +1,10 @@
-from pydantic_settings import BaseSettings
-from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos"
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
@@ -17,7 +20,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     
     FRONTEND_URL: str = "http://localhost:5173"
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
@@ -25,8 +28,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
     ]
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Storage S3-compatível (Cloudflare R2 / Backblaze B2 / MinIO / AWS S3)
+    STORAGE_ENDPOINT: str = ""
+    STORAGE_ACCESS_KEY: str = ""
+    STORAGE_SECRET_KEY: str = ""
+    STORAGE_BUCKET: str = "wr-videos"
+    STORAGE_REGION: str = "auto"
+    STORAGE_WATCH_URL_EXPIRATION: int = 7200  # segundos
 
 settings = Settings()

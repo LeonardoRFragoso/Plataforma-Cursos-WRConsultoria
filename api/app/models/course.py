@@ -1,10 +1,12 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, Enum
-from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
 import uuid
 from enum import Enum as PyEnum
 
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+
 from app.core.database import Base
+from app.core.utils import utc_now
+
 
 class CourseModality(str, PyEnum):
     PRESENCIAL = "PRESENCIAL"
@@ -31,6 +33,6 @@ class Course(Base):
     price = Column(Float, nullable=False)
     prerequisites = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 

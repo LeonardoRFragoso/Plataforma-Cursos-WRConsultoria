@@ -14,13 +14,6 @@ TEST_USERS = [
         "role": UserRole.ADMIN,
     },
     {
-        "email": "instructor@wrcursos.com.br",
-        "cpf": "98765432109",
-        "full_name": "Instrutor WR",
-        "password": "instructor123",
-        "role": UserRole.INSTRUCTOR,
-    },
-    {
         "email": "student@wrcursos.com.br",
         "cpf": "11122233344",
         "full_name": "Aluno WR",

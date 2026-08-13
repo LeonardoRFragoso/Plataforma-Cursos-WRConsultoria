@@ -1,36 +1,37 @@
-from pydantic import BaseModel
-from typing import Optional
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
 from app.models.course import CourseModality
+
 
 class CourseBase(BaseModel):
     code: str
     name: str
     category: str
-    description: Optional[str] = None
+    description: str | None = None
     carga_horaria: int
     modality: CourseModality
     price: float
-    prerequisites: Optional[str] = None
+    prerequisites: str | None = None
     is_active: bool = True
 
 class CourseCreate(CourseBase):
     pass
 
 class CourseUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    carga_horaria: Optional[int] = None
-    modality: Optional[CourseModality] = None
-    price: Optional[float] = None
-    prerequisites: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    carga_horaria: int | None = None
+    modality: CourseModality | None = None
+    price: float | None = None
+    prerequisites: str | None = None
+    is_active: bool | None = None
 
 class CourseResponse(CourseBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

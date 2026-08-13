@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
-const routes = [
+export const routes = [
   {
     path: '/',
     name: 'Home',
@@ -36,10 +36,22 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/courses/:id/learn',
+    name: 'CourseLearn',
+    component: () => import('../views/CourseLearn.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/courses/:id/lessons',
+    name: 'CourseLessons',
+    component: () => import('../views/CourseLessons.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
     path: '/classes',
     name: 'Classes',
     component: () => import('../views/Classes.vue'),
-    meta: { requiresAuth: true, requiresInstructor: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
     path: '/students',
@@ -77,7 +89,7 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+export async function navigationGuard(to, from, next) {
   const authStore = useAuthStore()
 
   const proceed = () => {
@@ -86,8 +98,6 @@ router.beforeEach((to, from, next) => {
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
       next('/login')
     } else if (to.meta.requiresAdmin && userRole !== 'admin') {
-      next('/dashboard')
-    } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
       next('/dashboard')
     } else {
       next()
@@ -99,6 +109,8 @@ router.beforeEach((to, from, next) => {
   } else {
     proceed()
   }
-})
+}
+
+router.beforeEach(navigationGuard)
 
 export default router

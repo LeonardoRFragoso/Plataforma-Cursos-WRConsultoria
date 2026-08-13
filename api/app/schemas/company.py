@@ -1,20 +1,20 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class CompanyBase(BaseModel):
     legal_name: str = Field(..., min_length=2)
-    trade_name: Optional[str] = None
+    trade_name: str | None = None
     cnpj: str = Field(..., min_length=14, max_length=18)
-    rh_name: Optional[str] = None
-    rh_email: Optional[EmailStr] = None
-    rh_phone: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
+    rh_name: str | None = None
+    rh_email: EmailStr | None = None
+    rh_phone: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
 
 
 class CompanyCreate(CompanyBase):
@@ -22,16 +22,16 @@ class CompanyCreate(CompanyBase):
 
 
 class CompanyUpdate(BaseModel):
-    legal_name: Optional[str] = None
-    trade_name: Optional[str] = None
-    cnpj: Optional[str] = None
-    rh_name: Optional[str] = None
-    rh_email: Optional[EmailStr] = None
-    rh_phone: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
+    legal_name: str | None = None
+    trade_name: str | None = None
+    cnpj: str | None = None
+    rh_name: str | None = None
+    rh_email: EmailStr | None = None
+    rh_phone: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
 
 
 class CompanyResponse(CompanyBase):
@@ -39,5 +39,4 @@ class CompanyResponse(CompanyBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

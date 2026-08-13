@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.security import get_current_user, get_current_admin
-from app.models.payment import Payment, PaymentStatus
+from app.core.security import get_current_admin, get_current_user
 from app.models.enrollment import Enrollment
-from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentResponse, PaymentWebhookRequest
+from app.models.payment import Payment, PaymentStatus
+from app.schemas.payment import (
+    PaymentCreate,
+    PaymentResponse,
+    PaymentUpdate,
+    PaymentWebhookRequest,
+)
 
 router = APIRouter()
 
@@ -34,7 +39,7 @@ async def create_payment(
     await db.refresh(payment)
     return payment
 
-@router.get("/", response_model=List[PaymentResponse])
+@router.get("/", response_model=list[PaymentResponse])
 async def list_payments(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
