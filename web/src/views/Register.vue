@@ -1,11 +1,12 @@
 <template>
   <div class="min-h-screen flex flex-col">
-    <header class="bg-primary-700 shadow-lg">
+    <!-- Header branco com logo -->
+    <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link to="/" class="flex items-center">
           <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
         </router-link>
-        <router-link to="/login" class="text-white/90 hover:text-white font-medium text-sm transition-colors">
+        <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
           Login
         </router-link>
       </div>
