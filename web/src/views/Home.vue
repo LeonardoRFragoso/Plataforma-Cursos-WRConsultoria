@@ -22,13 +22,7 @@
 
     <!-- Hero Section -->
     <section class="relative bg-primary-600 text-white overflow-hidden">
-      <div class="absolute inset-0 opacity-15">
-        <img
-          src="https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1920&q=80"
-          alt="Treinamento de segurança do trabalho"
-          class="w-full h-full object-cover"
-        />
-      </div>
+      <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
       <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
         <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
           Treinamentos NR com<br />certificação reconhecida

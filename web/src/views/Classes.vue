@@ -209,10 +209,29 @@ const loadClasses = async () => {
 
 const saveClass = async () => {
   try {
+    const payload = {
+      ...form.value,
+      instructor_id: authStore.user?.id,
+      max_students: Number(form.value.max_students),
+      location: form.value.location || null,
+      ead_link: form.value.ead_link || null,
+      description: form.value.description || null,
+    }
+
     if (editingId.value) {
-      await api.put(`/api/v1/classes/${editingId.value}`, form.value)
+      // Atualizar só os campos permitidos pelo schema de update
+      const updatePayload = {
+        start_date: payload.start_date,
+        end_date: payload.end_date,
+        max_students: payload.max_students,
+        location: payload.location,
+        ead_link: payload.ead_link,
+        description: payload.description,
+        status: payload.status,
+      }
+      await api.put(`/api/v1/classes/${editingId.value}`, updatePayload)
     } else {
-      await api.post('/api/v1/classes/', form.value)
+      await api.post('/api/v1/classes/', payload)
     }
     resetForm()
     loadClasses()

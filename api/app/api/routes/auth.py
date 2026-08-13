@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 import re
+from uuid import UUID
 
 from app.core.database import get_db
 from app.core.security import (
@@ -55,6 +56,22 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         role=UserRole.STUDENT,
     )
     db.add(user)
+    await db.flush()
+    
+    # Criar Student automaticamente se o CPF foi informado
+    if user_data.cpf:
+        student = Student(
+            user_id=user.id,
+            cpf=user_data.cpf,
+            phone=None,
+            company=None,
+            address=None,
+            city=None,
+            state=None,
+            zip_code=None,
+        )
+        db.add(student)
+    
     await db.commit()
     await db.refresh(user)
     return user
@@ -103,7 +120,10 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     }
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshTokenRequest):
+async def refresh_token(
+    request: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
     payload = decode_token(request.refresh_token)
     user_id = payload.get("sub")
     
@@ -113,8 +133,18 @@ async def refresh_token(request: RefreshTokenRequest):
             detail="Invalid refresh token",
         )
     
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
+    stmt = select(User).where(User.id == UUID(user_id))
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    access_token = create_access_token({"sub": user_id, "role": user.role})
+    refresh_token = create_refresh_token({"sub": user_id, "role": user.role})
     
     return {
         "access_token": access_token,

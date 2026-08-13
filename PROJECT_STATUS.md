@@ -4,7 +4,20 @@
 
 A **WR Plataforma de Cursos** foi construída do zero como uma solução completa de LMS (Learning Management System) + backoffice administrativo para a WR Consultoria e Soluções em QSMS.
 
-**Status:** ✅ **Fase 1 Completa - Pronto para Desenvolvimento Local**
+**Status:** ✅ **Fase 1 + Consolidação Pós-Merge - Pronto para Fase 3**
+
+---
+
+## ✅ Consolidação Pós-Merge
+
+| Item | Status |
+|---|---|
+| Migrations Alembic com `alembic/versions/` | ✅ Concluído |
+| Seeds de Turmas, Alunos, Matrículas, Pagamentos, Certificados | ✅ Concluído |
+| Hero image sem dependência de terceiros | ✅ Concluído |
+| Testes do fluxo matrícula → pagamento → certificado | ✅ Concluído |
+
+A documentação foi atualizada em `README.md`, `QUICKSTART.md` e `PROJECT_STATUS.md`.
 
 ---
 

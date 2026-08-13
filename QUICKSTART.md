@@ -23,13 +23,34 @@ docker-compose up -d
 
 Aguarde ~30 segundos para os serviços iniciarem.
 
-## 3. Acesse a Aplicação
+## 3. Migrations e Seed
+
+Crie as tabelas e popule o banco com dados de teste:
+
+```bash
+# Migrations Alembic
+docker-compose exec api alembic upgrade head
+
+# Seed de dados de teste (cria admin, instrutor, alunos, cursos, turmas etc.)
+docker-compose exec api python seed_db.py
+```
+
+Ou, sem Docker:
+
+```bash
+cd api
+source venv/bin/activate
+alembic upgrade head
+python seed_db.py
+```
+
+## 4. Acesse a Aplicação
 
 - **Frontend:** http://localhost:5173
 - **API Swagger:** http://localhost:8000/docs
 - **API ReDoc:** http://localhost:8000/redoc
 
-## 4. Teste o Fluxo Completo
+## 5. Teste o Fluxo Completo
 
 ### Cadastro de Usuário
 ```bash
@@ -47,7 +68,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "aluno@example.com",
+    "identifier": "aluno@example.com",
     "password": "senha123"
   }'
 ```
@@ -64,7 +85,8 @@ curl -X POST http://localhost:8000/api/v1/courses/ \
     "name": "Segurança em Instalações Elétricas",
     "category": "Segurança",
     "carga_horaria": 40,
-    "modality": "presencial",
+    "modality": "PRESENCIAL",
+    "tipo_curso": "FORMACAO",
     "price": 500.00,
     "description": "Treinamento NR-10"
   }'
@@ -75,7 +97,7 @@ curl -X POST http://localhost:8000/api/v1/courses/ \
 curl http://localhost:8000/api/v1/courses/
 ```
 
-## 5. Rodar Testes
+## 6. Rodar Testes
 
 ```bash
 # Backend
@@ -85,7 +107,7 @@ docker-compose exec api pytest tests/ -v
 docker-compose exec web npm run test
 ```
 
-## 6. Parar os Serviços
+## 7. Parar os Serviços
 
 ```bash
 docker-compose down
@@ -152,10 +174,15 @@ Frontend (Vue 3)
 
 ## Credenciais Padrão
 
-Não há usuário admin pré-criado. Você precisa:
+Os usuários de teste são criados automaticamente pelo `seed_db.py`:
 
-1. Registrar um usuário via `/api/v1/auth/register`
-2. Acessar o banco de dados e atualizar o `role` para `'admin'`
+| Usuário | Senha | Role |
+|---|---|---|
+| `admin@wrcursos.com.br` | `admin123` | `admin` |
+| `instructor@wrcursos.com.br` | `instructor123` | `instructor` |
+| `student@wrcursos.com.br` | `student123` | `student` |
+
+Se precisar criar um admin manualmente, acesse o banco e atualize o `role`:
 
 ```bash
 # Acesse o container do banco

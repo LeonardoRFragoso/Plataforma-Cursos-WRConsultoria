@@ -1,8 +1,9 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 from app.models.enrollment import EnrollmentStatus
+from app.models.payment import PaymentMethod
 
 class EnrollmentBase(BaseModel):
     student_id: UUID
@@ -25,3 +26,19 @@ class EnrollmentResponse(EnrollmentBase):
 
     class Config:
         from_attributes = True
+
+
+class BulkEnrollmentCreate(BaseModel):
+    class_id: UUID
+    student_ids: List[UUID]
+    price_per_student: float
+    company_id: Optional[UUID] = None
+    status: EnrollmentStatus = EnrollmentStatus.PENDENTE
+    payment_method: PaymentMethod = PaymentMethod.BOLETO
+    installments: Optional[str] = None
+
+
+class BulkEnrollmentResponse(BaseModel):
+    enrollment_ids: List[UUID]
+    payment_id: UUID
+    total_amount: float
