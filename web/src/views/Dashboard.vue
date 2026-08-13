@@ -5,6 +5,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 class="text-3xl font-bold text-secondary-900 mb-8">Dashboard</h1>
 
+      <!-- Stats para ADMIN -->
       <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <AppCard>
           <div class="text-gray-600 text-sm">Total de Alunos</div>
@@ -24,44 +25,74 @@
         </AppCard>
       </div>
 
+      <!-- Conteúdo por Role -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Card de Gerenciamento (apenas ADMIN) -->
         <AppCard v-if="isAdmin">
           <template #header>
-            <h3 class="text-xl font-semibold text-secondary-900">Gerenciamento</h3>
+            <h3 class="text-xl font-semibold text-secondary-900">🔧 Gerenciamento</h3>
           </template>
-          <div class="space-y-2">
-            <AppLink to="/courses">
-              → Cursos
+          <div class="space-y-3">
+            <AppLink to="/courses" class="block">
+              📚 Cursos
             </AppLink>
-            <AppLink to="/classes">
-              → Turmas
+            <AppLink to="/classes" class="block">
+              👥 Turmas
             </AppLink>
-            <AppLink to="/students">
-              → Alunos
+            <AppLink to="/students" class="block">
+              👤 Alunos
             </AppLink>
-            <AppLink to="/enrollments">
-              → Matrículas
+            <AppLink to="/enrollments" class="block">
+              📝 Matrículas
             </AppLink>
-            <AppLink to="/payments">
-              → Pagamentos
+            <AppLink to="/payments" class="block">
+              💳 Pagamentos
             </AppLink>
           </div>
         </AppCard>
 
-        <AppCard>
+        <!-- Card de Cursos do Instrutor (INSTRUCTOR) -->
+        <AppCard v-if="isInstructor">
           <template #header>
-            <h3 class="text-xl font-semibold text-secondary-900">Meus Cursos</h3>
+            <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
           </template>
-          <p class="text-gray-600">Você não está matriculado em nenhum curso ainda.</p>
+          <p class="text-gray-600 mb-4">Você não tem cursos atribuídos ainda.</p>
+          <AppLink to="/courses">
+            Ver todos os cursos →
+          </AppLink>
         </AppCard>
 
+        <!-- Card de Cursos do Aluno (STUDENT) -->
+        <AppCard v-if="isStudent">
+          <template #header>
+            <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
+          </template>
+          <p class="text-gray-600 mb-4">Você não está matriculado em nenhum curso ainda.</p>
+          <AppLink to="/courses">
+            Explorar cursos →
+          </AppLink>
+        </AppCard>
+
+        <!-- Card de Certificados (todos) -->
         <AppCard>
           <template #header>
-            <h3 class="text-xl font-semibold text-secondary-900">Certificados</h3>
+            <h3 class="text-xl font-semibold text-secondary-900">🏆 Certificados</h3>
           </template>
           <AppLink to="/certificates">
             Ver certificados →
           </AppLink>
+        </AppCard>
+
+        <!-- Card de Informações (todos) -->
+        <AppCard>
+          <template #header>
+            <h3 class="text-xl font-semibold text-secondary-900">ℹ️ Meu Perfil</h3>
+          </template>
+          <div class="space-y-2 text-sm">
+            <p><strong>Função:</strong> {{ userRoleDisplay }}</p>
+            <p><strong>Nome:</strong> {{ authStore.user?.full_name }}</p>
+            <p><strong>E-mail:</strong> {{ authStore.user?.email }}</p>
+          </div>
         </AppCard>
       </div>
     </div>
@@ -79,9 +110,26 @@ import AppLink from '../components/AppLink.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const roleMap = {
+  'ADMIN': 'Administrador',
+  'INSTRUCTOR': 'Instrutor',
+  'STUDENT': 'Aluno'
+}
+
+const userRoleDisplay = computed(() => {
+  return roleMap[authStore.userRole] || authStore.userRole
+})
+
 const isAdmin = computed(() => {
-  const role = authStore.userRole?.toLowerCase()
-  return role === 'admin'
+  return authStore.userRole === 'ADMIN'
+})
+
+const isInstructor = computed(() => {
+  return authStore.userRole === 'INSTRUCTOR'
+})
+
+const isStudent = computed(() => {
+  return authStore.userRole === 'STUDENT'
 })
 
 const stats = ref({
