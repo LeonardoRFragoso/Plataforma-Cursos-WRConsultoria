@@ -11,20 +11,20 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
 
   const login = async (identifier, password) => {
-    const response = await api.post('/auth/login', { identifier, password })
+    const response = await api.post('/api/v1/auth/login', { identifier, password })
     token.value = response.data.access_token
     refreshToken.value = response.data.refresh_token
     localStorage.setItem('access_token', token.value)
     localStorage.setItem('refresh_token', refreshToken.value)
     
-    const meResponse = await api.get('/auth/me')
+    const meResponse = await api.get('/api/v1/auth/me')
     user.value = meResponse.data
     userRole.value = meResponse.data.role
     localStorage.setItem('user_role', userRole.value)
   }
 
   const register = async (email, fullName, password) => {
-    await api.post('/auth/register', {
+    await api.post('/api/v1/auth/register', {
       email,
       full_name: fullName,
       password,
@@ -45,7 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!refreshToken.value) return
     
     try {
-      const response = await api.post('/auth/refresh', {
+      const response = await api.post('/api/v1/auth/refresh', {
         refresh_token: refreshToken.value,
       })
       token.value = response.data.access_token
