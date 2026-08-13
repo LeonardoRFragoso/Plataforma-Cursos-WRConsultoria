@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routes import auth, courses, classes, students, enrollments, payments, certificates
+from app.api.routes import auth, courses, classes, students, enrollments, payments, certificates, companies
 
 app = FastAPI(
     title="WR Plataforma de Cursos",
@@ -25,6 +25,7 @@ app.include_router(students.router, prefix="/api/v1/students", tags=["students"]
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
+app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 
 @app.get("/")
 async def root():

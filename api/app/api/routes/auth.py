@@ -56,6 +56,22 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         role=UserRole.STUDENT,
     )
     db.add(user)
+    await db.flush()
+    
+    # Criar Student automaticamente se o CPF foi informado
+    if user_data.cpf:
+        student = Student(
+            user_id=user.id,
+            cpf=user_data.cpf,
+            phone=None,
+            company=None,
+            address=None,
+            city=None,
+            state=None,
+            zip_code=None,
+        )
+        db.add(student)
+    
     await db.commit()
     await db.refresh(user)
     return user

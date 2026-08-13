@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, DateTime, Boolean, Enum
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 from enum import Enum as PyEnum
@@ -23,3 +24,5 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    student = relationship("Student", back_populates="user", uselist=False)

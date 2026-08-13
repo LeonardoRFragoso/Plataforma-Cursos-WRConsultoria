@@ -22,10 +22,29 @@
         <form @submit.prevent="saveStudent" class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AppInput
+              v-model="form.full_name"
+              label="Nome Completo *"
+              placeholder="João Silva"
+              required
+            />
+            <AppInput
+              v-model="form.email"
+              label="E-mail *"
+              type="email"
+              placeholder="joao@empresa.com"
+              required
+            />
+            <AppInput
               v-model="form.cpf"
-              label="CPF"
+              label="CPF *"
               placeholder="000.000.000-00"
               required
+            />
+            <AppInput
+              v-model="form.password"
+              label="Senha Inicial"
+              type="password"
+              placeholder="Deixe em branco para gerar senha temporária"
             />
             <AppInput
               v-model="form.phone"
@@ -82,19 +101,21 @@
         <table class="w-full border-collapse">
           <thead>
             <tr class="bg-gray-200">
+              <th class="px-4 py-2 text-left font-semibold text-gray-700">Nome</th>
+              <th class="px-4 py-2 text-left font-semibold text-gray-700">E-mail</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">CPF</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Telefone</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Empresa</th>
-              <th class="px-4 py-2 text-left font-semibold text-gray-700">Cidade</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Ações</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="student in students" :key="student.id" class="border-b hover:bg-gray-50">
+              <td class="px-4 py-2">{{ student.full_name || '-' }}</td>
+              <td class="px-4 py-2">{{ student.email || '-' }}</td>
               <td class="px-4 py-2">{{ student.cpf }}</td>
               <td class="px-4 py-2">{{ student.phone || '-' }}</td>
               <td class="px-4 py-2">{{ student.company || '-' }}</td>
-              <td class="px-4 py-2">{{ student.city || '-' }}</td>
               <td class="px-4 py-2 space-x-2">
                 <AppButton @click="editStudent(student)" class="bg-blue-600 text-white text-xs px-2 py-1">Editar</AppButton>
                 <AppButton @click="deleteStudent(student.id)" class="bg-red-600 text-white text-xs px-2 py-1">Deletar</AppButton>
@@ -123,7 +144,10 @@ const loading = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
 const form = ref({
+  full_name: '',
+  email: '',
   cpf: '',
+  password: '',
   phone: '',
   company: '',
   address: '',
@@ -149,9 +173,20 @@ const loadStudents = async () => {
 const saveStudent = async () => {
   try {
     if (editingId.value) {
-      await api.put(`/api/v1/students/${editingId.value}`, form.value)
+      const updatePayload = {
+        phone: form.value.phone,
+        company: form.value.company,
+        address: form.value.address,
+        city: form.value.city,
+        state: form.value.state,
+        zip_code: form.value.zip_code,
+      }
+      await api.put(`/api/v1/students/${editingId.value}`, updatePayload)
     } else {
-      await api.post('/api/v1/students/', form.value)
+      const response = await api.post('/api/v1/students/', form.value)
+      if (response.data.temp_password) {
+        alert(`Aluno cadastrado! Senha temporária: ${response.data.temp_password}`)
+      }
     }
     resetForm()
     loadStudents()
@@ -163,7 +198,18 @@ const saveStudent = async () => {
 
 const editStudent = (student) => {
   editingId.value = student.id
-  form.value = { ...student }
+  form.value = {
+    full_name: student.full_name,
+    email: student.email,
+    cpf: student.cpf,
+    password: '',
+    phone: student.phone,
+    company: student.company,
+    address: student.address,
+    city: student.city,
+    state: student.state,
+    zip_code: student.zip_code,
+  }
   showForm.value = true
 }
 
@@ -182,7 +228,10 @@ const deleteStudent = async (id) => {
 const resetForm = () => {
   editingId.value = null
   form.value = {
+    full_name: '',
+    email: '',
     cpf: '',
+    password: '',
     phone: '',
     company: '',
     address: '',

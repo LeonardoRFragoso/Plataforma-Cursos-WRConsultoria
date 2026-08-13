@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 
@@ -13,9 +14,20 @@ class Student(Base):
     cpf = Column(String, unique=True, index=True, nullable=False)
     phone = Column(String, nullable=True)
     company = Column(String, nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     address = Column(String, nullable=True)
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
     zip_code = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="student")
+
+    @property
+    def email(self):
+        return self.user.email if self.user else None
+
+    @property
+    def full_name(self):
+        return self.user.full_name if self.user else None

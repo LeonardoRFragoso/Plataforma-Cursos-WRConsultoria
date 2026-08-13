@@ -23,6 +23,7 @@ class Payment(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     enrollment_id = Column(UUID(as_uuid=True), ForeignKey("enrollments.id"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     amount = Column(Float, nullable=False)
     status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDENTE, nullable=False)
     method = Column(Enum(PaymentMethod), nullable=False)
