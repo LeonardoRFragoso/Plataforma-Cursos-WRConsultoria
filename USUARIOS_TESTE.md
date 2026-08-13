@@ -10,12 +10,6 @@ Para testar a plataforma, use um dos usuários abaixo ou crie um novo cadastro.
 - **Senha:** `admin123`
 - **Acesso:** Dashboard completo, gerenciamento de cursos, turmas, alunos, pagamentos
 
-### Instrutor
-- **E-mail:** `instructor@wrcursos.com.br`
-- **CPF:** `98765432109`
-- **Senha:** `instructor123`
-- **Acesso:** Criar e gerenciar turmas, visualizar alunos
-
 ### Aluno
 - **E-mail:** `student@wrcursos.com.br`
 - **CPF:** `11122233344`

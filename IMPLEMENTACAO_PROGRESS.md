@@ -6,7 +6,7 @@
 - [x] Login com CPF ou E-mail
 - [x] Registro de usuários
 - [x] JWT tokens (access + refresh)
-- [x] Roles (Admin, Instructor, Student)
+- [x] Roles (Admin, Student)
 - [x] Proteção de endpoints
 
 ### Frontend
@@ -89,5 +89,4 @@ Nenhum item em progresso no momento.
 ## 🔗 Usuários de Teste
 
 - **Admin**: admin@wrcursos.com.br / admin123
-- **Instructor**: instructor@wrcursos.com.br / instructor123
 - **Student**: student@wrcursos.com.br / student123

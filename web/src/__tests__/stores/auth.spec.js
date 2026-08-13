@@ -44,13 +44,6 @@ describe('Auth Store', () => {
     expect(authStore.userRole).toBe('admin')
   })
 
-  it('recognizes instructor role', () => {
-    const authStore = useAuthStore()
-    authStore.userRole = 'instructor'
-    
-    expect(authStore.userRole).toBe('instructor')
-  })
-
   it('recognizes student role', () => {
     const authStore = useAuthStore()
     authStore.userRole = 'student'

@@ -9,7 +9,6 @@ from app.core.database import Base
 
 class UserRole(str, PyEnum):
     ADMIN = "admin"
-    INSTRUCTOR = "instructor"
     STUDENT = "student"
 
 class User(Base):

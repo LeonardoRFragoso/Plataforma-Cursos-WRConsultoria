@@ -161,7 +161,7 @@ WR-Plataforma-Cursos/
 
 ### Usuários (User)
 - Autenticação com JWT
-- Roles: admin, instructor, student
+- Roles: admin, student
 - Email único
 
 ### Cursos (Course)
@@ -171,7 +171,7 @@ WR-Plataforma-Cursos/
 
 ### Turmas (Class)
 - Vinculadas a cursos
-- Instrutor responsável
+- Responsável (admin)
 - Data início/fim, vagas, local/link EAD
 - Status: aberta, em_andamento, concluida, cancelada
 
@@ -218,7 +218,6 @@ WR-Plataforma-Cursos/
 ### Roles (RBAC)
 
 - **admin:** Acesso total (cursos, turmas, alunos, financeiro)
-- **instructor:** Gestão de turmas e presença
 - **student:** Portal do aluno (matrículas, certificados)
 
 ## Endpoints Principais
@@ -238,10 +237,10 @@ WR-Plataforma-Cursos/
 
 ### Turmas
 - `GET /api/v1/classes/` - Listar turmas
-- `POST /api/v1/classes/` - Criar turma (instructor/admin)
+- `POST /api/v1/classes/` - Criar turma (admin)
 - `GET /api/v1/classes/{id}` - Detalhes da turma
-- `PUT /api/v1/classes/{id}` - Atualizar turma (instructor/admin)
-- `DELETE /api/v1/classes/{id}` - Deletar turma (instructor/admin)
+- `PUT /api/v1/classes/{id}` - Atualizar turma (admin)
+- `DELETE /api/v1/classes/{id}` - Deletar turma (admin)
 
 ### Alunos
 - `GET /api/v1/students/` - Listar alunos (admin)

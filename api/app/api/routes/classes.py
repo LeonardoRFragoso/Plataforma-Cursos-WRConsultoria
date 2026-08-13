@@ -5,7 +5,7 @@ from typing import List
 from uuid import UUID
 
 from app.core.database import get_db
-from app.core.security import get_current_instructor
+from app.core.security import get_current_admin
 from app.models.class_model import Class
 from app.schemas.class_schema import ClassCreate, ClassUpdate, ClassResponse
 
@@ -15,7 +15,7 @@ router = APIRouter()
 async def create_class(
     class_data: ClassCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_instructor),
+    current_user: dict = Depends(get_current_admin),
 ):
     class_obj = Class(**class_data.model_dump())
     db.add(class_obj)
@@ -53,7 +53,7 @@ async def update_class(
     class_id: UUID,
     class_data: ClassUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_instructor),
+    current_user: dict = Depends(get_current_admin),
 ):
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
@@ -77,7 +77,7 @@ async def update_class(
 async def delete_class(
     class_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_instructor),
+    current_user: dict = Depends(get_current_admin),
 ):
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
