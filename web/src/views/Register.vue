@@ -1,10 +1,22 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-primary-50 to-gray-50 flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md border border-gray-200">
-      <div class="text-center mb-6">
-        <img src="../assets/logo-wr.png" alt="WR Consultoria" class="h-16 w-auto mx-auto mb-4" />
-        <h2 class="text-2xl font-bold text-secondary-900">Cadastro</h2>
+  <div class="min-h-screen flex flex-col">
+    <header class="bg-primary-700 shadow-lg">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+        <router-link to="/" class="flex items-center">
+          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
+        </router-link>
+        <router-link to="/login" class="text-white/90 hover:text-white font-medium text-sm transition-colors">
+          Login
+        </router-link>
       </div>
+    </header>
+
+    <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
+      <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md border border-gray-200">
+        <div class="text-center mb-6">
+          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-16 w-auto mx-auto mb-4" />
+          <h2 class="text-2xl font-bold text-secondary-900">Cadastro</h2>
+        </div>
       
       <form @submit.prevent="handleRegister" class="space-y-4">
         <div>
@@ -76,6 +88,7 @@
           </router-link>
         </p>
       </div>
+    </div>
     </div>
   </div>
 </template>
