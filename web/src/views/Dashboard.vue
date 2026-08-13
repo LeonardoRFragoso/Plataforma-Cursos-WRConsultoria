@@ -100,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
@@ -143,4 +143,9 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+// Debug
+watch(() => authStore.userRole, (newRole) => {
+  console.log('Dashboard: userRole changed to', newRole)
+})
 </script>
