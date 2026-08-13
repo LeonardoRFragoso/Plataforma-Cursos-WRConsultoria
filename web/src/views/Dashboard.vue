@@ -6,57 +6,63 @@
       <h1 class="text-3xl font-bold text-secondary-900 mb-8">Dashboard</h1>
 
       <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <AppCard>
           <div class="text-gray-600 text-sm">Total de Alunos</div>
           <div class="text-3xl font-bold text-primary-600">{{ stats.totalStudents }}</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        </AppCard>
+        <AppCard>
           <div class="text-gray-600 text-sm">Turmas Ativas</div>
           <div class="text-3xl font-bold text-primary-600">{{ stats.activeClasses }}</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        </AppCard>
+        <AppCard>
           <div class="text-gray-600 text-sm">Matrículas Pendentes</div>
           <div class="text-3xl font-bold text-primary-600">{{ stats.pendingEnrollments }}</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        </AppCard>
+        <AppCard>
           <div class="text-gray-600 text-sm">Receita do Mês</div>
           <div class="text-3xl font-bold text-primary-600">R$ {{ stats.monthlyRevenue }}</div>
-        </div>
+        </AppCard>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div v-if="isAdmin" class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-          <h3 class="text-xl font-semibold text-secondary-900 mb-4">Gerenciamento</h3>
+        <AppCard v-if="isAdmin">
+          <template #header>
+            <h3 class="text-xl font-semibold text-secondary-900">Gerenciamento</h3>
+          </template>
           <div class="space-y-2">
-            <router-link to="/courses" class="block text-primary-600 hover:text-primary-700 transition-colors">
+            <AppLink to="/courses">
               → Cursos
-            </router-link>
-            <router-link to="/classes" class="block text-primary-600 hover:text-primary-700 transition-colors">
+            </AppLink>
+            <AppLink to="/classes">
               → Turmas
-            </router-link>
-            <router-link to="/students" class="block text-primary-600 hover:text-primary-700 transition-colors">
+            </AppLink>
+            <AppLink to="/students">
               → Alunos
-            </router-link>
-            <router-link to="/enrollments" class="block text-primary-600 hover:text-primary-700 transition-colors">
+            </AppLink>
+            <AppLink to="/enrollments">
               → Matrículas
-            </router-link>
-            <router-link to="/payments" class="block text-primary-600 hover:text-primary-700 transition-colors">
+            </AppLink>
+            <AppLink to="/payments">
               → Pagamentos
-            </router-link>
+            </AppLink>
           </div>
-        </div>
+        </AppCard>
 
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-          <h3 class="text-xl font-semibold text-secondary-900 mb-4">Meus Cursos</h3>
+        <AppCard>
+          <template #header>
+            <h3 class="text-xl font-semibold text-secondary-900">Meus Cursos</h3>
+          </template>
           <p class="text-gray-600">Você não está matriculado em nenhum curso ainda.</p>
-        </div>
+        </AppCard>
 
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-          <h3 class="text-xl font-semibold text-secondary-900 mb-4">Certificados</h3>
-          <router-link to="/certificates" class="text-primary-600 hover:text-primary-700 transition-colors">
+        <AppCard>
+          <template #header>
+            <h3 class="text-xl font-semibold text-secondary-900">Certificados</h3>
+          </template>
+          <AppLink to="/certificates">
             Ver certificados →
-          </router-link>
-        </div>
+          </AppLink>
+        </AppCard>
       </div>
     </div>
   </div>
@@ -67,6 +73,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
+import AppCard from '../components/AppCard.vue'
+import AppLink from '../components/AppLink.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
