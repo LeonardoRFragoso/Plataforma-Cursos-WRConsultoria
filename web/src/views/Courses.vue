@@ -61,9 +61,9 @@
                 class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
               >
-                <option value="presencial">Presencial</option>
-                <option value="ead">EAD</option>
-                <option value="semipresencial">Semipresencial</option>
+                <option value="PRESENCIAL">Presencial</option>
+                <option value="EAD">EAD</option>
+                <option value="SEMIPRESENCIAL">Semipresencial</option>
               </select>
             </div>
           </div>
@@ -156,7 +156,7 @@ const form = ref({
   category: '',
   carga_horaria: 0,
   price: 0,
-  modality: 'presencial',
+  modality: 'PRESENCIAL',
   description: '',
 })
 
@@ -165,9 +165,9 @@ const isInstructor = computed(() => authStore.userRole?.toLowerCase() === 'instr
 
 const formatModality = (modality) => {
   const map = {
-    'presencial': 'Presencial',
-    'ead': 'EAD',
-    'semipresencial': 'Semipresencial'
+    'PRESENCIAL': 'Presencial',
+    'EAD': 'EAD',
+    'SEMIPRESENCIAL': 'Semipresencial'
   }
   return map[modality] || modality
 }
@@ -229,7 +229,7 @@ const resetForm = () => {
     category: '',
     carga_horaria: 0,
     price: 0,
-    modality: 'presencial',
+    modality: 'PRESENCIAL',
     description: '',
   }
   showForm.value = false

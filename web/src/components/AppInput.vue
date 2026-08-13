@@ -10,7 +10,8 @@
       :placeholder="placeholder"
       :required="required"
       :disabled="disabled"
-      @input="$emit('update:modelValue', $event.target.value)"
+      :step="step"
+      @input="handleInput"
       :class="[
         'w-full px-4 py-2 border border-gray-300 rounded-md',
         'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
@@ -25,7 +26,7 @@
 <script setup>
 defineProps({
   modelValue: {
-    type: String,
+    type: [String, Number],
     default: ''
   },
   type: {
@@ -51,8 +52,16 @@ defineProps({
   error: {
     type: String,
     default: ''
+  },
+  step: {
+    type: String,
+    default: '1'
   }
 })
 
-defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
+
+const handleInput = (event) => {
+  emit('update:modelValue', event.target.value)
+}
 </script>
