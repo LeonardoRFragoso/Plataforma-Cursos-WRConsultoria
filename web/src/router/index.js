@@ -77,22 +77,27 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
 
-  // Sempre inicializar o usuário antes de decidir a navegação
-  await authStore.initializeUser()
+  const proceed = () => {
+    const userRole = authStore.userRole?.toLowerCase()
 
-  const userRole = authStore.userRole?.toLowerCase()
+    if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+      next('/login')
+    } else if (to.meta.requiresAdmin && userRole !== 'admin') {
+      next('/dashboard')
+    } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
+      next('/dashboard')
+    } else {
+      next()
+    }
+  }
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-  } else if (to.meta.requiresAdmin && userRole !== 'admin') {
-    next('/dashboard')
-  } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
-    next('/dashboard')
+  if (authStore.token && !authStore.initialized) {
+    authStore.initializeUser().then(proceed)
   } else {
-    next()
+    proceed()
   }
 })
 
