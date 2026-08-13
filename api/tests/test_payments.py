@@ -62,6 +62,7 @@ async def _create_test_enrollment(client, admin_headers):
             "city": "São Paulo",
             "state": "SP",
             "zip_code": "02000-000",
+            "class_id": class_id,
         },
         headers=admin_headers,
     )

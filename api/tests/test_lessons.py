@@ -54,7 +54,11 @@ async def _create_class(client, admin_headers, course_id, responsible_admin_id, 
     return response.json()["id"]
 
 
-async def _create_student(client, admin_headers):
+async def _create_student(client, admin_headers, class_id=None):
+    if class_id is None:
+        course_id = await _create_course(client, admin_headers)
+        responsible_admin_id = await _get_admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, responsible_admin_id)
     email = f"student_lsn_{uuid.uuid4().hex[:8]}@example.com"
     cpf = f"{uuid.uuid4().int % 10**11:011d}"
     response = await client.post(
@@ -70,6 +74,7 @@ async def _create_student(client, admin_headers):
             "city": "São Paulo",
             "state": "SP",
             "zip_code": "01000-000",
+            "class_id": class_id,
         },
         headers=admin_headers,
     )

@@ -18,6 +18,7 @@ class StudentCreate(StudentBase):
     full_name: str
     password: str | None = None
     company_id: UUID | None = None
+    class_id: UUID
 
 class StudentUpdate(BaseModel):
     phone: str | None = None
