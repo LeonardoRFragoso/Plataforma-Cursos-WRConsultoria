@@ -11,6 +11,12 @@ class CourseModality(str, PyEnum):
     EAD = "ead"
     SEMIPRESENCIAL = "semipresencial"
 
+class CourseType(str, PyEnum):
+    FORMACAO = "formacao"
+    RECICLAGEM = "reciclagem"
+    INICIAL = "inicial"
+    PERIODICO = "periodico"
+
 class Course(Base):
     __tablename__ = "courses"
 
@@ -21,8 +27,10 @@ class Course(Base):
     description = Column(Text, nullable=True)
     carga_horaria = Column(Integer, nullable=False)
     modality = Column(Enum(CourseModality), default=CourseModality.PRESENCIAL, nullable=False)
+    tipo_curso = Column(Enum(CourseType), default=CourseType.FORMACAO, nullable=False)
     price = Column(Float, nullable=False)
     prerequisites = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+

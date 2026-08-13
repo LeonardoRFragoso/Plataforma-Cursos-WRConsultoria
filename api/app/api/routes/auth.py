@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
+import re
 
 from app.core.database import get_db
 from app.core.security import (
@@ -17,6 +18,16 @@ from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse,
 
 router = APIRouter()
 
+def is_cpf(identifier: str) -> bool:
+    """Verifica se o identificador é um CPF (apenas números, 11 dígitos)"""
+    cpf_pattern = r'^\d{11}$'
+    return bool(re.match(cpf_pattern, identifier.replace('.', '').replace('-', '')))
+
+def is_email(identifier: str) -> bool:
+    """Verifica se o identificador é um e-mail"""
+    email_pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    return bool(re.match(email_pattern, identifier))
+
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     stmt = select(User).where(User.email == user_data.email)
@@ -27,8 +38,18 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             detail="Email already registered",
         )
     
+    if user_data.cpf:
+        stmt = select(User).where(User.cpf == user_data.cpf)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CPF already registered",
+            )
+    
     user = User(
         email=user_data.email,
+        cpf=user_data.cpf,
         full_name=user_data.full_name,
         password_hash=hash_password(user_data.password),
         role=UserRole.STUDENT,
@@ -40,9 +61,25 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
-    stmt = select(User).where(User.email == credentials.email)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    """
+    Login com CPF ou e-mail.
+    Aceita identifier como CPF (11 dígitos) ou e-mail.
+    """
+    user = None
+    
+    if is_cpf(credentials.identifier):
+        stmt = select(User).where(User.cpf == credentials.identifier)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+    elif is_email(credentials.identifier):
+        stmt = select(User).where(User.email == credentials.identifier)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Identifier must be a valid CPF (11 digits) or email",
+        )
     
     if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
