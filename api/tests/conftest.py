@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -9,6 +10,7 @@ settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/w
 
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.security import hash_password
+from app.core.utils import utc_now
 from app.main import app
 from app.models.user import User, UserRole
 
@@ -76,9 +78,46 @@ def test_user_data():
 
 @pytest.fixture
 async def student_user(client, admin_headers):
-    """Cria um aluno e faz login, retornando headers e student_id."""
+    """Cria um aluno em uma turma e faz login, retornando headers e student_id."""
     email = f"student_{uuid.uuid4().hex[:8]}@example.com"
     cpf = f"{uuid.uuid4().int % 10**11:011d}"
+
+    today = utc_now().date()
+    course = await client.post(
+        "/api/v1/courses/",
+        json={
+            "code": f"CUR-{uuid.uuid4().hex[:6].upper()}",
+            "name": "Curso Teste",
+            "category": "Segurança",
+            "carga_horaria": 40,
+            "modality": "PRESENCIAL",
+            "price": 100.0,
+            "description": "Curso teste",
+        },
+        headers=admin_headers,
+    )
+    assert course.status_code == 201
+    course_id = course.json()["id"]
+
+    me = await client.get("/api/v1/auth/me", headers=admin_headers)
+    assert me.status_code == 200
+    admin_id = me.json()["id"]
+
+    class_payload = {
+        "course_id": course_id,
+        "responsible_admin_id": admin_id,
+        "start_date": (today + timedelta(days=1)).isoformat(),
+        "end_date": (today + timedelta(days=30)).isoformat(),
+        "max_students": 20,
+        "location": "São Paulo",
+        "ead_link": None,
+        "status": "ABERTA",
+        "description": "Turma teste",
+    }
+    class_response = await client.post("/api/v1/classes/", json=class_payload, headers=admin_headers)
+    assert class_response.status_code == 201
+    class_id = class_response.json()["id"]
+
     response = await client.post(
         "/api/v1/students/",
         json={
@@ -92,6 +131,7 @@ async def student_user(client, admin_headers):
             "city": "São Paulo",
             "state": "SP",
             "zip_code": "01000-000",
+            "class_id": class_id,
         },
         headers=admin_headers,
     )

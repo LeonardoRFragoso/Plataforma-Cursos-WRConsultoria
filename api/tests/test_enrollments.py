@@ -66,6 +66,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
         "city": "São Paulo",
         "state": "SP",
         "zip_code": "01000-000",
+        "class_id": class_id,
     }
     student_response = await client.post(
         "/api/v1/students/",

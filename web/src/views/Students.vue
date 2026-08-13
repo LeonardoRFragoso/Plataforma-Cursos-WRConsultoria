@@ -71,6 +71,19 @@
               label="CEP"
               placeholder="00000-000"
             />
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Turma *</label>
+              <select
+                v-model="form.class_id"
+                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                :required="!editingId"
+              >
+                <option value="">Selecione uma turma</option>
+                <option v-for="cls in classes" :key="cls.id" :value="cls.id">
+                  {{ getCourseNameById(cls.course_id) }} — {{ new Date(cls.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(cls.end_date).toLocaleDateString('pt-BR') }}
+                </option>
+              </select>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
@@ -140,6 +153,8 @@ import AppInput from '../components/AppInput.vue'
 const authStore = useAuthStore()
 
 const students = ref([])
+const classes = ref([])
+const courses = ref([])
 const loading = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
@@ -154,9 +169,14 @@ const form = ref({
   city: '',
   state: '',
   zip_code: '',
+  class_id: '',
 })
 
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
+
+const getCourseNameById = (courseId) => {
+  return courses.value.find(c => c.id === courseId)?.name || 'Curso desconhecido'
+}
 
 const loadStudents = async () => {
   loading.value = true
@@ -167,6 +187,24 @@ const loadStudents = async () => {
     console.error('Erro ao carregar alunos:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const loadClasses = async () => {
+  try {
+    const response = await api.get('/api/v1/classes/')
+    classes.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar turmas:', error)
+  }
+}
+
+const loadCourses = async () => {
+  try {
+    const response = await api.get('/api/v1/courses/')
+    courses.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar cursos:', error)
   }
 }
 
@@ -183,7 +221,8 @@ const saveStudent = async () => {
       }
       await api.put(`/api/v1/students/${editingId.value}`, updatePayload)
     } else {
-      const response = await api.post('/api/v1/students/', form.value)
+      const createPayload = { ...form.value }
+      const response = await api.post('/api/v1/students/', createPayload)
       if (response.data.temp_password) {
         alert(`Aluno cadastrado! Senha temporária: ${response.data.temp_password}`)
       }
@@ -192,7 +231,9 @@ const saveStudent = async () => {
     loadStudents()
   } catch (error) {
     console.error('Erro ao salvar aluno:', error)
-    alert('Erro ao salvar aluno: ' + (error.response?.data?.detail || error.message))
+    const detail = error.response?.data?.detail
+    const message = typeof detail === 'object' ? JSON.stringify(detail) : (detail || error.message)
+    alert('Erro ao salvar aluno: ' + message)
   }
 }
 
@@ -209,6 +250,7 @@ const editStudent = (student) => {
     city: student.city,
     state: student.state,
     zip_code: student.zip_code,
+    class_id: '',
   }
   showForm.value = true
 }
@@ -238,9 +280,14 @@ const resetForm = () => {
     city: '',
     state: '',
     zip_code: '',
+    class_id: '',
   }
   showForm.value = false
 }
 
-onMounted(loadStudents)
+onMounted(() => {
+  loadStudents()
+  loadClasses()
+  loadCourses()
+})
 </script>

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_admin
 from app.models.class_model import Class
+from app.models.course import Course
 from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
 
 router = APIRouter()
@@ -17,6 +18,18 @@ async def create_class(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
+    course = await db.get(Course, class_data.course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+    if not course.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Course must be active to create a class",
+        )
+
     class_obj = Class(**class_data.model_dump())
     db.add(class_obj)
     await db.commit()

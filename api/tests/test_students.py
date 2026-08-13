@@ -62,6 +62,7 @@ async def test_admin_create_student_and_enroll(client, admin_headers):
         "city": "São Paulo",
         "state": "SP",
         "zip_code": "01000-000",
+        "class_id": class_id,
     }
     student_response = await client.post(
         "/api/v1/students/",
@@ -89,17 +90,8 @@ async def test_admin_create_student_and_enroll(client, admin_headers):
     assert login.status_code == 200
     assert "access_token" in login.json()
 
-    # Matricular o aluno na turma
-    enrollment = await client.post(
-        "/api/v1/enrollments/",
-        json={
-            "student_id": student_id,
-            "class_id": class_id,
-            "price": 150.00,
-            "status": "CONFIRMADA",
-        },
-        headers=admin_headers,
-    )
-    assert enrollment.status_code == 201
-    assert enrollment.json()["student_id"] == student_id
-    assert enrollment.json()["class_id"] == class_id
+    # Verificar que a matrícula foi criada automaticamente
+    enrollment_response = await client.get("/api/v1/enrollments/", headers=admin_headers)
+    assert enrollment_response.status_code == 200
+    enrollments = enrollment_response.json()
+    assert any(e["student_id"] == student_id and e["class_id"] == class_id for e in enrollments)

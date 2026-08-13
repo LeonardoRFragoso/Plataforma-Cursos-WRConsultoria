@@ -8,6 +8,9 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user, hash_password
+from app.models.class_model import Class
+from app.models.course import Course
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.student import Student
 from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentResponse, StudentUpdate
@@ -55,6 +58,26 @@ async def create_student(
             detail="Email already registered",
         )
 
+    # Validar turma e curso
+    class_obj = await db.get(Class, student_data.class_id)
+    if not class_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Class not found",
+        )
+
+    course = await db.get(Course, class_obj.course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found for the selected class",
+        )
+    if not course.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The course for the selected class is not active",
+        )
+
     # Gerar senha temporária se não fornecida
     temp_password = student_data.password or secrets.token_urlsafe(8)
 
@@ -71,13 +94,23 @@ async def create_student(
     await db.flush()
 
     # Criar Student vinculado ao User
-    student_payload = student_data.model_dump(exclude={"email", "full_name", "password", "cpf"})
+    student_payload = student_data.model_dump(exclude={"email", "full_name", "password", "cpf", "class_id"})
     student = Student(
         user_id=user.id,
         cpf=raw_cpf,
         **student_payload,
     )
     db.add(student)
+    await db.flush()
+
+    # Criar matrícula vinculando aluno à turma
+    enrollment = Enrollment(
+        student_id=student.id,
+        class_id=class_obj.id,
+        price=course.price,
+        status=EnrollmentStatus.CONFIRMADA,
+    )
+    db.add(enrollment)
 
     await db.commit()
     await db.refresh(student)
@@ -157,6 +190,11 @@ async def delete_student(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Student not found",
         )
+    
+    enrollment_stmt = select(Enrollment).where(Enrollment.student_id == student_id)
+    enrollment_result = await db.execute(enrollment_stmt)
+    for enrollment in enrollment_result.scalars().all():
+        await db.delete(enrollment)
     
     await db.delete(student)
     await db.commit()
