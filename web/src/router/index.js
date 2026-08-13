@@ -79,12 +79,13 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
+  const userRole = authStore.userRole?.toLowerCase()
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if (to.meta.requiresAdmin && authStore.userRole !== 'admin') {
+  } else if (to.meta.requiresAdmin && userRole !== 'admin') {
     next('/dashboard')
-  } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(authStore.userRole)) {
+  } else if (to.meta.requiresInstructor && !['admin', 'instructor'].includes(userRole)) {
     next('/dashboard')
   } else {
     next()

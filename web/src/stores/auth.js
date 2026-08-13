@@ -59,7 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const initializeUser = async () => {
-    if (token.value) {
+    if (token.value && !user.value) {
       try {
         const meResponse = await api.get('/api/v1/auth/me')
         user.value = meResponse.data
@@ -72,7 +72,6 @@ export const useAuthStore = defineStore('auth', () => {
         })
       } catch (error) {
         console.error('✗ Failed to initialize user:', error)
-        logout()
       }
     }
   }
