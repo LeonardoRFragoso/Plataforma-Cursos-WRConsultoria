@@ -10,6 +10,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from app.core.migration_reconcile import reconcile_enrollments
+
 
 # revision identifiers, used by Alembic.
 revision: str = '844b5516b310'
@@ -19,13 +21,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Remove matrículas duplicadas, mantendo a de menor id
-    op.execute(
-        sa.text(
-            "DELETE FROM enrollments a USING enrollments b "
-            "WHERE a.student_id = b.student_id AND a.class_id = b.class_id AND a.id > b.id"
-        )
-    )
+    # Reconcilia duplicatas de forma segura, escolhendo a matrícula canônica e
+    # abortando quando não for possível resolver automaticamente.
+    conn = op.get_bind()
+    reconcile_enrollments(conn)
     op.create_unique_constraint('uq_enrollment_student_class', 'enrollments', ['student_id', 'class_id'])
 
 
