@@ -27,6 +27,20 @@ TEST_USERS = [
         "password": "student123",
         "role": UserRole.STUDENT,
     },
+    {
+        "email": "student2@wrcursos.com.br",
+        "cpf": "22233344455",
+        "full_name": "Aluno 2 WR",
+        "password": "student123",
+        "role": UserRole.STUDENT,
+    },
+    {
+        "email": "student3@wrcursos.com.br",
+        "cpf": "33344455566",
+        "full_name": "Aluno 3 WR",
+        "password": "student123",
+        "role": UserRole.STUDENT,
+    },
 ]
 
 async def seed_users(db):

@@ -10,6 +10,7 @@ from app.seeds.users_seed import seed_users
 from app.seeds.courses_seed import COURSES_DATA
 from app.models.course import Course, CourseModality, CourseType
 
+
 async def main():
     print("🌱 Iniciando seed do banco de dados...\n")
     
@@ -53,11 +54,48 @@ async def main():
         await db.commit()
         break
     
+    # Seed de alunos
+    print("\n👥 Populando alunos...")
+    from app.seeds.students_seed import seed_students
+    async for db in get_db():
+        await seed_students(db)
+        break
+    
+    # Seed de turmas
+    print("\n📅 Populando turmas...")
+    from app.seeds.classes_seed import seed_classes
+    async for db in get_db():
+        await seed_classes(db)
+        break
+    
+    # Seed de matrículas
+    print("\n📝 Populando matrículas...")
+    from app.seeds.enrollments_seed import seed_enrollments
+    async for db in get_db():
+        await seed_enrollments(db)
+        break
+    
+    # Seed de pagamentos
+    print("\n💳 Populando pagamentos...")
+    from app.seeds.payments_seed import seed_payments
+    async for db in get_db():
+        await seed_payments(db)
+        break
+    
+    # Seed de certificados
+    print("\n🏆 Populando certificados...")
+    from app.seeds.certificates_seed import seed_certificates
+    async for db in get_db():
+        await seed_certificates(db)
+        break
+    
     print("\n✓ Seed concluído com sucesso!")
     print("\n📋 Usuários de teste:")
     print("  Admin:      admin@wrcursos.com.br / admin123")
     print("  Instrutor:  instructor@wrcursos.com.br / instructor123")
     print("  Aluno:      student@wrcursos.com.br / student123")
+    print("  Aluno 2:    student2@wrcursos.com.br / student123")
+    print("  Aluno 3:    student3@wrcursos.com.br / student123")
     print("\n💡 Você também pode logar com CPF:")
     print("  Admin:      12345678901 / admin123")
     print("  Instrutor:  98765432109 / instructor123")
