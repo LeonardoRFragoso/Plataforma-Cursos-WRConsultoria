@@ -71,7 +71,7 @@ async def create_student(
     await db.flush()
 
     # Criar Student vinculado ao User
-    student_payload = student_data.model_dump(exclude={"email", "full_name", "password"})
+    student_payload = student_data.model_dump(exclude={"email", "full_name", "password", "cpf"})
     student = Student(
         user_id=user.id,
         cpf=raw_cpf,

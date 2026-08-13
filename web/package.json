@@ -7,9 +7,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore",
+    "lint:fix": "npm run lint -- --fix"
   },
   "dependencies": {
     "vue": "^3.3.8",

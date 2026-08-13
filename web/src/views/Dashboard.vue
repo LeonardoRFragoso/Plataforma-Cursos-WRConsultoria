@@ -89,14 +89,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppLink from '../components/AppLink.vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
 const roleMap = {
@@ -122,9 +120,4 @@ const stats = ref({
   pendingEnrollments: 0,
   monthlyRevenue: 0,
 })
-
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
 </script>

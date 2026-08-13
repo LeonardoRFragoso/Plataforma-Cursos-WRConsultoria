@@ -135,7 +135,6 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
@@ -143,7 +142,6 @@ import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
 const courses = ref([])
