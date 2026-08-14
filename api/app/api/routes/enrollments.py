@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
 from app.models.class_model import Class
 from app.models.company import Company
+from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment, PaymentStatus
 from app.models.student import Student
@@ -17,6 +18,7 @@ from app.schemas.enrollment import (
     EnrollmentCreate,
     EnrollmentResponse,
     EnrollmentUpdate,
+    MyEnrollmentResponse,
 )
 
 router = APIRouter()
@@ -54,6 +56,45 @@ async def list_enrollments(
     result = await db.execute(stmt)
     enrollments = result.scalars().all()
     return enrollments
+
+@router.get("/me", response_model=list[MyEnrollmentResponse])
+async def list_my_enrollments(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "student":
+        return []
+
+    user_id = UUID(current_user["user_id"])
+    stmt = select(Student).where(Student.user_id == user_id)
+    result = await db.execute(stmt)
+    student = result.scalar_one_or_none()
+    if not student:
+        return []
+
+    stmt = (
+        select(Enrollment, Class, Course)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(Enrollment.student_id == student.id)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        MyEnrollmentResponse(
+            id=enrollment.id,
+            status=enrollment.status,
+            course_id=course.id,
+            course_name=course.name,
+            class_id=class_obj.id,
+            start_date=class_obj.start_date,
+            end_date=class_obj.end_date,
+            enrollment_date=enrollment.enrollment_date,
+        )
+        for enrollment, class_obj, course in rows
+    ]
+
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)
 async def get_enrollment(

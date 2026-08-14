@@ -74,15 +74,17 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Turma *</label>
               <select
+                v-if="availableClasses.length > 0"
                 v-model="form.class_id"
                 class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 :required="!editingId"
               >
                 <option value="">Selecione uma turma</option>
-                <option v-for="cls in classes" :key="cls.id" :value="cls.id">
-                  {{ getCourseNameById(cls.course_id) }} — {{ new Date(cls.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(cls.end_date).toLocaleDateString('pt-BR') }}
+                <option v-for="cls in availableClasses" :key="cls.id" :value="cls.id">
+                  {{ getCourseNameById(cls.course_id) }} — {{ new Date(cls.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(cls.end_date).toLocaleDateString('pt-BR') }} ({{ cls.max_students - enrollmentCountByClass[cls.id] }} vagas)
                 </option>
               </select>
+              <p v-else class="text-sm text-red-600">Nenhuma turma elegível disponível</p>
             </div>
           </div>
           <div>
@@ -155,6 +157,7 @@ const authStore = useAuthStore()
 const students = ref([])
 const classes = ref([])
 const courses = ref([])
+const enrollments = ref([])
 const loading = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
@@ -178,6 +181,26 @@ const getCourseNameById = (courseId) => {
   return courses.value.find(c => c.id === courseId)?.name || 'Curso desconhecido'
 }
 
+const enrollmentCountByClass = computed(() => {
+  const counts = {}
+  for (const enrollment of enrollments.value) {
+    if (enrollment.status === 'PENDENTE' || enrollment.status === 'CONFIRMADA') {
+      counts[enrollment.class_id] = (counts[enrollment.class_id] || 0) + 1
+    }
+  }
+  return counts
+})
+
+const availableClasses = computed(() => {
+  return classes.value.filter((cls) => {
+    if (cls.status !== 'ABERTA') return false
+    const course = courses.value.find(c => c.id === cls.course_id)
+    if (!course || !course.is_active) return false
+    const count = enrollmentCountByClass.value[cls.id] || 0
+    return count < cls.max_students
+  })
+})
+
 const loadStudents = async () => {
   loading.value = true
   try {
@@ -196,6 +219,15 @@ const loadClasses = async () => {
     classes.value = response.data
   } catch (error) {
     console.error('Erro ao carregar turmas:', error)
+  }
+}
+
+const loadEnrollments = async () => {
+  try {
+    const response = await api.get('/api/v1/enrollments/')
+    enrollments.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar matrículas:', error)
   }
 }
 
@@ -221,6 +253,10 @@ const saveStudent = async () => {
       }
       await api.put(`/api/v1/students/${editingId.value}`, updatePayload)
     } else {
+      if (!form.value.class_id) {
+        alert('Selecione uma turma elegível para o aluno')
+        return
+      }
       const createPayload = { ...form.value }
       const response = await api.post('/api/v1/students/', createPayload)
       if (response.data.temp_password) {
@@ -228,7 +264,8 @@ const saveStudent = async () => {
       }
     }
     resetForm()
-    loadStudents()
+    await loadStudents()
+    await loadEnrollments()
   } catch (error) {
     console.error('Erro ao salvar aluno:', error)
     const detail = error.response?.data?.detail
@@ -285,9 +322,7 @@ const resetForm = () => {
   showForm.value = false
 }
 
-onMounted(() => {
-  loadStudents()
-  loadClasses()
-  loadCourses()
+onMounted(async () => {
+  await Promise.all([loadStudents(), loadClasses(), loadCourses(), loadEnrollments()])
 })
 </script>

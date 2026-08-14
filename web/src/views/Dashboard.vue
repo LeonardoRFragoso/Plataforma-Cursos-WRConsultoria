@@ -56,10 +56,34 @@
           <template #header>
             <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
           </template>
-          <p class="text-gray-600 mb-4">Você não está matriculado em nenhum curso ainda.</p>
-          <AppLink to="/courses">
-            Explorar cursos →
-          </AppLink>
+          <div v-if="loadingEnrollments" class="text-sm text-gray-600">
+            Carregando cursos...
+          </div>
+          <div v-else-if="myEnrollments.length === 0" class="text-gray-600 mb-4">
+            <p class="mb-4">Você não está matriculado em nenhum curso ainda.</p>
+            <AppLink to="/courses">
+              Explorar cursos →
+            </AppLink>
+          </div>
+          <ul v-else class="space-y-3">
+            <li v-for="enrollment in myEnrollments" :key="enrollment.id" class="border border-gray-200 rounded-md p-3 hover:bg-gray-50">
+              <AppLink v-if="canPlay(enrollment.status)" :to="`/courses/${enrollment.course_id}/learn`" class="block">
+                <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
+                <div class="text-sm text-gray-600">
+                  {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
+                  <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+                </div>
+              </AppLink>
+              <div v-else class="block cursor-not-allowed opacity-75">
+                <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
+                <div class="text-sm text-gray-600">
+                  {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
+                  <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+                  <span class="ml-2 text-xs italic">{{ statusMessage(enrollment.status) }}</span>
+                </div>
+              </div>
+            </li>
+          </ul>
         </AppCard>
 
         <!-- Card de Certificados (todos) -->
@@ -89,8 +113,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppLink from '../components/AppLink.vue'
@@ -119,5 +144,45 @@ const stats = ref({
   activeClasses: 0,
   pendingEnrollments: 0,
   monthlyRevenue: 0,
+})
+
+const myEnrollments = ref([])
+const loadingEnrollments = ref(false)
+
+const canPlay = (status) => status === 'CONFIRMADA' || status === 'CONCLUIDA'
+
+const statusMessage = (status) => {
+  const messages = {
+    PENDENTE: 'Aguardando confirmação',
+    CANCELADA: 'Matrícula cancelada',
+  }
+  return messages[status] || ''
+}
+
+const statusClass = (status) => {
+  const classes = {
+    PENDENTE: 'bg-yellow-100 text-yellow-800',
+    CONFIRMADA: 'bg-green-100 text-green-800',
+    CONCLUIDA: 'bg-blue-100 text-blue-800',
+    CANCELADA: 'bg-red-100 text-red-800',
+  }
+  return classes[status] || 'bg-gray-100 text-gray-800'
+}
+
+const loadMyEnrollments = async () => {
+  if (!isStudent.value) return
+  loadingEnrollments.value = true
+  try {
+    const response = await api.get('/api/v1/enrollments/me')
+    myEnrollments.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar matrículas:', error)
+  } finally {
+    loadingEnrollments.value = false
+  }
+}
+
+onMounted(() => {
+  loadMyEnrollments()
 })
 </script>

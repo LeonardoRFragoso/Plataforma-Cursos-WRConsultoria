@@ -45,7 +45,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
         "max_students": 30,
         "location": "Sala de Testes",
         "ead_link": None,
-        "status": "CONCLUIDA",
+        "status": "ABERTA",
         "description": "Turma de teste",
     }
     class_response = await client.post("/api/v1/classes/", json=class_data, headers=admin_headers)
@@ -76,21 +76,23 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     assert student_response.status_code == 201
     student_id = student_response.json()["id"]
 
-    # 6. Criar matrícula com status concluída
-    enrollment_data = {
-        "student_id": student_id,
-        "class_id": class_id,
-        "price": 299.90,
-        "status": "CONCLUIDA",
-    }
-    enrollment_response = await client.post(
-        "/api/v1/enrollments/",
-        json=enrollment_data,
+    # 6. Buscar matrícula automática e atualizar para concluída
+    list_enrollments = await client.get("/api/v1/enrollments/", headers=admin_headers)
+    assert list_enrollments.status_code == 200
+    enrollment = next(
+        (e for e in list_enrollments.json() if e["student_id"] == student_id and e["class_id"] == class_id),
+        None,
+    )
+    assert enrollment is not None
+    enrollment_id = enrollment["id"]
+
+    update_response = await client.put(
+        f"/api/v1/enrollments/{enrollment_id}",
+        json={"status": "CONCLUIDA"},
         headers=admin_headers,
     )
-    assert enrollment_response.status_code == 201
-    enrollment_id = enrollment_response.json()["id"]
-    assert enrollment_response.json()["status"] == "CONCLUIDA"
+    assert update_response.status_code == 200
+    assert update_response.json()["status"] == "CONCLUIDA"
 
     # 7. Criar pagamento
     payment_data = {
