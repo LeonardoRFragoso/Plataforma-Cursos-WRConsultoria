@@ -5,13 +5,14 @@
     <div v-if="notEnrolled" class="max-w-3xl mx-auto px-4 py-16 text-center">
       <h1 class="text-2xl font-bold text-secondary-900 mb-4">Acesso restrito</h1>
       <p class="text-gray-600 mb-6">Você não está matriculado neste curso. Matricule-se para assistir às aulas.</p>
-      <AppLink to="/courses" class="bg-primary-600 text-white px-4 py-2 rounded-md">
-        Ver cursos
+      <AppLink to="/catalog" class="bg-primary-600 text-white px-4 py-2 rounded-md">
+        Explorar cursos
       </AppLink>
     </div>
 
     <div v-else class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div class="mb-4">
+        <AppLink to="/dashboard" class="text-sm text-primary-600 hover:underline">← Voltar ao Dashboard</AppLink>
         <h1 class="text-2xl font-bold text-secondary-900">{{ course.name }}</h1>
         <p class="text-sm text-gray-600">Progresso do curso: {{ progress.percentage || 0 }}%</p>
         <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
@@ -113,8 +114,12 @@
             </div>
           </AppCard>
 
-          <div v-else class="text-center py-16 text-gray-500">
+          <div v-else-if="lessons.length" class="text-center py-16 text-gray-500">
             Selecione uma aula para começar
+          </div>
+          <div v-else class="text-center py-16 text-gray-500">
+            <p>Este curso ainda não possui aulas disponíveis.</p>
+            <p class="text-sm mt-2">Entre em contato com a administração.</p>
           </div>
         </div>
       </div>
@@ -173,6 +178,9 @@ const loadLessons = async () => {
   try {
     const response = await api.get(`/api/v1/lessons/courses/${courseId}/lessons`)
     lessons.value = response.data
+    if (lessons.value.length && !selectedLesson.value) {
+      await selectLesson(lessons.value[0])
+    }
   } catch (error) {
     if (error.response?.status === 403) {
       notEnrolled.value = true

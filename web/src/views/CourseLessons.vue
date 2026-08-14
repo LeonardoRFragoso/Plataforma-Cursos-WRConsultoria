@@ -3,10 +3,11 @@
     <AppNavbar />
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
+      <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
         <div>
+          <AppLink to="/courses" class="text-sm text-primary-600 hover:underline">← Cursos</AppLink>
           <h1 class="text-2xl font-bold text-secondary-900">Conteúdo do Curso</h1>
-          <p class="text-sm text-gray-600">{{ course.name }}</p>
+          <p class="text-sm text-gray-600">{{ course.name }} <span v-if="course.code">({{ course.code }})</span></p>
         </div>
         <AppButton @click="showForm = true" class="bg-primary-600 text-white">
           + Nova Aula
@@ -135,6 +136,7 @@ import { useRoute } from 'vue-router'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
+import AppLink from '../components/AppLink.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 

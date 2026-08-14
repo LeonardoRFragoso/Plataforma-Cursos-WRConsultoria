@@ -113,7 +113,14 @@
             <p><strong>Preço:</strong> R$ {{ formatPrice(course.price) }}</p>
             <p v-if="course.description" class="text-gray-600 mt-3">{{ course.description }}</p>
           </div>
-          <div v-if="isAdmin" class="mt-4 flex gap-2">
+          <div v-if="isAdmin" class="mt-4 flex flex-wrap gap-2">
+            <AppLink
+              :to="`/courses/${course.id}/lessons`"
+              variant="secondary"
+              class="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary-600 text-white text-sm flex-1 hover:bg-primary-700"
+            >
+              Gerenciar aulas
+            </AppLink>
             <AppButton
               @click="editCourse(course)"
               class="bg-blue-600 text-white text-sm flex-1"
@@ -124,7 +131,7 @@
               @click="deleteCourse(course.id)"
               class="bg-red-600 text-white text-sm flex-1"
             >
-              Deletar
+              Excluir
             </AppButton>
           </div>
         </AppCard>
@@ -141,6 +148,7 @@ import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppLink from '../components/AppLink.vue'
 
 const authStore = useAuthStore()
 

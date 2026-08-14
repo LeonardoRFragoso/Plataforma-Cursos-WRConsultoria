@@ -49,4 +49,16 @@ describe('Navigation guards', () => {
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/courses')
   })
+
+  it('permite visitante acessar /catalog sem autenticação', async () => {
+    await router.push('/catalog')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/catalog')
+  })
+
+  it('permite visitante acessar /courses/:id sem autenticação', async () => {
+    await router.push('/courses/123')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/courses/123')
+  })
 })

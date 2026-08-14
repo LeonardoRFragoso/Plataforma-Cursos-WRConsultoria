@@ -61,7 +61,7 @@
           </div>
           <div v-else-if="myEnrollments.length === 0" class="text-gray-600 mb-4">
             <p class="mb-4">Você não está matriculado em nenhum curso ainda.</p>
-            <AppLink to="/courses">
+            <AppLink to="/catalog">
               Explorar cursos →
             </AppLink>
           </div>

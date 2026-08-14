@@ -33,13 +33,17 @@ export const routes = [
     path: '/courses/:id',
     name: 'CourseDetail',
     component: () => import('../views/CourseDetail.vue'),
-    meta: { requiresAuth: true },
   },
   {
     path: '/courses/:id/learn',
     name: 'CourseLearn',
     component: () => import('../views/CourseLearn.vue'),
     meta: { requiresAuth: true },
+  },
+  {
+    path: '/catalog',
+    name: 'Catalog',
+    component: () => import('../views/Catalog.vue'),
   },
   {
     path: '/courses/:id/lessons',
