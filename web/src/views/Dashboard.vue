@@ -67,13 +67,21 @@
           </div>
           <ul v-else class="space-y-3">
             <li v-for="enrollment in myEnrollments" :key="enrollment.id" class="border border-gray-200 rounded-md p-3 hover:bg-gray-50">
-              <AppLink :to="`/courses/${enrollment.course_id}/learn`" class="block">
+              <AppLink v-if="canPlay(enrollment.status)" :to="`/courses/${enrollment.course_id}/learn`" class="block">
                 <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
                 <div class="text-sm text-gray-600">
                   {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
                   <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
                 </div>
               </AppLink>
+              <div v-else class="block cursor-not-allowed opacity-75">
+                <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
+                <div class="text-sm text-gray-600">
+                  {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
+                  <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+                  <span class="ml-2 text-xs italic">{{ statusMessage(enrollment.status) }}</span>
+                </div>
+              </div>
             </li>
           </ul>
         </AppCard>
@@ -140,6 +148,16 @@ const stats = ref({
 
 const myEnrollments = ref([])
 const loadingEnrollments = ref(false)
+
+const canPlay = (status) => status === 'CONFIRMADA' || status === 'CONCLUIDA'
+
+const statusMessage = (status) => {
+  const messages = {
+    PENDENTE: 'Aguardando confirmação',
+    CANCELADA: 'Matrícula cancelada',
+  }
+  return messages[status] || ''
+}
 
 const statusClass = (status) => {
   const classes = {

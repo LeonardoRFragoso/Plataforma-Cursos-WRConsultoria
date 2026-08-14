@@ -1,8 +1,9 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.certificates import (
@@ -14,7 +15,7 @@ from app.core.security import get_current_admin, get_current_user
 from app.core.storage import generate_upload_url, generate_watch_url
 from app.core.utils import utc_now
 from app.models.certificate import Certificate
-from app.models.class_model import Class
+from app.models.class_model import Class, ClassStatus
 from app.models.course import Course
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
@@ -74,6 +75,7 @@ async def _require_course_access(
                 ]),
             )
         )
+        .limit(1)
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None
@@ -472,7 +474,7 @@ async def list_lesson_materials(
 
 
 async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_id: UUID):
-    """Cria certificado se todas as aulas obrigatórias do curso estiverem concluídas."""
+    """Cria certificado e conclui a matrícula correta se todas as aulas obrigatórias estiverem concluídas."""
     total_stmt = select(func.count(Lesson.id)).where(
         and_(Lesson.course_id == course_id, Lesson.is_free_preview == False)
     )
@@ -497,7 +499,8 @@ async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_i
     if total_lessons == 0 or completed_lessons < total_lessons:
         return
 
-    # Buscar matrículas confirmadas/concluídas do aluno em turmas do curso
+    # Seleciona a matrícula correta do fluxo: ativa (CONFIRMADA),
+    # em turma EM_ANDAMENTO, preferindo a turma mais recente.
     stmt = (
         select(Enrollment)
         .join(Class)
@@ -511,20 +514,49 @@ async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_i
                 ]),
             )
         )
+        .order_by(
+            case(
+                (Enrollment.status == EnrollmentStatus.CONFIRMADA, 0),
+                (Enrollment.status == EnrollmentStatus.CONCLUIDA, 1),
+                else_=2,
+            ),
+            case(
+                (Class.status == ClassStatus.EM_ANDAMENTO, 0),
+                (Class.status == ClassStatus.ABERTA, 1),
+                (Class.status == ClassStatus.CONCLUIDA, 2),
+                (Class.status == ClassStatus.CANCELADA, 3),
+                else_=4,
+            ),
+            Class.start_date.desc(),
+            Enrollment.enrollment_date.desc(),
+        )
+        .limit(1)
     )
     result = await db.execute(stmt)
-    enrollments = result.scalars().all()
+    enrollment = result.scalar_one_or_none()
 
-    for enrollment in enrollments:
-        enrollment.status = EnrollmentStatus.CONCLUIDA
+    if not enrollment:
+        return
 
-        stmt = (
-            insert(Certificate)
-            .values(
-                enrollment_id=enrollment.id,
-                certificate_number=generate_certificate_number(),
-                validation_code=generate_validation_code(),
-            )
-            .on_conflict_do_nothing(index_elements=["enrollment_id"])
+    cert_stmt = (
+        insert(Certificate)
+        .values(
+            enrollment_id=enrollment.id,
+            certificate_number=generate_certificate_number(),
+            validation_code=generate_validation_code(),
         )
-        await db.execute(stmt)
+        .on_conflict_do_nothing(index_elements=["enrollment_id"])
+    )
+
+    # Emite o certificado antes de alterar a matrícula. Em caso de falha,
+    # rollback reverte o progresso desta chamada e evita estado parcial.
+    try:
+        await db.execute(cert_stmt)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao emitir certificado",
+        )
+
+    enrollment.status = EnrollmentStatus.CONCLUIDA
