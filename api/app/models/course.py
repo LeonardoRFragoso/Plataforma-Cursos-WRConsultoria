@@ -4,7 +4,6 @@ from enum import Enum as PyEnum
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.core.constants import WR_TENANT_ID
 from app.core.database import Base
 from app.core.utils import utc_now
 
@@ -31,7 +30,7 @@ class Course(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        default=WR_TENANT_ID,
+        
         nullable=False,
         index=True,
     )

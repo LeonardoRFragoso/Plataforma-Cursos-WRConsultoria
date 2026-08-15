@@ -544,6 +544,7 @@ async def _maybe_create_certificate(db: AsyncSession, student_id: UUID, course_i
             enrollment_id=enrollment.id,
             certificate_number=generate_certificate_number(),
             validation_code=generate_validation_code(),
+            tenant_id=db.info["tenant_id"],
         )
         .on_conflict_do_nothing(index_elements=["enrollment_id"])
     )

@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
+from app.core.context import current_tenant_id
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 security = HTTPBearer()
@@ -86,4 +87,14 @@ async def get_current_super_admin(current_user: dict = Depends(get_current_user)
             detail="Super admin required",
         )
     return current_user
+
+
+def get_current_tenant_id() -> UUID:
+    tenant_id = current_tenant_id.get()
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant not resolved",
+        )
+    return tenant_id
 

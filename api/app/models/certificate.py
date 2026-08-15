@@ -3,7 +3,6 @@ import uuid
 from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.core.constants import WR_TENANT_ID
 from app.core.database import Base
 from app.core.utils import utc_now
 
@@ -15,7 +14,7 @@ class Certificate(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        default=WR_TENANT_ID,
+        
         nullable=False,
         index=True,
     )

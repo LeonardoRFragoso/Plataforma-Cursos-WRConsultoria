@@ -5,7 +5,6 @@ from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, String, Uniq
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from app.core.constants import WR_TENANT_ID
 from app.core.database import Base
 from app.core.utils import utc_now
 
@@ -27,7 +26,7 @@ class User(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        default=WR_TENANT_ID,
+        
         nullable=False,
         index=True,
     )
