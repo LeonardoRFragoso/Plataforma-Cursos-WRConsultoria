@@ -23,6 +23,11 @@ export const routes = [
     component: () => import('../views/Partner.vue'),
   },
   {
+    path: '/validar-certificado',
+    name: 'ValidateCertificate',
+    component: () => import('../views/ValidateCertificate.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/Dashboard.vue'),
