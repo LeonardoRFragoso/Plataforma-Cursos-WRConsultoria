@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
+from app.core.utils import utc_now
 from app.models.class_model import Class
 from app.models.course import Course
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import Tenant
@@ -19,7 +20,7 @@ from app.schemas.payment import (
     PaymentUpdate,
     PaymentWebhookRequest,
 )
-from app.services.mercado_pago_service import MercadoPagoService
+from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
 
 router = APIRouter()
 
@@ -109,27 +110,106 @@ async def mercado_pago_webhook(
     request: PaymentWebhookRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Payment).where(Payment.mercado_pago_id == request.id)
-    result = await db.execute(stmt)
-    payment = result.scalar_one_or_none()
-    
-    if not payment:
+    if not request.id or not request.external_reference:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment id and external reference are required",
+        )
+
+    try:
+        enrollment_id = UUID(request.external_reference)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid external reference",
+        )
+
+    stmt = (
+        select(Payment, Tenant)
+        .join(Tenant, Payment.tenant_id == Tenant.id)
+        .where(Payment.enrollment_id == enrollment_id)
+        .order_by(Payment.created_at.desc())
+    )
+    result = await db.execute(stmt.limit(1))
+    row = result.first()
+
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
-    
+
+    _payment, tenant = row
+    access_token = (tenant.settings or {}).get("mp_access_token")
+
+    try:
+        mp_payment = await MercadoPagoService.get_payment_info(
+            request.id, access_token
+        )
+    except MercadoPagoError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Mercado Pago verification failed: {exc}",
+        ) from exc
+
+    mp_external_reference = str(mp_payment.get("external_reference") or "")
+    if mp_external_reference != request.external_reference:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="External reference mismatch",
+        )
+
+    preference_id = mp_payment.get("preference_id")
+    if not preference_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Mercado Pago preference",
+        )
+
+    stmt = (
+        select(Payment, Enrollment)
+        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+        .where(Payment.mercado_pago_id == preference_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment preference not found",
+        )
+
+    payment, enrollment = row
+    if payment.enrollment_id != enrollment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enrollment mismatch",
+        )
+
     status_map = {
         "approved": PaymentStatus.APROVADO,
         "pending": PaymentStatus.PROCESSANDO,
+        "in_process": PaymentStatus.PROCESSANDO,
+        "in_mediation": PaymentStatus.PROCESSANDO,
         "rejected": PaymentStatus.RECUSADO,
         "cancelled": PaymentStatus.RECUSADO,
         "refunded": PaymentStatus.REEMBOLSADO,
+        "charged_back": PaymentStatus.REEMBOLSADO,
     }
-    
-    payment.status = status_map.get(request.status, PaymentStatus.PENDENTE)
+    mp_status = mp_payment.get("status", "unknown")
+    new_status = status_map.get(mp_status, PaymentStatus.PENDENTE)
+
+    if payment.status == new_status:
+        return {"status": "ok"}
+
+    payment.status = new_status
+    if new_status == PaymentStatus.APROVADO:
+        payment.paid_at = utc_now()
+        if enrollment.status != EnrollmentStatus.CONFIRMADA:
+            enrollment.status = EnrollmentStatus.CONFIRMADA
+
     await db.commit()
-    
     return {"status": "ok"}
 
 @router.delete("/{payment_id}", status_code=status.HTTP_204_NO_CONTENT)

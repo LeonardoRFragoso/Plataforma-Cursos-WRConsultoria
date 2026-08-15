@@ -58,10 +58,11 @@ class MercadoPagoService:
         raise MercadoPagoError(f"Erro ao criar preferência: {response.text}")
     
     @staticmethod
-    async def get_payment_info(payment_id: str):
+    async def get_payment_info(payment_id: str, access_token: str | None = None):
         """Obtém informações de um pagamento"""
+        token = access_token or settings.MERCADO_PAGO_ACCESS_TOKEN
         headers = {
-            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+            "Authorization": f"Bearer {token}",
         }
         
         async with httpx.AsyncClient() as client:
@@ -75,10 +76,11 @@ class MercadoPagoService:
         raise MercadoPagoError(f"Erro ao obter pagamento: {response.text}")
     
     @staticmethod
-    async def refund_payment(payment_id: str):
+    async def refund_payment(payment_id: str, access_token: str | None = None):
         """Reembolsa um pagamento"""
+        token = access_token or settings.MERCADO_PAGO_ACCESS_TOKEN
         headers = {
-            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
         
