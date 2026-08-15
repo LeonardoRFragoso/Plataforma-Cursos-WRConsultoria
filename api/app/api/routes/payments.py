@@ -22,6 +22,7 @@ from app.schemas.payment import (
     PaymentWebhookRequest,
 )
 from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
+from app.services.tenant_secret_service import get_mercado_pago_access_token
 
 router = APIRouter()
 
@@ -191,7 +192,12 @@ async def mercado_pago_webhook(
         )
 
     _payment, tenant = row
-    access_token = (tenant.settings or {}).get("mp_access_token")
+    # Access token do Mercado Pago lido do TenantSecret criptografado.
+    # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
+    # mantido apenas para janela de migração pós-deploy).
+    access_token = await get_mercado_pago_access_token(db, tenant.id)
+    if not access_token:
+        access_token = (tenant.settings or {}).get("mp_access_token")
 
     try:
         mp_payment = await MercadoPagoService.get_payment_info(
@@ -327,10 +333,15 @@ async def create_mercado_pago_checkout(
     tenant_id = getattr(request.state, "tenant_id", None)
     access_token = None
     if tenant_id:
-        tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-        tenant = tenant_result.scalar_one_or_none()
-        if tenant and tenant.settings:
-            access_token = tenant.settings.get("mp_access_token")
+        # Access token do Mercado Pago lido do TenantSecret criptografado.
+        # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
+        # mantido apenas para janela de migração pós-deploy).
+        access_token = await get_mercado_pago_access_token(db, tenant_id)
+        if not access_token:
+            tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+            tenant = tenant_result.scalar_one_or_none()
+            if tenant and tenant.settings:
+                access_token = tenant.settings.get("mp_access_token")
 
     try:
         preference = await MercadoPagoService.create_preference(
