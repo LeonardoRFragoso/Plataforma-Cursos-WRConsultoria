@@ -27,6 +27,8 @@ from app.api.routes import (
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSession, AsyncSessionLocal, get_db
+from app.core.rate_limit import limiter
+from app.core.secrets import validate_secrets
 from app.core.tenant import TenantResolver
 
 app = FastAPI(
@@ -48,6 +50,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Rate limiting básico por IP."""
+    if not settings.RATE_LIMIT_ENABLED or request.url.path in ("/health", "/"):
+        return await call_next(request)
+
+    client_host = request.client.host if request.client else "unknown"
+    if not limiter.is_allowed(client_host):
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": "Rate limit exceeded"},
+        )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -114,3 +131,14 @@ async def health(db: AsyncSession = Depends(get_db)):
     await db.execute(text("SELECT 1"))
     duration = round((time.perf_counter() - start) * 1000, 2)
     return {"status": "ok", "db_latency_ms": duration}
+
+
+@app.get("/api/v1/health/secrets")
+async def health_secrets():
+    issues = validate_secrets()
+    if issues:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "warning", "issues": issues},
+        )
+    return {"status": "ok"}

@@ -5,11 +5,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
+    ENVIRONMENT: str = "development"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos"
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    RATE_LIMIT_ENABLED: bool = False
+    RATE_LIMIT_REQUESTS: int = 100
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
     
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
