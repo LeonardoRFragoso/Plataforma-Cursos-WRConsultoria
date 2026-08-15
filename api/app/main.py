@@ -18,7 +18,9 @@ from app.api.routes import (
     lessons,
     partner_leads,
     payments,
+    plans,
     students,
+    tenant_subscriptions,
     tenants,
 )
 from app.core.config import settings
@@ -90,6 +92,12 @@ app.include_router(classes.router, prefix="/api/v1/classes", tags=["classes"])
 app.include_router(students.router, prefix="/api/v1/students", tags=["students"])
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
+app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
+app.include_router(
+    tenant_subscriptions.router,
+    prefix="/api/v1/subscriptions",
+    tags=["subscriptions"],
+)
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
