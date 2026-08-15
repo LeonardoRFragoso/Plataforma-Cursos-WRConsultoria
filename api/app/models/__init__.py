@@ -10,6 +10,7 @@ from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
+from app.models.tenant_secret import TenantSecret
 from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
 from app.models.user import User, UserRole
 
@@ -38,6 +39,7 @@ __all__ = [
     "Student",
     "SubscriptionStatus",
     "Tenant",
+    "TenantSecret",
     "TenantStatus",
     "TenantSubscription",
     "User",

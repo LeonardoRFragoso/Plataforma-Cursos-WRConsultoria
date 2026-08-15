@@ -17,13 +17,16 @@ from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.plan import BillingCycle, Plan
 from app.models.tenant import CustomDomainStatus, Tenant
+from app.models.tenant_secret import TenantSecret
 from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
 from app.schemas.plan import PlanCreate, PlanResponse, PlanUpdate
 from app.schemas.tenant import CustomDomainOut
+from app.schemas.tenant_secret import TenantSecretReveal
 from app.schemas.tenant_subscription import (
     TenantSubscriptionCreate,
     TenantSubscriptionResponse,
 )
+from app.services.secret_crypto import decrypt
 
 router = APIRouter()
 
@@ -324,3 +327,41 @@ async def super_activate_custom_domain(
     await db.commit()
     await db.refresh(tenant)
     return tenant
+
+
+# ------------------------------------------------------------------
+# Tenant secrets — revelação de valor plano (SUPER_ADMIN)
+# ------------------------------------------------------------------
+
+@router.get(
+    "/tenants/{tenant_id}/secrets/{secret_id}/reveal",
+    response_model=TenantSecretReveal,
+)
+async def super_reveal_tenant_secret(
+    tenant_id: UUID,
+    secret_id: UUID,
+    db: AsyncSession = Depends(get_db_privileged),
+    current_user: dict = Depends(get_current_super_admin),
+):
+    """Revela o valor plano de um secret de tenant (SUPER_ADMIN)."""
+    secret = await db.get(TenantSecret, secret_id)
+    if not secret or secret.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found"
+        )
+    try:
+        value = decrypt(secret.encrypted_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt secret",
+        ) from exc
+    return TenantSecretReveal(
+        id=secret.id,
+        tenant_id=secret.tenant_id,
+        key=secret.key,
+        value=value,
+        description=secret.description,
+        created_at=secret.created_at,
+        updated_at=secret.updated_at,
+    )

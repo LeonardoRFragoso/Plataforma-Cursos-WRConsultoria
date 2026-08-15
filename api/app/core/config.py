@@ -42,4 +42,9 @@ class Settings(BaseSettings):
     STORAGE_REGION: str = "auto"
     STORAGE_WATCH_URL_EXPIRATION: int = 7200  # segundos
 
+    # Chave de criptografia para secrets de tenant (32 bytes base64).
+    # Em produção deve ser definida via env. Se vazia, fallback para uma
+    # chave derivada da SECRET_KEY (apenas desenvolvimento).
+    TENANT_SECRET_ENCRYPTION_KEY: str = ""
+
 settings = Settings()

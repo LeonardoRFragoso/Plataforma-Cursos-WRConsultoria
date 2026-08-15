@@ -22,6 +22,7 @@ from app.api.routes import (
     reports,
     students,
     super_admin,
+    tenant_secrets,
     tenant_subscriptions,
     tenants,
 )
@@ -124,6 +125,11 @@ app.include_router(
     super_admin.router,
     prefix="/api/v1/super-admin",
     tags=["super-admin"],
+)
+app.include_router(
+    tenant_secrets.router,
+    prefix="/api/v1/secrets",
+    tags=["secrets"],
 )
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
