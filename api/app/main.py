@@ -27,14 +27,14 @@ from app.core.database import AsyncSession, AsyncSessionLocal, get_db
 from app.core.tenant import TenantResolver
 
 app = FastAPI(
-    title="WR Plataforma de Cursos",
-    description="API para gestão de cursos e treinamentos NR",
+    title="Plataforma de Cursos",
+    description="API para gestão de cursos e certificações",
     version="1.0.0",
 )
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"],
+    allowed_hosts=settings.ALLOWED_HOSTS,
 )
 app.add_middleware(GZipMiddleware)
 
@@ -96,7 +96,7 @@ app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
 
 @app.get("/")
 async def root():
-    return {"message": "WR Plataforma de Cursos API", "version": "1.0.0"}
+    return {"message": "Plataforma de Cursos API", "version": "1.0.0"}
 
 @app.get("/health")
 async def health(db: AsyncSession = Depends(get_db)):

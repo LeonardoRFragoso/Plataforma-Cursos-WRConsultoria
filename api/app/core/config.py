@@ -28,6 +28,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
     ]
     
+    ALLOWED_HOSTS: list[str] = ["*"]
+    
     # Storage S3-compatível (Cloudflare R2 / Backblaze B2 / MinIO / AWS S3)
     STORAGE_ENDPOINT: str = ""
     STORAGE_ACCESS_KEY: str = ""
