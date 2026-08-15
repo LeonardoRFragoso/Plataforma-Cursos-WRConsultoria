@@ -29,7 +29,7 @@ from app.api.routes import (
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSession, AsyncSessionLocal, get_db
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_rate_limiter
 from app.core.secrets import validate_secrets
 from app.core.tenant import TenantResolver
 
@@ -56,12 +56,21 @@ app.add_middleware(
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """Rate limiting básico por IP."""
+    """Rate limiting por IP usando o backend configurado (Memory ou Redis).
+
+    Usa get_rate_limiter() para obter o singleton do backend, respeitando
+    RATE_LIMIT_REDIS_URL. Evita criar nova conexão Redis por request.
+    """
     if not settings.RATE_LIMIT_ENABLED or request.url.path in ("/health", "/"):
         return await call_next(request)
 
     client_host = request.client.host if request.client else "unknown"
-    if not limiter.is_allowed(client_host):
+    backend = get_rate_limiter()
+    if not backend.is_allowed(
+        client_host,
+        settings.RATE_LIMIT_REQUESTS,
+        settings.RATE_LIMIT_WINDOW_SECONDS,
+    ):
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             content={"detail": "Rate limit exceeded"},

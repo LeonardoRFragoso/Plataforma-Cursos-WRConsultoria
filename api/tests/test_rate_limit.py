@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.core.rate_limit import (
     MemoryBackend,
     RateLimiter,
@@ -120,3 +122,77 @@ def test_rate_limiter_delegates_to_backend():
     assert args.args[0] == "key"
     assert args.args[1] == 10
     assert args.args[2] == 30
+
+
+# ---- Middleware integration ----
+
+
+@pytest.mark.asyncio
+async def test_middleware_uses_factory_backend_not_global_limiter(client):
+    """O middleware usa get_rate_limiter(), não o limiter global.
+
+    Com RATE_LIMIT_ENABLED=True e um backend mockado que bloqueia,
+    o middleware deve retornar 429 usando o backend da factory.
+    """
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    # Salva estado original
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_backend = rl_module._backend
+    rl_module._backend = None
+
+    blocking_backend = MagicMock()
+    blocking_backend.is_allowed.return_value = False
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        rl_module._backend = blocking_backend
+
+        response = await client.get("/api/v1/courses")
+        assert response.status_code == 429
+        assert "Rate limit exceeded" in response.json()["detail"]
+
+        # Prova que o backend da factory foi chamado, não o limiter global
+        blocking_backend.is_allowed.assert_called()
+        call_args = blocking_backend.is_allowed.call_args
+        assert call_args.args[1] == app_settings.RATE_LIMIT_REQUESTS
+        assert call_args.args[2] == app_settings.RATE_LIMIT_WINDOW_SECONDS
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
+        rl_module._backend = original_backend
+
+
+@pytest.mark.asyncio
+async def test_middleware_redis_backend_used_when_configured(client):
+    """Com RATE_LIMIT_REDIS_URL definida, o middleware usa RedisBackend."""
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_redis_url = app_settings.RATE_LIMIT_REDIS_URL
+    original_backend = rl_module._backend
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        app_settings.RATE_LIMIT_REDIS_URL = "redis://localhost:6379/0"
+        rl_module._backend = None
+
+        with patch("redis.Redis.from_url") as mock_from_url:
+            mock_redis = MagicMock()
+            pipe = MagicMock()
+            pipe.execute.return_value = [1, True]
+            mock_redis.pipeline.return_value = pipe
+            mock_from_url.return_value = mock_redis
+
+            response = await client.get("/api/v1/courses")
+            # Backend Redis foi instanciado e usado
+            mock_from_url.assert_called_once_with(
+                "redis://localhost:6379/0", decode_responses=True
+            )
+            # Não deve ser 429 (count=1 <= max_requests)
+            assert response.status_code != 429
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
+        app_settings.RATE_LIMIT_REDIS_URL = original_redis_url
+        rl_module._backend = original_backend
