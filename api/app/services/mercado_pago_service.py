@@ -11,14 +11,21 @@ class MercadoPagoService:
     BASE_URL = "https://api.mercadopago.com/v1"
     
     @staticmethod
-    async def create_preference(enrollment_id: str, amount: float, student_email: str, course_name: str):
+    async def create_preference(
+        enrollment_id: str,
+        amount: float,
+        student_email: str,
+        course_name: str,
+        access_token: str | None = None,
+    ):
         """Cria uma preferência de pagamento no Mercado Pago"""
+        token = access_token or settings.MERCADO_PAGO_ACCESS_TOKEN
         headers = {
-            "Authorization": f"Bearer {settings.MERCADO_PAGO_ACCESS_TOKEN}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "X-Idempotency-Key": str(enrollment_id),
         }
-        
+
         preference_data = {
             "items": [
                 {

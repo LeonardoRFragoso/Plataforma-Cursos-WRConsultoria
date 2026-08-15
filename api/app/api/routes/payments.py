@@ -1,19 +1,24 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
+from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment, PaymentStatus
+from app.models.student import Student
+from app.models.tenant import Tenant
+from app.models.user import User
 from app.schemas.payment import (
     PaymentCreate,
     PaymentResponse,
     PaymentUpdate,
     PaymentWebhookRequest,
 )
+from app.services.mercado_pago_service import MercadoPagoService
 
 router = APIRouter()
 
@@ -140,3 +145,58 @@ async def delete_payment(
     
     await db.delete(payment)
     await db.commit()
+
+
+@router.post("/{payment_id}/checkout")
+async def create_mercado_pago_checkout(
+    payment_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    stmt = (
+        select(Payment, Enrollment, Student, User, Course)
+        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+        .join(Student, Enrollment.student_id == Student.id)
+        .join(User, Student.user_id == User.id)
+        .join(Course, Enrollment.class_id == Course.id)
+        .where(Payment.id == payment_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    payment, enrollment, _student, user, course = row
+
+    tenant_id = getattr(request.state, "tenant_id", None)
+    access_token = None
+    if tenant_id:
+        tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = tenant_result.scalar_one_or_none()
+        if tenant and tenant.settings:
+            access_token = tenant.settings.get("mp_access_token")
+
+    try:
+        preference = await MercadoPagoService.create_preference(
+            enrollment_id=str(enrollment.id),
+            amount=payment.amount,
+            student_email=user.email,
+            course_name=course.name,
+            access_token=access_token,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    payment.mercado_pago_id = preference.get("id")
+    payment.status = PaymentStatus.PROCESSANDO
+    await db.commit()
+
+    return {"checkout_url": preference.get("init_point"), "preference_id": preference.get("id")}
