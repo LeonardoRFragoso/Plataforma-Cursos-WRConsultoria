@@ -8,6 +8,7 @@ from app.api.routes import (
     classes,
     companies,
     courses,
+    dashboard,
     enrollments,
     lessons,
     partner_leads,
@@ -68,6 +69,9 @@ async def tenant_middleware(request: Request, call_next):
 app.include_router(tenants.router, prefix="/api/v1/tenants", tags=["tenants"])
 app.include_router(
     partner_leads.router, prefix="/api/v1/partner-leads", tags=["partner-leads"]
+)
+app.include_router(
+    dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"]
 )
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
