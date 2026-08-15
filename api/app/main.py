@@ -6,6 +6,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.api.routes import (
     auth,
@@ -181,17 +182,30 @@ async def health_live():
 
 
 @app.get("/health/ready")
-async def health_ready(db: AsyncSession = Depends(get_db)):
-    """Readiness probe — can serve requests. Checks DB connectivity."""
+async def health_ready():
+    """Readiness probe — can serve requests. Checks DB connectivity.
+
+    Uses a dedicated DB session created directly inside the route's try block
+    instead of the ``get_db`` dependency. ``get_db`` executes
+    ``SET LOCAL app.current_tenant = ...`` before yielding the session, so if
+    PostgreSQL is unavailable the dependency raises before this handler runs —
+    producing an uncontrolled 500 instead of the intended 503.
+
+    This probe intentionally avoids tenant RLS context: it is a process-level
+    connectivity check, not a tenant-scoped request. SQLAlchemy connectivity
+    failures (OperationalError/InterfaceError) and low-level socket errors
+    (OSError) are mapped to 503 ``not_ready``.
+    """
     start = time.perf_counter()
     try:
-        await db.execute(text("SELECT 1"))
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
         duration = round((time.perf_counter() - start) * 1000, 2)
         return {"status": "ok", "db_latency_ms": duration}
-    except (OSError, RuntimeError) as exc:
+    except (OperationalError, InterfaceError, OSError) as exc:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "not_ready", "error": str(type(exc).__name__)},
+            content={"status": "not_ready", "error": type(exc).__name__},
         )
 
 
