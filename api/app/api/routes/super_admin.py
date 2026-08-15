@@ -16,9 +16,10 @@ from app.core.database import get_db_privileged
 from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.plan import BillingCycle, Plan
-from app.models.tenant import Tenant
+from app.models.tenant import CustomDomainStatus, Tenant
 from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
 from app.schemas.plan import PlanCreate, PlanResponse, PlanUpdate
+from app.schemas.tenant import CustomDomainOut
 from app.schemas.tenant_subscription import (
     TenantSubscriptionCreate,
     TenantSubscriptionResponse,
@@ -264,3 +265,62 @@ async def super_renew_subscription(
     await db.commit()
     await db.refresh(subscription)
     return subscription
+
+
+# ------------------------------------------------------------------
+# Custom domain — confirmação manual (SUPER_ADMIN, desenvolvimento)
+# ------------------------------------------------------------------
+
+@router.post(
+    "/tenants/{tenant_id}/custom-domain/confirm",
+    response_model=CustomDomainOut,
+)
+async def super_confirm_custom_domain(
+    tenant_id: UUID,
+    db: AsyncSession = Depends(get_db_privileged),
+    current_user: dict = Depends(get_current_super_admin),
+):
+    """Confirmação manual de domínio por SUPER_ADMIN (dev sem DNS)."""
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    if not tenant.custom_domain:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No custom domain registered",
+        )
+    tenant.custom_domain_status = CustomDomainStatus.VERIFIED
+    tenant.domain_verified_at = utc_now()
+    tenant.domain_verification_error = None
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
+@router.post(
+    "/tenants/{tenant_id}/custom-domain/activate",
+    response_model=CustomDomainOut,
+)
+async def super_activate_custom_domain(
+    tenant_id: UUID,
+    db: AsyncSession = Depends(get_db_privileged),
+    current_user: dict = Depends(get_current_super_admin),
+):
+    """Ativa domínio customizado verificado (SUPER_ADMIN)."""
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    if not tenant.custom_domain:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No custom domain registered",
+        )
+    if tenant.custom_domain_status != CustomDomainStatus.VERIFIED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Domain must be verified before activation",
+        )
+    tenant.custom_domain_status = CustomDomainStatus.ACTIVE
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant

@@ -48,7 +48,10 @@ class TenantResolver:
             if tenant:
                 return tenant
 
-        stmt = select(Tenant).where(Tenant.custom_domain == host)
+        stmt = select(Tenant).where(
+            Tenant.custom_domain == host,
+            Tenant.custom_domain_status.in_(["VERIFIED", "ACTIVE"]),
+        )
         result = await db.execute(stmt)
         tenant = result.scalar_one_or_none()
         if tenant:

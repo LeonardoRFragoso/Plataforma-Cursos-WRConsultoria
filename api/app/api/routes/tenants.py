@@ -1,4 +1,5 @@
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -7,8 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id
-from app.models.tenant import Tenant
-from app.schemas.tenant import CustomDomainIn, CustomDomainOut
+from app.core.utils import utc_now
+from app.models.tenant import CustomDomainStatus, Tenant
+from app.schemas.tenant import CustomDomainIn, CustomDomainOut, CustomDomainVerifyOut
+from app.services.domain_verification import (
+    build_dns_instructions,
+    get_domain_verification_provider,
+)
 
 router = APIRouter()
 
@@ -94,7 +100,7 @@ async def get_custom_domain(
     return tenant
 
 
-@router.post("/custom-domain", response_model=CustomDomainOut)
+@router.post("/custom-domain", response_model=CustomDomainVerifyOut)
 async def set_custom_domain(
     data: CustomDomainIn,
     db: AsyncSession = Depends(get_db),
@@ -129,7 +135,62 @@ async def set_custom_domain(
             detail="Custom domain already in use",
         )
 
+    # Registra domínio em PENDING com token seguro; nunca ACTIVE apenas por
+    # ter sido digitado.
     tenant.custom_domain = domain
+    tenant.custom_domain_status = CustomDomainStatus.PENDING
+    tenant.domain_verification_token = secrets.token_urlsafe(32)
+    tenant.domain_verified_at = None
+    tenant.domain_verification_error = None
+    await db.commit()
+    await db.refresh(tenant)
+
+    out = CustomDomainVerifyOut.model_validate(tenant)
+    out.dns_instructions = build_dns_instructions(
+        domain, tenant.domain_verification_token
+    )
+    return out
+
+
+@router.post("/custom-domain/verify", response_model=CustomDomainOut)
+async def verify_custom_domain(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    tenant_id = get_current_tenant_id()
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    if not tenant.custom_domain or not tenant.domain_verification_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No custom domain registered",
+        )
+
+    provider = get_domain_verification_provider()
+    try:
+        ok = await provider.verify_txt(
+            tenant.custom_domain, tenant.domain_verification_token
+        )
+    except (HTTPException, ValueError, RuntimeError) as exc:  # provider robustez
+        tenant.custom_domain_status = CustomDomainStatus.ERROR
+        tenant.domain_verification_error = str(exc)
+        await db.commit()
+        await db.refresh(tenant)
+        return tenant
+
+    if ok:
+        tenant.custom_domain_status = CustomDomainStatus.VERIFIED
+        tenant.domain_verified_at = utc_now()
+        tenant.domain_verification_error = None
+    else:
+        tenant.custom_domain_status = CustomDomainStatus.ERROR
+        tenant.domain_verification_error = (
+            "DNS TXT record not found or token mismatch"
+        )
     await db.commit()
     await db.refresh(tenant)
     return tenant
@@ -149,6 +210,10 @@ async def remove_custom_domain(
         )
 
     tenant.custom_domain = None
+    tenant.custom_domain_status = CustomDomainStatus.NONE
+    tenant.domain_verification_token = None
+    tenant.domain_verified_at = None
+    tenant.domain_verification_error = None
     await db.commit()
     await db.refresh(tenant)
     return tenant

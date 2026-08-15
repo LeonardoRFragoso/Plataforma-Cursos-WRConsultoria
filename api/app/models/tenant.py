@@ -23,6 +23,14 @@ class PartnerLeadStatus(str, PyEnum):
     REJECTED = "REJECTED"
 
 
+class CustomDomainStatus(str, PyEnum):
+    NONE = "NONE"
+    PENDING = "PENDING"
+    VERIFIED = "VERIFIED"
+    ACTIVE = "ACTIVE"
+    ERROR = "ERROR"
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -32,6 +40,14 @@ class Tenant(Base):
     slug = Column(String, unique=True, index=True, nullable=False)
     cnpj = Column(String, nullable=True)
     custom_domain = Column(String, unique=True, index=True, nullable=True)
+    custom_domain_status = Column(
+        String,
+        default=CustomDomainStatus.NONE,
+        nullable=False,
+    )
+    domain_verification_token = Column(String, nullable=True)
+    domain_verified_at = Column(DateTime, nullable=True)
+    domain_verification_error = Column(String, nullable=True)
     logo_url = Column(String, nullable=True)
     logo_white_url = Column(String, nullable=True)
     favicon_url = Column(String, nullable=True)
