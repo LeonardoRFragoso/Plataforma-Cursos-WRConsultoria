@@ -12,6 +12,7 @@ from app.api.routes import (
     lessons,
     payments,
     students,
+    tenants,
 )
 from app.core.config import settings
 from app.core.context import current_tenant_id
@@ -63,6 +64,7 @@ async def tenant_middleware(request: Request, call_next):
     finally:
         current_tenant_id.reset(token)
 
+app.include_router(tenants.router, prefix="/api/v1/tenants", tags=["tenants"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(classes.router, prefix="/api/v1/classes", tags=["classes"])
