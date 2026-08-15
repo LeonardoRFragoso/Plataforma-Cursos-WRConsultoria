@@ -5,6 +5,7 @@ from app.models.company import Company
 from app.models.course import Course, CourseModality
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
+from app.models.one_time_token import OneTimeToken
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
@@ -24,6 +25,7 @@ __all__ = [
     "LessonContentType",
     "LessonMaterial",
     "LessonProgress",
+    "OneTimeToken",
     "PartnerLead",
     "PartnerLeadStatus",
     "Payment",

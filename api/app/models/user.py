@@ -33,7 +33,7 @@ class User(Base):
     email = Column(String, index=True, nullable=False)
     cpf = Column(String, index=True, nullable=True)
     full_name = Column(String, nullable=False)
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)
     role = Column(
         Enum(UserRole, values_callable=lambda x: [e.value for e in x]),
         default=UserRole.STUDENT,

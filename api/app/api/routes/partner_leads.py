@@ -10,6 +10,7 @@ from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
 from app.models.user import User, UserRole
+from app.services.one_time_token_service import OneTimeTokenService
 
 router = APIRouter()
 
@@ -104,8 +105,18 @@ async def approve_partner_lead(
         full_name=lead.contact_name,
         role=UserRole.ADMIN,
         tenant_id=tenant.id,
+        is_active=False,
     )
     db.add(admin_user)
+    await db.flush()
+
+    activation_token, _ = await OneTimeTokenService.create(
+        db, str(admin_user.id), "activation"
+    )
 
     await db.commit()
-    return {"tenant_id": tenant.id, "admin_user_id": admin_user.id}
+    return {
+        "tenant_id": tenant.id,
+        "admin_user_id": admin_user.id,
+        "activation_token": activation_token,
+    }

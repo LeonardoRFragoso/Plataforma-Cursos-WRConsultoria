@@ -1,5 +1,4 @@
 import re
-from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,6 +25,7 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
 )
+from app.services.one_time_token_service import OneTimeTokenService
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -33,6 +33,11 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ActivateRequest(BaseModel):
     token: str
     new_password: str
 
@@ -118,7 +123,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Identifier must be a valid CPF (11 digits) or email",
         )
     
-    if not user or not verify_password(credentials.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -218,19 +223,17 @@ async def forgot_password(
     if not user:
         return {"detail": "If the email exists, a reset link was sent"}
 
-    reset_token = create_access_token(
-        {"sub": str(user.id), "type": "password_reset"},
-        expires_delta=timedelta(seconds=900),
+    raw, _token = await OneTimeTokenService.create(
+        db, str(user.id), "reset", ttl_hours=1
     )
+    await db.commit()
 
     # Em produção enviar e-mail via SMTP; em dev retornar o token
     if all([settings.SMTP_SERVER, settings.SMTP_USER, settings.SMTP_PASSWORD]):
         # Envio de e-mail omitido para simplicidade
-        pass
-    else:
-        return {"reset_token": reset_token}
+        return {"detail": "If the email exists, a reset link was sent"}
 
-    return {"detail": "If the email exists, a reset link was sent"}
+    return {"reset_token": raw}
 
 
 @router.post("/reset-password")
@@ -238,15 +241,14 @@ async def reset_password(
     payload: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    payload_token = decode_token(payload.token)
-    if payload_token.get("type") != "password_reset":
+    token = await OneTimeTokenService.consume(db, payload.token, "reset")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid token",
+            detail="Invalid or expired token",
         )
 
-    user_id = payload_token.get("sub")
-    stmt = select(User).where(User.id == UUID(user_id))
+    stmt = select(User).where(User.id == token.user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
@@ -259,3 +261,31 @@ async def reset_password(
     user.password_hash = hash_password(payload.new_password)
     await db.commit()
     return {"detail": "Password reset successfully"}
+
+
+@router.post("/activate")
+async def activate(
+    payload: ActivateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token = await OneTimeTokenService.consume(db, payload.token, "activation")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired activation token",
+        )
+
+    stmt = select(User).where(User.id == token.user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.is_active = True
+    await db.commit()
+    return {"detail": "Account activated successfully"}
