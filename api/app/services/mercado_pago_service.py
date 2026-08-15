@@ -9,7 +9,7 @@ class MercadoPagoError(Exception):
 
 class MercadoPagoService:
     BASE_URL = "https://api.mercadopago.com/v1"
-    
+
     @staticmethod
     async def create_preference(
         enrollment_id: str,
@@ -18,7 +18,18 @@ class MercadoPagoService:
         course_name: str,
         access_token: str | None = None,
     ):
-        """Cria uma preferência de pagamento no Mercado Pago"""
+        """Cria uma preferência de pagamento no Mercado Pago.
+
+        Em modo mock (MERCADO_PAGO_MOCK_MODE=true), retorna uma
+        preferência fake determinística sem chamar a API do MP.
+        Usado apenas para testes/integração — nunca em produção.
+        """
+        if settings.MERCADO_PAGO_MOCK_MODE:
+            return {
+                "id": f"mock-pref-{enrollment_id}",
+                "init_point": f"http://mock-mp.test/checkout?enrollment={enrollment_id}",
+            }
+
         token = access_token or settings.MERCADO_PAGO_ACCESS_TOKEN
         headers = {
             "Authorization": f"Bearer {token}",
@@ -59,7 +70,25 @@ class MercadoPagoService:
     
     @staticmethod
     async def get_payment_info(payment_id: str, access_token: str | None = None):
-        """Obtém informações de um pagamento"""
+        """Obtém informações de um pagamento.
+
+        Em modo mock (MERCADO_PAGO_MOCK_MODE=true), retorna um
+        pagamento fake aprovado sem chamar a API do MP. O payment_id
+        deve ter o formato "mock-mp-payment-{enrollment_id}".
+        """
+        if settings.MERCADO_PAGO_MOCK_MODE:
+            # Extrai enrollment_id do payment_id mockado
+            prefix = "mock-mp-payment-"
+            if payment_id.startswith(prefix):
+                enrollment_id = payment_id[len(prefix):]
+            else:
+                enrollment_id = payment_id
+            return {
+                "external_reference": enrollment_id,
+                "preference_id": f"mock-pref-{enrollment_id}",
+                "status": "approved",
+            }
+
         token = access_token or settings.MERCADO_PAGO_ACCESS_TOKEN
         headers = {
             "Authorization": f"Bearer {token}",

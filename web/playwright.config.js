@@ -5,7 +5,13 @@ import { defineConfig, devices } from '@playwright/test'
  * - ui-mocked: browser/UI integration with mocked API (no backend needed)
  * - integration: full-stack with real FastAPI + PostgreSQL backend
  *   (requires backend running on localhost:8000)
+ *
+ * baseURL is configurable via PLAYWRIGHT_BASE_URL env var:
+ * - local preview (ui-mocked): http://localhost:4173 (vite preview)
+ * - docker CI (integration):   http://localhost:5173 (vite dev in docker)
  */
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173'
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -14,7 +20,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: BASE_URL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -27,14 +33,14 @@ export default defineConfig({
       name: 'integration',
       testDir: './e2e/integration',
       use: { ...devices['Desktop Chrome'] },
-      // Integration tests require a real backend; skip if not available
-      dependencies: [],
     },
   ],
-  webServer: {
-    command: 'npm run build && npm run preview -- --port 4173',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined // external server (docker); don't start our own
+    : {
+        command: 'npm run build && npm run preview -- --port 4173',
+        url: 'http://localhost:4173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
 })

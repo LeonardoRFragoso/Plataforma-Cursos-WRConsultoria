@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
+    MERCADO_PAGO_MOCK_MODE: bool = False
     
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
