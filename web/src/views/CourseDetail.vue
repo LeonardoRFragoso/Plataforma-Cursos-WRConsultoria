@@ -60,11 +60,16 @@
 
                   <button
                     v-else
+                    :disabled="purchasing"
                     @click="startPurchase"
-                    class="w-full py-3 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors"
+                    class="w-full py-3 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors disabled:opacity-60"
                   >
-                    Comprar agora
+                    {{ purchasing ? 'Redirecionando...' : 'Comprar agora' }}
                   </button>
+
+                  <p v-if="purchaseError" class="mt-3 text-sm text-red-600 text-center">
+                    {{ purchaseError }}
+                  </p>
 
                   <p v-if="!authStore.isAuthenticated" class="text-sm text-gray-500 mt-4 text-center">
                     Já tem conta?
@@ -94,6 +99,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 import { fetchCourse } from '../api/courses'
+import { purchaseCourse, createCheckout } from '../api/enrollments'
 import AppNavbar from '../components/AppNavbar.vue'
 
 const route = useRoute()
@@ -104,6 +110,8 @@ const tenantStore = useTenantStore()
 const course = ref(null)
 const loading = ref(true)
 const error = ref('')
+const purchasing = ref(false)
+const purchaseError = ref('')
 
 const redirectPath = computed(() => route.fullPath)
 const loginWithRedirect = computed(() => ({ path: '/login', query: { redirect: redirectPath.value } }))
@@ -118,9 +126,19 @@ function goToLogin() {
   router.push({ path: '/login', query: { redirect: redirectPath.value } })
 }
 
-function startPurchase() {
-  // Próxima etapa do fluxo de compra será implementada em commit futuro
-  router.push({ path: `/cursos/${route.params.id}/comprar` })
+async function startPurchase() {
+  purchaseError.value = ''
+  purchasing.value = true
+
+  try {
+    const { data } = await purchaseCourse(course.value.id, 'BOLETO')
+    const paymentId = data.payment.id
+    const checkout = await createCheckout(paymentId)
+    window.location.href = checkout.data.checkout_url
+  } catch (err) {
+    purchaseError.value = err.response?.data?.detail || 'Erro ao iniciar a compra. Tente novamente.'
+    purchasing.value = false
+  }
 }
 
 onMounted(async () => {

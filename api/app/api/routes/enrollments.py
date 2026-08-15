@@ -1,25 +1,28 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
-from app.models.class_model import Class
+from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
 from app.models.course import Course
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
 from app.models.student import Student
 from app.schemas.enrollment import (
     BulkEnrollmentCreate,
     BulkEnrollmentResponse,
     EnrollmentCreate,
+    EnrollmentPurchaseRequest,
+    EnrollmentPurchaseResponse,
     EnrollmentResponse,
     EnrollmentUpdate,
     MyEnrollmentResponse,
 )
+from app.schemas.payment import PaymentResponse
 
 router = APIRouter()
 
@@ -157,6 +160,129 @@ async def delete_enrollment(
     
     await db.delete(enrollment)
     await db.commit()
+
+
+@router.post("/purchase", response_model=EnrollmentPurchaseResponse, status_code=status.HTTP_201_CREATED)
+async def purchase_enrollment(
+    data: EnrollmentPurchaseRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can purchase",
+        )
+
+    user_id = UUID(current_user["user_id"])
+    stmt = select(Student).where(Student.user_id == user_id)
+    result = await db.execute(stmt)
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student profile not found",
+        )
+
+    stmt = select(Course).where(Course.id == data.course_id)
+    result = await db.execute(stmt)
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+    if not course.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Course not available",
+        )
+
+    stmt = (
+        select(Class)
+        .where(
+            Class.course_id == course.id,
+            Class.status == ClassStatus.ABERTA,
+        )
+        .order_by(Class.start_date.asc())
+    )
+    result = await db.execute(stmt)
+    open_classes = result.scalars().all()
+    if not open_classes:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No open class for this course",
+        )
+
+    for class_obj in open_classes:
+        count_stmt = (
+            select(func.count(Enrollment.id))
+            .where(
+                Enrollment.class_id == class_obj.id,
+                Enrollment.status != EnrollmentStatus.CANCELADA,
+            )
+        )
+        enrolled = (await db.execute(count_stmt)).scalar_one()
+        if enrolled >= class_obj.max_students:
+            continue
+
+        stmt = select(Enrollment).where(
+            Enrollment.student_id == student.id,
+            Enrollment.class_id == class_obj.id,
+        )
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            if existing.status == EnrollmentStatus.CANCELADA:
+                continue
+            payment = (
+                await db.execute(select(Payment).where(Payment.enrollment_id == existing.id))
+            ).scalar_one_or_none()
+            if not payment:
+                payment = Payment(
+                    enrollment_id=existing.id,
+                    amount=existing.price,
+                    status=PaymentStatus.PENDENTE,
+                    method=data.method,
+                )
+                db.add(payment)
+                await db.commit()
+                await db.refresh(payment)
+            return EnrollmentPurchaseResponse(
+                enrollment=existing,
+                payment=PaymentResponse.model_validate(payment),
+            )
+
+        enrollment = Enrollment(
+            student_id=student.id,
+            class_id=class_obj.id,
+            price=course.price,
+            status=EnrollmentStatus.PENDENTE,
+        )
+        db.add(enrollment)
+        await db.flush()
+
+        payment = Payment(
+            enrollment_id=enrollment.id,
+            amount=course.price,
+            status=PaymentStatus.PENDENTE,
+            method=data.method,
+        )
+        db.add(payment)
+        await db.commit()
+        await db.refresh(enrollment)
+        await db.refresh(payment)
+
+        return EnrollmentPurchaseResponse(
+            enrollment=enrollment,
+            payment=PaymentResponse.model_validate(payment),
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="No class with available seats",
+    )
 
 
 @router.post("/bulk", response_model=BulkEnrollmentResponse, status_code=status.HTTP_201_CREATED)

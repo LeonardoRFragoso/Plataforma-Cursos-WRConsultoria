@@ -186,6 +186,8 @@ async def student_user(client, admin_headers):
         "headers": {"Authorization": f"Bearer {token}"},
         "student_id": student_id,
         "email": email,
+        "course_id": course_id,
+        "class_id": class_id,
     }
 
 

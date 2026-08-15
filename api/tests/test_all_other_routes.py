@@ -473,6 +473,42 @@ class TestEnrollments:
         response = await client.post("/api/v1/enrollments/bulk", json=payload, headers=admin_headers)
         assert response.status_code == 404
 
+    async def test_purchase_enrollment(self, client, student_user):
+        response = await client.post(
+            "/api/v1/enrollments/purchase",
+            json={"course_id": str(student_user["course_id"])},
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 201
+        assert response.json()["enrollment"]["student_id"] == str(student_user["student_id"])
+        assert response.json()["payment"]["enrollment_id"] == response.json()["enrollment"]["id"]
+        assert response.json()["payment"]["status"] == "PENDENTE"
+
+    async def test_purchase_enrollment_idempotent(self, client, student_user):
+        payload = {"course_id": str(student_user["course_id"])}
+        first = await client.post(
+            "/api/v1/enrollments/purchase",
+            json=payload,
+            headers=student_user["headers"],
+        )
+        assert first.status_code == 201
+        second = await client.post(
+            "/api/v1/enrollments/purchase",
+            json=payload,
+            headers=student_user["headers"],
+        )
+        assert second.status_code == 201
+        assert first.json()["enrollment"]["id"] == second.json()["enrollment"]["id"]
+        assert first.json()["payment"]["id"] == second.json()["payment"]["id"]
+
+    async def test_purchase_enrollment_forbidden_for_admin(self, client, admin_headers):
+        response = await client.post(
+            "/api/v1/enrollments/purchase",
+            json={"course_id": str(uuid.uuid4())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 403
+
 
 class TestPayments:
     async def test_create_payment(self, client, admin_headers, student_user):

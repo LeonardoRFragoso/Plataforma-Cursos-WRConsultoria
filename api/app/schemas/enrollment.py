@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.enrollment import EnrollmentStatus
 from app.models.payment import PaymentMethod
+from app.schemas.payment import PaymentResponse
 
 
 class EnrollmentBase(BaseModel):
@@ -56,3 +57,13 @@ class BulkEnrollmentResponse(BaseModel):
     enrollment_ids: list[UUID]
     payment_id: UUID
     total_amount: float
+
+
+class EnrollmentPurchaseRequest(BaseModel):
+    course_id: UUID
+    method: PaymentMethod = PaymentMethod.BOLETO
+
+
+class EnrollmentPurchaseResponse(BaseModel):
+    enrollment: EnrollmentResponse
+    payment: PaymentResponse
