@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
+from app.models.class_model import Class
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment, PaymentStatus
@@ -28,16 +29,20 @@ async def create_payment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    is_admin = current_user.get("role") in ("admin", "super_admin")
     stmt = select(Enrollment).where(Enrollment.id == payment_data.enrollment_id)
+    if not is_admin:
+        stmt = stmt.join(Student).where(Student.user_id == UUID(current_user["user_id"]))
+
     result = await db.execute(stmt)
     enrollment = result.scalar_one_or_none()
-    
+
     if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
-    
+
     payment = Payment(**payment_data.model_dump())
     db.add(payment)
     await db.commit()
@@ -155,11 +160,12 @@ async def create_mercado_pago_checkout(
     current_user: dict = Depends(get_current_user),
 ):
     stmt = (
-        select(Payment, Enrollment, Student, User, Course)
+        select(Payment, Enrollment, Student, User, Class, Course)
         .join(Enrollment, Payment.enrollment_id == Enrollment.id)
         .join(Student, Enrollment.student_id == Student.id)
         .join(User, Student.user_id == User.id)
-        .join(Course, Enrollment.class_id == Course.id)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
         .where(Payment.id == payment_id)
     )
     result = await db.execute(stmt)
@@ -171,7 +177,15 @@ async def create_mercado_pago_checkout(
             detail="Payment not found",
         )
 
-    payment, enrollment, _student, user, course = row
+    payment, enrollment, _student, user, _class, course = row
+
+    is_owner = str(user.id) == current_user["user_id"]
+    is_admin = current_user.get("role") in ("admin", "super_admin")
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot checkout a payment that does not belong to you",
+        )
 
     tenant_id = getattr(request.state, "tenant_id", None)
     access_token = None
