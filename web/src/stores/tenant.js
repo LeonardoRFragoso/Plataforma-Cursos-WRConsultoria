@@ -26,7 +26,7 @@ export const useTenantStore = defineStore('tenant', {
         this.accent_color = data.accent_color
         this.loaded = true
       } catch (error) {
-        this.name = 'WR Consultoria'
+        this.name = 'Plataforma de Cursos'
         this.primary_color = '#0056b3'
         this.secondary_color = '#1a1a1a'
         this.accent_color = '#ff6b35'

@@ -11,7 +11,13 @@ app.use(createPinia())
 
 const tenantStore = useTenantStore()
 const slug = window.location.hostname.split('.')[0] || 'wr'
-tenantStore.loadBranding(slug).then(() => tenantStore.applyColors())
+tenantStore.loadBranding(slug).then(() => {
+  tenantStore.applyColors()
+  const name = tenantStore.name || 'Plataforma de Cursos'
+  document.title = name
+  const meta = document.querySelector('meta[name="description"]')
+  if (meta) meta.content = `Cursos e certificações - ${name}`
+})
 
 app.use(router)
 
