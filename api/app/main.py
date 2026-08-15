@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import (
@@ -26,6 +28,12 @@ app = FastAPI(
     description="API para gestão de cursos e treinamentos NR",
     version="1.0.0",
 )
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],
+)
+app.add_middleware(GZipMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
