@@ -1,8 +1,11 @@
-from fastapi import FastAPI, HTTPException, Request
+import time
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.routes import (
     auth,
@@ -20,7 +23,7 @@ from app.api.routes import (
 )
 from app.core.config import settings
 from app.core.context import current_tenant_id
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncSession, AsyncSessionLocal, get_db
 from app.core.tenant import TenantResolver
 
 app = FastAPI(
@@ -96,5 +99,8 @@ async def root():
     return {"message": "WR Plataforma de Cursos API", "version": "1.0.0"}
 
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health(db: AsyncSession = Depends(get_db)):
+    start = time.perf_counter()
+    await db.execute(text("SELECT 1"))
+    duration = round((time.perf_counter() - start) * 1000, 2)
+    return {"status": "ok", "db_latency_ms": duration}
