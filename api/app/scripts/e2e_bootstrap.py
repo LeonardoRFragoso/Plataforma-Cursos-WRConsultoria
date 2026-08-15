@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Bootstrap idempotente para testes E2E full-stack.
 
 Cria APENAS os dados mínimos necessários para o teste de integração
