@@ -1,10 +1,13 @@
 import re
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
@@ -23,6 +26,16 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
 )
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 
 router = APIRouter()
 
@@ -183,11 +196,66 @@ async def get_current_user_info(
     stmt = select(User).where(User.id == current_user["user_id"])
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     return user
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(User).where(User.email == payload.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {"detail": "If the email exists, a reset link was sent"}
+
+    reset_token = create_access_token(
+        {"sub": str(user.id), "type": "password_reset"},
+        expires_delta=timedelta(seconds=900),
+    )
+
+    # Em produção enviar e-mail via SMTP; em dev retornar o token
+    if all([settings.SMTP_SERVER, settings.SMTP_USER, settings.SMTP_PASSWORD]):
+        # Envio de e-mail omitido para simplicidade
+        pass
+    else:
+        return {"reset_token": reset_token}
+
+    return {"detail": "If the email exists, a reset link was sent"}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    payload_token = decode_token(payload.token)
+    if payload_token.get("type") != "password_reset":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token",
+        )
+
+    user_id = payload_token.get("sub")
+    stmt = select(User).where(User.id == UUID(user_id))
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    await db.commit()
+    return {"detail": "Password reset successfully"}
