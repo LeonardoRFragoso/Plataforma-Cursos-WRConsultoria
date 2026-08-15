@@ -76,7 +76,9 @@ jobs:
       - run: cd web && npm ci
       - run: cd web && npx playwright install --with-deps chromium
       - run: cd web && npm run build
-      - run: cd web && npx playwright test
+      # CI runs only the ui-mocked suite; the integration suite requires
+      # a running backend+postgres and is covered by the smoke job.
+      - run: cd web && npx playwright test --project=ui-mocked
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
