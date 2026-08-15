@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import httpx
 import pytest
+from sqlalchemy import text
 
 from app.core.config import settings
 
@@ -39,6 +40,22 @@ async def setup_db():
     """Recria o esquema do banco para cada teste."""
     await engine.dispose()
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("""
+        DO $$
+        DECLARE
+            t text;
+        BEGIN
+            FOR t IN (
+                SELECT typname
+                FROM pg_type
+                JOIN pg_namespace n ON n.oid = pg_type.typnamespace
+                WHERE typtype = 'e' AND n.nspname = 'public'
+            ) LOOP
+                EXECUTE format('DROP TYPE IF EXISTS %I CASCADE', t);
+            END LOOP;
+        END $$;
+        """))
         await conn.run_sync(Base.metadata.create_all)
     await _insert_master_tenant()
     yield

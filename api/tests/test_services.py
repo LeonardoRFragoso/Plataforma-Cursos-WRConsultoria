@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -8,7 +8,13 @@ from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.core import utils
-from app.core.security import create_access_token, decode_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    decode_token,
+    get_current_tenant_id,
+    hash_password,
+    verify_password,
+)
 from app.core.storage import _get_s3_client, _key_for_lesson, generate_upload_url, generate_watch_url
 from app.services import CertificateService, MercadoPagoService
 
@@ -35,6 +41,16 @@ def test_access_token_roundtrip():
 def test_decode_token_rejects_invalid_token():
     with pytest.raises(HTTPException):
         decode_token("not-a-valid-token")
+
+
+def test_create_access_token_accepts_expires_delta():
+    token = create_access_token({"sub": str(uuid.uuid4())}, expires_delta=timedelta(minutes=5))
+    assert isinstance(token, str)
+
+
+def test_get_current_tenant_id_requires_tenant_context():
+    with pytest.raises(HTTPException):
+        get_current_tenant_id()
 
 
 def test_certificate_service_generates_pdf():
