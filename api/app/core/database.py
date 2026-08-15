@@ -34,12 +34,26 @@ def _resolve_tenant_id() -> str:
 
 @event.listens_for(Session, "before_flush")
 def _set_tenant_on_flush(session, flush_context, instances):
-    """Define tenant_id dos novos objetos a partir do contexto da sessão."""
+    """Define tenant_id dos novos objetos a partir do contexto da sessão.
+
+    Modelos cuja coluna tenant_id é nullable (ex.: Plan do catálogo global
+    da WR) podem ter tenant_id intencionalmente NULL e não são preenchidos
+    automaticamente.
+    """
     if "tenant_id" not in session.info:
         session.info["tenant_id"] = WR_TENANT_ID
     tenant_id = session.info["tenant_id"]
     for obj in session.new:
-        if hasattr(obj, "tenant_id") and obj.tenant_id is None:
+        if not hasattr(obj, "tenant_id"):
+            continue
+        column = None
+        if hasattr(obj, "__table__") and "tenant_id" in obj.__table__.columns:
+            column = obj.__table__.columns["tenant_id"]
+        is_nullable = column is not None and column.nullable
+        if is_nullable:
+            # Permitido NULL (catálogo global); não preenche automaticamente.
+            continue
+        if obj.tenant_id is None:
             if not tenant_id:
                 raise IntegrityError(
                     "tenant_id required but no tenant resolved",

@@ -105,6 +105,38 @@ def admin_headers(admin_token):
 
 
 @pytest.fixture
+async def super_admin_token(client):
+    """Cria um usuário super_admin e autentica, retornando o access token."""
+    email = "superadmin@example.com"
+    password = "super123"
+
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email=email,
+            full_name="Super Admin",
+            cpf="99988877766",
+            password_hash=hash_password(password),
+            role=UserRole.SUPER_ADMIN,
+            is_active=True,
+            tenant_id=WR_TENANT_ID,
+        )
+        session.add(user)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"identifier": email, "password": password},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+@pytest.fixture
+def super_admin_headers(super_admin_token):
+    return {"Authorization": f"Bearer {super_admin_token}"}
+
+
+@pytest.fixture
 def test_user_data():
     return {
         "email": "test@example.com",

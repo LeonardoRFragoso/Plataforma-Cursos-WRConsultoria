@@ -18,10 +18,12 @@ class Plan(Base):
     __tablename__ = "plans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # tenant_id é NULL para planos do catálogo comercial global da WR.
+    # Planos legados específicos de tenant mantêm o valor para compatibilidade.
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     name = Column(String, nullable=False)

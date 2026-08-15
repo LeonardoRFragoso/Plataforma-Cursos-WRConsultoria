@@ -21,6 +21,7 @@ from app.api.routes import (
     plans,
     reports,
     students,
+    super_admin,
     tenant_subscriptions,
     tenants,
 )
@@ -85,6 +86,8 @@ async def tenant_middleware(request: Request, call_next):
             if not (
                 request.url.path.startswith("/api/v1/tenants")
                 or request.url.path.startswith("/api/v1/partner-leads")
+                or request.url.path.startswith("/api/v1/super-admin")
+                or request.url.path.startswith("/api/v1/plans/public")
             ):
                 current_tenant_id.reset(token)
                 return JSONResponse(
@@ -116,6 +119,11 @@ app.include_router(
     tenant_subscriptions.router,
     prefix="/api/v1/subscriptions",
     tags=["subscriptions"],
+)
+app.include_router(
+    super_admin.router,
+    prefix="/api/v1/super-admin",
+    tags=["super-admin"],
 )
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])

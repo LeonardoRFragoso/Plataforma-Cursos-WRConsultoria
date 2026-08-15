@@ -11,7 +11,10 @@ class TenantSubscriptionBase(BaseModel):
 
 
 class TenantSubscriptionCreate(TenantSubscriptionBase):
-    pass
+    """Criação de assinatura pelo SUPER_ADMIN (atribui plano a um tenant)."""
+
+    tenant_id: UUID
+    status: SubscriptionStatus = SubscriptionStatus.TRIAL
 
 
 class TenantSubscriptionUpdate(BaseModel):

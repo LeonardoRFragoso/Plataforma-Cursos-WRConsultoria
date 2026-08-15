@@ -9,10 +9,17 @@ from app.core.utils import utc_now
 
 
 class SubscriptionStatus(str, PyEnum):
+    # Status legados (compatibilidade com dados existentes)
     PENDENTE = "PENDENTE"
     ATIVO = "ATIVO"
     CANCELADO = "CANCELADO"
     EXPIRADO = "EXPIRADO"
+    # Status do lifecycle White Label SaaS controlado pela WR
+    TRIAL = "TRIAL"
+    ACTIVE = "ACTIVE"
+    PAST_DUE = "PAST_DUE"
+    SUSPENDED = "SUSPENDED"
+    CANCELLED = "CANCELLED"
 
 
 class TenantSubscription(Base):

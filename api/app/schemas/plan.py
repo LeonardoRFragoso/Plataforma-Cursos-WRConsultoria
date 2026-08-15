@@ -34,6 +34,7 @@ class PlanUpdate(BaseModel):
 
 class PlanResponse(PlanBase):
     id: UUID
+    tenant_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
