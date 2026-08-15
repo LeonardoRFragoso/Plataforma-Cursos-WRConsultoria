@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id
 from app.core.utils import utc_now
+from app.models.certificate import Certificate
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment
 from app.models.student import Student
@@ -50,10 +51,33 @@ def _format_student(s: Student) -> dict:
     }
 
 
+def _format_certificate(c: Certificate) -> dict:
+    return {
+        "id": str(c.id),
+        "enrollment_id": str(c.enrollment_id),
+        "certificate_number": c.certificate_number,
+        "validation_code": c.validation_code,
+        "issued_at": c.issued_at,
+        "pdf_path": c.pdf_path,
+        "created_at": c.created_at,
+        "updated_at": c.updated_at,
+    }
+
+
 COLUMNS = {
     "enrollments": ["id", "student_id", "class_id", "price", "status", "created_at", "updated_at"],
     "payments": ["id", "enrollment_id", "amount", "status", "method", "created_at", "updated_at"],
     "students": ["id", "user_id", "cpf", "phone", "created_at", "updated_at"],
+    "certificates": [
+        "id",
+        "enrollment_id",
+        "certificate_number",
+        "validation_code",
+        "issued_at",
+        "pdf_path",
+        "created_at",
+        "updated_at",
+    ],
 }
 
 
@@ -75,10 +99,17 @@ async def _fetch_students(db: AsyncSession, tenant_id):
     return COLUMNS["students"], rows
 
 
+async def _fetch_certificates(db: AsyncSession, tenant_id):
+    result = await db.execute(select(Certificate).where(Certificate.tenant_id == tenant_id))
+    rows = [_format_certificate(c) for c in result.scalars().all()]
+    return COLUMNS["certificates"], rows
+
+
 FETCHERS = {
     "enrollments": _fetch_enrollments,
     "payments": _fetch_payments,
     "students": _fetch_students,
+    "certificates": _fetch_certificates,
 }
 
 
