@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from botocore.exceptions import ClientError
+from fastapi import HTTPException
 
 from app.core import utils
+from app.core.security import create_access_token, decode_token, hash_password, verify_password
 from app.core.storage import _get_s3_client, _key_for_lesson, generate_upload_url, generate_watch_url
 from app.services import CertificateService, MercadoPagoService
 
@@ -14,6 +16,25 @@ from app.services import CertificateService, MercadoPagoService
 def test_utc_now_returns_datetime():
     now = utils.utc_now()
     assert isinstance(now, datetime)
+
+
+def test_password_hashing_roundtrip():
+    password = "senha-segura-123"
+    hashed = hash_password(password)
+    assert verify_password(password, hashed) is True
+    assert verify_password("wrong", hashed) is False
+
+
+def test_access_token_roundtrip():
+    token = create_access_token({"sub": str(uuid.uuid4())})
+    assert isinstance(token, str)
+    payload = decode_token(token)
+    assert "sub" in payload
+
+
+def test_decode_token_rejects_invalid_token():
+    with pytest.raises(HTTPException):
+        decode_token("not-a-valid-token")
 
 
 def test_certificate_service_generates_pdf():

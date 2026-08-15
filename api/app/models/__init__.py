@@ -7,12 +7,15 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
 from app.models.one_time_token import OneTimeToken
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
+from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
 from app.models.user import User, UserRole
 
 __all__ = [
     "Attendance",
+    "BillingCycle",
     "Certificate",
     "Class",
     "ClassStatus",
@@ -31,9 +34,12 @@ __all__ = [
     "Payment",
     "PaymentMethod",
     "PaymentStatus",
+    "Plan",
     "Student",
+    "SubscriptionStatus",
     "Tenant",
     "TenantStatus",
+    "TenantSubscription",
     "User",
     "UserRole",
 ]
