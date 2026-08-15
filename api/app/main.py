@@ -10,6 +10,7 @@ from app.api.routes import (
     courses,
     enrollments,
     lessons,
+    partner_leads,
     payments,
     students,
     tenants,
@@ -65,6 +66,9 @@ async def tenant_middleware(request: Request, call_next):
         current_tenant_id.reset(token)
 
 app.include_router(tenants.router, prefix="/api/v1/tenants", tags=["tenants"])
+app.include_router(
+    partner_leads.router, prefix="/api/v1/partner-leads", tags=["partner-leads"]
+)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(classes.router, prefix="/api/v1/classes", tags=["classes"])

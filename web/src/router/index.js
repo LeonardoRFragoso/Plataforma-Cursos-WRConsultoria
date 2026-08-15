@@ -18,6 +18,11 @@ export const routes = [
     component: () => import('../views/Register.vue'),
   },
   {
+    path: '/seja-parceiro',
+    name: 'Partner',
+    component: () => import('../views/Partner.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/Dashboard.vue'),
