@@ -97,9 +97,15 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile.prod
+      # VITE_API_URL is a BUILD-TIME Vite configuration. Vite inlines
+      # import.meta.env.VITE_* into the compiled bundle, so the API endpoint
+      # is baked into the static assets at build time. It CANNOT be changed at
+      # runtime via environment variables on the nginx container — changing the
+      # API URL requires rebuilding the web image. This is public configuration,
+      # not a secret (every VITE_* value becomes browser-visible).
+      args:
+        VITE_API_URL: ${VITE_API_URL:?VITE_API_URL is required at web image build time}
     container_name: wr-web-prod
-    environment:
-      VITE_API_URL: ${VITE_API_URL}
     ports:
       - "${WEB_PORT:-80}:80"
     depends_on:
