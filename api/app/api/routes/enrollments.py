@@ -168,6 +168,18 @@ async def purchase_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    """Compra de curso com idempotência no nível do Course.
+
+    Regras de idempotência (qualquer turma do mesmo curso):
+    - CONFIRMADA / CONCLUIDA: curso já adquirido -> retorna estado existente,
+      nunca cria nova matrícula/pagamento.
+    - PENDENTE: reutiliza a matrícula/pagamento pendente existente.
+    - CANCELADA: permite nova compra (regra explícita de abandono).
+
+    Concorrência: trava o registro do Student para serializar compras
+    simultâneas do mesmo aluno e trava a turma ao conferir capacidade,
+    impedindo ultrapassar max_students.
+    """
     if current_user.get("role") != "student":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -175,7 +187,8 @@ async def purchase_enrollment(
         )
 
     user_id = UUID(current_user["user_id"])
-    stmt = select(Student).where(Student.user_id == user_id)
+    # Trava o Student para serializar compras concorrentes do mesmo aluno.
+    stmt = select(Student).where(Student.user_id == user_id).with_for_update()
     result = await db.execute(stmt)
     student = result.scalar_one_or_none()
     if not student:
@@ -198,6 +211,61 @@ async def purchase_enrollment(
             detail="Course not available",
         )
 
+    # Idempotência no nível do Course: busca matrícula existente em qualquer turma.
+    existing_stmt = (
+        select(Enrollment)
+        .join(Class, Enrollment.class_id == Class.id)
+        .where(
+            Enrollment.student_id == student.id,
+            Class.course_id == course.id,
+        )
+    )
+    existing_enrollments = (await db.execute(existing_stmt)).scalars().all()
+
+    async def _resolve_payment(enrollment: Enrollment) -> Payment:
+        payment = (
+            await db.execute(
+                select(Payment)
+                .where(Payment.enrollment_id == enrollment.id)
+                .order_by(Payment.created_at.desc())
+            )
+        ).scalar_one_or_none()
+        if not payment:
+            payment = Payment(
+                enrollment_id=enrollment.id,
+                amount=enrollment.price,
+                status=PaymentStatus.PENDENTE,
+                method=data.method,
+            )
+            db.add(payment)
+            await db.commit()
+            await db.refresh(payment)
+        return payment
+
+    # Curso já adquirido (CONFIRMADA ou CONCLUIDA): não cria nova compra.
+    acquired = [
+        e for e in existing_enrollments
+        if e.status in (EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA)
+    ]
+    if acquired:
+        enrollment = acquired[0]
+        payment = await _resolve_payment(enrollment)
+        return EnrollmentPurchaseResponse(
+            enrollment=enrollment,
+            payment=PaymentResponse.model_validate(payment),
+        )
+
+    # PENDENTE: reutiliza matrícula/pagamento pendente existente.
+    pending = [e for e in existing_enrollments if e.status == EnrollmentStatus.PENDENTE]
+    if pending:
+        enrollment = pending[0]
+        payment = await _resolve_payment(enrollment)
+        return EnrollmentPurchaseResponse(
+            enrollment=enrollment,
+            payment=PaymentResponse.model_validate(payment),
+        )
+
+    # Nenhuma matrícula reutilizável (CANCELADA ou inexistente): nova compra.
     stmt = (
         select(Class)
         .where(
@@ -215,6 +283,24 @@ async def purchase_enrollment(
         )
 
     for class_obj in open_classes:
+        # Trava a turma para conferir capacidade de forma segura sob concorrência.
+        locked = (
+            await db.execute(
+                select(Class).where(Class.id == class_obj.id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if not locked:
+            continue
+
+        # Pula turmas onde o aluno já possui matrícula (a constraint única
+        # (tenant, student, class) impede uma segunda; matrículas CANCELADA
+        # aqui já foram tratadas acima e não podem ser reutilizadas na mesma turma).
+        already_in_class = any(
+            e.class_id == class_obj.id for e in existing_enrollments
+        )
+        if already_in_class:
+            continue
+
         count_stmt = (
             select(func.count(Enrollment.id))
             .where(
@@ -225,34 +311,6 @@ async def purchase_enrollment(
         enrolled = (await db.execute(count_stmt)).scalar_one()
         if enrolled >= class_obj.max_students:
             continue
-
-        stmt = select(Enrollment).where(
-            Enrollment.student_id == student.id,
-            Enrollment.class_id == class_obj.id,
-        )
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
-
-        if existing:
-            if existing.status == EnrollmentStatus.CANCELADA:
-                continue
-            payment = (
-                await db.execute(select(Payment).where(Payment.enrollment_id == existing.id))
-            ).scalar_one_or_none()
-            if not payment:
-                payment = Payment(
-                    enrollment_id=existing.id,
-                    amount=existing.price,
-                    status=PaymentStatus.PENDENTE,
-                    method=data.method,
-                )
-                db.add(payment)
-                await db.commit()
-                await db.refresh(payment)
-            return EnrollmentPurchaseResponse(
-                enrollment=existing,
-                payment=PaymentResponse.model_validate(payment),
-            )
 
         enrollment = Enrollment(
             student_id=student.id,
