@@ -19,6 +19,7 @@ from app.api.routes import (
     partner_leads,
     payments,
     plans,
+    reports,
     students,
     tenant_subscriptions,
     tenants,
@@ -93,6 +94,7 @@ app.include_router(students.router, prefix="/api/v1/students", tags=["students"]
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(
     tenant_subscriptions.router,
     prefix="/api/v1/subscriptions",
