@@ -4,6 +4,38 @@
 **Branch:** `chore/production-readiness`  
 **Base:** `f2b73ca` (main, post-merge PR #9)
 
+## Staging Readiness Status
+
+**READY WITH CAVEATS**
+
+The two final pre-merge release blockers discovered in the audit of PR #10
+have been resolved:
+
+1. **P0 — Frontend production API endpoint contract.** `VITE_API_URL` is now a
+   build-time argument to `web/Dockerfile.prod` (validated non-empty, exposed
+   only to the builder stage). `docker-compose.prod.yml` passes it under
+   `web.build.args` with a `${VITE_API_URL:?...}` required-variable contract.
+   CI builds the web image with an unmistakable test URL
+   (`https://api.release-test.example`) and asserts the compiled runtime
+   assets contain that URL and do NOT contain the `http://localhost:8000`
+   development fallback. A build without `VITE_API_URL` is proven to fail.
+2. **P1 — `/health/ready` failure contract.** The readiness probe no longer
+   depends on `get_db` (which executes tenant RLS setup before yielding and
+   can raise before the handler's try block). It creates a dedicated
+   `AsyncSession` inside its own try block and maps SQLAlchemy connectivity
+   exceptions (`OperationalError`, `InterfaceError`) and `OSError` to a clean
+   `503 not_ready`. Tests cover DB healthy (200), DB unavailable (503),
+   `/health/live` (200, no DB query), and absence of secrets in responses.
+
+Remaining caveats (out of scope for PR #10, tracked separately):
+
+- Infrastructure provisioning (DNS, TLS, reverse proxy, managed Postgres/Redis)
+- Real production secrets must be supplied via environment/.env
+- SMTP email sending is not yet functional (forgot-password creates a token
+  but does not send email) — separate email-delivery PR
+- Python dependency security upgrades (fastapi, starlette, python-jose,
+  python-multipart, etc.) — separate security PR
+
 ## Classification
 
 - **P0 BLOCKER** — Must fix before staging deployment
@@ -179,3 +211,22 @@ This audit will be addressed in atomic commits on `chore/production-readiness`:
 9. `docs(ops): add deployment backup and rollback runbooks` — `docs/`
 10. `test(release): validate production images and smoke flow` — CI job
 11. `docs(platform): reconcile documentation after SaaS merge` — update existing docs
+
+## Final Pre-Merge Reconciliation (PR #10)
+
+Two production-readiness gaps discovered in the final audit were corrected in
+atomic commits on the same branch:
+
+12. `fix(web): inject API endpoint into production build` — `VITE_API_URL`
+    build-time contract (`web/Dockerfile.prod` ARG validation +
+    `docker-compose.prod.yml` `web.build.args`)
+13. `fix(health): make readiness fail cleanly on database outage` — dedicated
+    readiness DB probe, 503 on connectivity failure, no `get_db` dependency
+14. `test(release): verify production artifact configuration` — CI asserts the
+    compiled frontend bundle embeds the correct API URL and not the dev
+    fallback; production-mode API container smoke (`/health/live` 200,
+    `/docs` 404 with `DOCS_ENABLED=false`); prod compose config validated
+    with release-test env values
+15. `docs(release): clarify frontend build-time configuration` —
+    `.env.production.example`, `docs/DEPLOYMENT.md`, `docs/RELEASE_RUNBOOK.md`,
+    and this audit updated to document the build-time `VITE_API_URL` contract

@@ -59,6 +59,34 @@ cp .env.production.example .env.production
 # Edit .env.production with real values
 ```
 
+#### Frontend API endpoint (build-time)
+
+`VITE_API_URL` is a **build-time** Vite configuration, not a runtime variable.
+Vite inlines `import.meta.env.VITE_*` values into the compiled static bundle
+when `npm run build` runs inside `web/Dockerfile.prod`. The value is supplied
+as a Docker build argument (`--build-arg VITE_API_URL=...`) and interpolated by
+`docker-compose.prod.yml` under `web.build.args`.
+
+- **Changing the API URL requires rebuilding the frontend image.** Setting it
+  as a runtime environment variable on the nginx container has no effect — the
+  value was already baked into the compiled JS at build time.
+- The web image build **fails fast** if `VITE_API_URL` is empty/missing, so a
+  production frontend can never be compiled while still pointing at the
+  development fallback (`http://localhost:8000`).
+- `VITE_API_URL` is **public configuration, not a secret**. Every `VITE_*`
+  value becomes browser-visible in the compiled JS. Never put credentials in a
+  `VITE_*` variable.
+
+```bash
+# Staging build
+VITE_API_URL=https://api.staging.example.com \
+  docker compose -f docker-compose.prod.yml build web
+
+# Production build
+VITE_API_URL=https://api.platform.example.com \
+  docker compose -f docker-compose.prod.yml build web
+```
+
 ### 2. Backup database (if upgrading existing deployment)
 
 ```bash

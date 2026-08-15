@@ -17,6 +17,9 @@
 - [ ] `SECRET_KEY` set (≥ 32 chars, not a placeholder)
 - [ ] `ALLOWED_HOSTS` lists exact domains
 - [ ] `CORS_ORIGINS` lists exact origins (no wildcards, no localhost)
+- [ ] `VITE_API_URL` set to the correct API origin for this environment
+      (build-time frontend config — changing it requires rebuilding the web
+      image; never put secrets in a `VITE_*` variable)
 - [ ] SMTP credentials configured (if email flows needed)
 - [ ] Storage credentials configured (if video/material upload needed)
 
@@ -59,6 +62,10 @@ If migration fails:
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+> **Note:** `VITE_API_URL` is baked into the frontend at image build time.
+> If the API origin changed since the last build, rebuild the web image first:
+> `VITE_API_URL=https://api.example.com docker compose -f docker-compose.prod.yml build web`
 
 ### 4. Health verification
 
