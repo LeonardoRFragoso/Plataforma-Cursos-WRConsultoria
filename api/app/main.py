@@ -100,7 +100,18 @@ async def rate_limit_middleware(request: Request, call_next):
 @app.middleware("http")
 async def tenant_middleware(request: Request, call_next):
     """Resolve o tenant por host/custom domain e define o contexto da sessão."""
-    if request.url.path in ("/health", "/health/live", "/health/ready", "/"):
+    # Framework-level paths that are never tenant-scoped: health probes, root,
+    # and OpenAPI/Swagger docs (which may be disabled via DOCS_ENABLED). These
+    # must bypass tenant resolution so they do not require DB connectivity.
+    if request.url.path in (
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    ):
         return await call_next(request)
 
     resolver = TenantResolver()
