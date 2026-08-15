@@ -23,7 +23,7 @@ de ambiente.
 import asyncio
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
@@ -34,6 +34,20 @@ from app.services.tenant_secret_service import (
     MERCADO_PAGO_ACCESS_TOKEN_KEY,
     set_tenant_secret,
 )
+
+
+async def _privileged_session():
+    """Cria uma sessão com bypass_rls para migrar secrets de múltiplos tenants.
+
+    Com FORCE ROW LEVEL SECURITY, uma sessão normal só vê registros do
+    tenant atual. A migração precisa percorrer todos os tenants, então
+    usa bypass_rls = '1' (contexto privilegiado de SUPER_ADMIN).
+    """
+    session = AsyncSessionLocal()
+    session.info["tenant_id"] = WR_TENANT_ID
+    await session.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+    await session.execute(text("SET LOCAL app.bypass_rls = '1'"))
+    return session
 
 
 async def migrate_tenant_mp_tokens(dry_run: bool = False) -> dict:
@@ -47,8 +61,8 @@ async def migrate_tenant_mp_tokens(dry_run: bool = False) -> dict:
         "tenants_migrated": [],
     }
 
-    async with AsyncSessionLocal() as db:
-        db.info["tenant_id"] = WR_TENANT_ID
+    db = await _privileged_session()
+    try:
         result = await db.execute(
             select(Tenant).where(Tenant.settings.isnot(None))
         )
@@ -125,6 +139,9 @@ async def migrate_tenant_mp_tokens(dry_run: bool = False) -> dict:
                 await db.commit()
             report["migrated"] += 1
             report["tenants_migrated"].append(str(tenant.id))
+
+    finally:
+        await db.close()
 
     return report
 

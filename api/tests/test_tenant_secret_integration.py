@@ -467,3 +467,75 @@ async def test_migration_dry_run_does_not_modify():
         settings.pop("mp_access_token", None)
         tenant.settings = settings
         await db.commit()
+
+
+# ---- Multi-tenant migration with FORCE RLS ----
+
+
+@pytest.mark.asyncio
+async def test_migration_handles_multiple_tenants_with_rls():
+    """A migração percorre múltiplos tenants usando sessão privilegiada.
+
+    Com FORCE ROW LEVEL SECURITY, uma sessão normal só vê registros do
+    tenant atual. A migração usa bypass_rls para acessar todos os tenants.
+    """
+    from sqlalchemy import text as sql_text
+
+    from app.scripts.migrate_mp_access_tokens import migrate_tenant_mp_tokens
+
+    # Cria dois tenants com mp_access_token em settings
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        # Apply RLS + FORCE for tenant_secrets and tenants
+        for table in ["tenant_secrets", "tenants"]:
+            await db.execute(sql_text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
+            await db.execute(sql_text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
+        await db.execute(sql_text("DROP POLICY IF EXISTS tenant_isolation_tenant_secrets ON tenant_secrets"))
+        await db.execute(sql_text(
+            "CREATE POLICY tenant_isolation_tenant_secrets ON tenant_secrets "
+            "FOR ALL TO public "
+            "USING (current_setting('app.bypass_rls', true) = '1' "
+            "OR tenant_id = current_setting('app.current_tenant', true)::UUID) "
+            "WITH CHECK (current_setting('app.bypass_rls', true) = '1' "
+            "OR tenant_id = current_setting('app.current_tenant', true)::UUID)"
+        ))
+        await db.commit()
+
+        tenant_a = Tenant(
+            name="Multi-Tenant A",
+            slug=f"mt-a-{uuid.uuid4().hex[:6]}",
+            contact_name="A",
+            contact_email="a@mt.test",
+            settings={"mp_access_token": "TOKEN-A-MULTI"},
+        )
+        tenant_b = Tenant(
+            name="Multi-Tenant B",
+            slug=f"mt-b-{uuid.uuid4().hex[:6]}",
+            contact_name="B",
+            contact_email="b@mt.test",
+            settings={"mp_access_token": "TOKEN-B-MULTI"},
+        )
+        db.add_all([tenant_a, tenant_b])
+        await db.commit()
+
+    # Executa a migração (usa sessão privilegiada com bypass_rls)
+    report = await migrate_tenant_mp_tokens(dry_run=False)
+
+    assert report["migrated"] >= 2, f"Expected 2 migrations, got {report['migrated']}"
+    assert len(report["errors"]) == 0
+
+    # Verifica que ambos os tokens foram migrados
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await db.execute(sql_text("SET LOCAL app.bypass_rls = '1'"))
+
+        token_a = await get_mercado_pago_access_token(db, tenant_a.id)
+        token_b = await get_mercado_pago_access_token(db, tenant_b.id)
+        assert token_a == "TOKEN-A-MULTI"
+        assert token_b == "TOKEN-B-MULTI"
+
+        # Verifica que plaintext foi removido de settings
+        tenant_a_db = await db.get(Tenant, tenant_a.id)
+        tenant_b_db = await db.get(Tenant, tenant_b.id)
+        assert "mp_access_token" not in (tenant_a_db.settings or {})
+        assert "mp_access_token" not in (tenant_b_db.settings or {})
