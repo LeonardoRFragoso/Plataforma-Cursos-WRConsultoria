@@ -16,6 +16,12 @@
           >
             Cadastro
           </router-link>
+          <router-link
+            to="/seja-parceiro"
+            class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors"
+          >
+            Seja parceiro
+          </router-link>
         </nav>
       </div>
     </header>
@@ -28,7 +34,7 @@
           Treinamentos NR com<br />certificação reconhecida
         </h1>
         <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
-          Plataforma de cursos da WR Consultoria e Soluções em QSMS.
+          Plataforma de cursos da {{ tenantName }}.
           Segurança, qualidade e meio ambiente para sua empresa.
         </p>
         <router-link
@@ -87,6 +93,50 @@
       </div>
     </section>
 
+    <!-- Vitrine de Cursos -->
+    <section class="py-20 bg-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold text-secondary-900 mb-4">Cursos disponíveis</h2>
+          <p class="text-gray-600 max-w-2xl mx-auto">
+            Escolha um curso e inicie sua jornada de capacitação.
+          </p>
+        </div>
+
+        <div v-if="loading" class="text-center text-gray-500">Carregando cursos...</div>
+
+        <div v-else-if="courses.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div
+            v-for="course in courses"
+            :key="course.id"
+            class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200 overflow-hidden flex flex-col"
+          >
+            <div class="p-6 flex-1">
+              <h3 class="text-xl font-semibold text-secondary-900 mb-2">{{ course.name }}</h3>
+              <p class="text-sm text-gray-500 mb-4 uppercase tracking-wide">{{ course.category }}</p>
+              <p class="text-gray-600 text-sm mb-4 line-clamp-3">{{ course.description }}</p>
+              <div class="flex items-center justify-between text-sm text-gray-600">
+                <span>Carga: {{ course.carga_horaria }}h</span>
+                <span class="font-semibold text-primary-600">{{ formatPrice(course.price) }}</span>
+              </div>
+            </div>
+            <div class="p-4 border-t border-gray-100 bg-gray-50">
+              <router-link
+                to="/register"
+                class="block w-full text-center py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors"
+              >
+                Matricular
+              </router-link>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="text-center text-gray-500">
+          Nenhum curso disponível no momento.
+        </div>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer class="bg-primary-700 text-white/80 py-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -99,4 +149,31 @@
 </template>
 
 <script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useTenantStore } from '../stores/tenant'
+import { fetchPublicCourses } from '../api/courses'
+
+const tenantStore = useTenantStore()
+const courses = ref([])
+const loading = ref(true)
+const tenantName = computed(() => tenantStore.name || 'WR Consultoria')
+
+function formatPrice(price) {
+  if (price === 0 || price === null) return 'Gratuito'
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(price)
+}
+
+onMounted(async () => {
+  try {
+    const { data } = await fetchPublicCourses()
+    courses.value = data
+  } catch {
+    courses.value = []
+  } finally {
+    loading.value = false
+  }
+})
 </script>
