@@ -41,3 +41,28 @@ async def get_branding_by_domain(
         secondary_color=tenant.secondary_color,
         accent_color=tenant.accent_color,
     )
+
+
+@router.get("/plans")
+async def list_plans():
+    """Retorna os planos disponíveis para comercialização."""
+    return [
+        {
+            "name": "Starter",
+            "price": 97.0,
+            "description": "Ideal para pequenas consultorias iniciando com treinamentos digitais.",
+            "features": ["1 domínio customizado", "Até 50 alunos", "Suporte por e-mail"],
+        },
+        {
+            "name": "Pro",
+            "price": 297.0,
+            "description": "Para empresas que precisam escalar a capacitação.",
+            "features": ["5 domínios customizados", "Até 500 alunos", "Suporte prioritário", "Relatórios avançados"],
+        },
+        {
+            "name": "Enterprise",
+            "price": 997.0,
+            "description": "Solução completa com integrações e volume ilimitado.",
+            "features": ["Domínios ilimitados", "Alunos ilimitados", "Suporte 24/7", "API dedicada", "White label completo"],
+        },
+    ]
