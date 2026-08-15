@@ -1,7 +1,5 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from app.core.rate_limit import RateLimiter
 
 

@@ -15,6 +15,7 @@ from app.models.student import Student
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.payment import (
+    PaymentAdminCreate,
     PaymentCreate,
     PaymentResponse,
     PaymentUpdate,
@@ -24,12 +25,23 @@ from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoServi
 
 router = APIRouter()
 
+
+def _amounts_match(a: float, b: float) -> bool:
+    """Compara valores monetários com tolerância de centavos."""
+    return abs(float(a) - float(b)) < 0.005
+
+
 @router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
     payment_data: PaymentCreate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    """Cria um pagamento para uma matrícula existente.
+
+    O valor é sempre calculado server-side a partir de ``Enrollment.price``.
+    O cliente nunca é autoridade do preço.
+    """
     is_admin = current_user.get("role") in ("admin", "super_admin")
     stmt = select(Enrollment).where(Enrollment.id == payment_data.enrollment_id)
     if not is_admin:
@@ -44,7 +56,46 @@ async def create_payment(
             detail="Enrollment not found",
         )
 
-    payment = Payment(**payment_data.model_dump())
+    payment = Payment(
+        enrollment_id=enrollment.id,
+        amount=enrollment.price,
+        method=payment_data.method,
+        installments=payment_data.installments,
+    )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+@router.post(
+    "/admin",
+    response_model=PaymentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_payment_admin(
+    payment_data: PaymentAdminCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """Criação administrativa explícita de pagamento com valor manual.
+
+    Reservada para fluxos auditáveis (ex.: pagamento consolidado em lote).
+    Requer papel admin/super_admin.
+    """
+    enrollment = await db.get(Enrollment, payment_data.enrollment_id)
+    if not enrollment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Enrollment not found",
+        )
+
+    payment = Payment(
+        enrollment_id=enrollment.id,
+        amount=payment_data.amount,
+        method=payment_data.method,
+        installments=payment_data.installments,
+    )
     db.add(payment)
     await db.commit()
     await db.refresh(payment)
@@ -206,6 +257,12 @@ async def mercado_pago_webhook(
     payment.status = new_status
     if new_status == PaymentStatus.APROVADO:
         payment.paid_at = utc_now()
+        # Segurança: só libera o curso quando o valor pago é consistente com
+        # o preço autoritativo da matrícula. Um pagamento inconsistente nunca
+        # deve confirmar uma matrícula de curso.
+        if not _amounts_match(payment.amount, enrollment.price):
+            await db.commit()
+            return {"status": "amount_mismatch", "detail": "Payment amount does not match enrollment price"}
         if enrollment.status != EnrollmentStatus.CONFIRMADA:
             enrollment.status = EnrollmentStatus.CONFIRMADA
 

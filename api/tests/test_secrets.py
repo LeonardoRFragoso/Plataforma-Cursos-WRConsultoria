@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from app.core.secrets import validate_allowed_hosts, validate_secret_key, validate_secrets
+from app.core.secrets import validate_allowed_hosts, validate_secret_key
 
 
 def test_validate_secret_key_flags_short_key():
