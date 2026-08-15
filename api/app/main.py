@@ -29,14 +29,25 @@ from app.api.routes import (
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSession, AsyncSessionLocal, get_db
+from app.core.logging_config import RequestLoggingMiddleware, setup_logging
+from app.core.proxy import get_client_ip
 from app.core.rate_limit import get_rate_limiter
-from app.core.secrets import validate_secrets
+from app.core.secrets import validate_production_config, validate_secrets
 from app.core.tenant import TenantResolver
+
+# Fail-closed: refuse to start in production with unsafe config.
+validate_production_config()
+
+# Structured logging
+setup_logging()
 
 app = FastAPI(
     title="Plataforma de Cursos",
     description="API para gestão de cursos e certificações",
     version="1.0.0",
+    docs_url="/docs" if settings.DOCS_ENABLED else None,
+    redoc_url="/redoc" if settings.DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
 )
 
 app.add_middleware(
@@ -53,6 +64,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -61,10 +74,15 @@ async def rate_limit_middleware(request: Request, call_next):
     Usa get_rate_limiter() para obter o singleton do backend, respeitando
     RATE_LIMIT_REDIS_URL. Evita criar nova conexão Redis por request.
     """
-    if not settings.RATE_LIMIT_ENABLED or request.url.path in ("/health", "/"):
+    if not settings.RATE_LIMIT_ENABLED or request.url.path in (
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/",
+    ):
         return await call_next(request)
 
-    client_host = request.client.host if request.client else "unknown"
+    client_host = get_client_ip(request)
     backend = get_rate_limiter()
     if not backend.is_allowed(
         client_host,
@@ -81,7 +99,7 @@ async def rate_limit_middleware(request: Request, call_next):
 @app.middleware("http")
 async def tenant_middleware(request: Request, call_next):
     """Resolve o tenant por host/custom domain e define o contexto da sessão."""
-    if request.url.path in ("/health", "/"):
+    if request.url.path in ("/health", "/health/live", "/health/ready", "/"):
         return await call_next(request)
 
     resolver = TenantResolver()
@@ -154,6 +172,27 @@ async def health(db: AsyncSession = Depends(get_db)):
     await db.execute(text("SELECT 1"))
     duration = round((time.perf_counter() - start) * 1000, 2)
     return {"status": "ok", "db_latency_ms": duration}
+
+
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe — process is alive. No dependency checks."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(db: AsyncSession = Depends(get_db)):
+    """Readiness probe — can serve requests. Checks DB connectivity."""
+    start = time.perf_counter()
+    try:
+        await db.execute(text("SELECT 1"))
+        duration = round((time.perf_counter() - start) * 1000, 2)
+        return {"status": "ok", "db_latency_ms": duration}
+    except (OSError, RuntimeError) as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "error": str(type(exc).__name__)},
+        )
 
 
 @app.get("/api/v1/health/secrets")

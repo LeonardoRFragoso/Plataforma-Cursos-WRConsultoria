@@ -52,4 +52,12 @@ class Settings(BaseSettings):
     # chave derivada da SECRET_KEY (apenas desenvolvimento).
     TENANT_SECRET_ENCRYPTION_KEY: str = ""
 
+    # Comma-separated list of trusted proxy IPs/CIDRs for X-Forwarded-For.
+    # Only these proxies' X-Forwarded-For headers are trusted for client IP.
+    # Empty = do not trust any forwarded IP (use direct connection IP).
+    TRUSTED_PROXY_CIDRS: str = ""
+
+    # Expose Swagger/OpenAPI docs. Set to false in production.
+    DOCS_ENABLED: bool = True
+
 settings = Settings()
