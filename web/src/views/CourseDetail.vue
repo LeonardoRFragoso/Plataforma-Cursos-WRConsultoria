@@ -58,13 +58,25 @@
                     Entrar para comprar
                   </button>
 
+                  <div v-else-if="enrollmentLoading" class="text-center text-gray-500 py-3">
+                    Carregando matrícula...
+                  </div>
+
+                  <router-link
+                    v-else-if="courseEnrollment?.status === 'CONFIRMADA'"
+                    :to="`/courses/${course.id}/learn`"
+                    class="block w-full py-3 px-4 bg-green-600 text-white text-center rounded-md hover:bg-green-700 font-semibold transition-colors"
+                  >
+                    Acessar curso
+                  </router-link>
+
                   <button
                     v-else
                     :disabled="purchasing"
                     @click="startPurchase"
                     class="w-full py-3 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors disabled:opacity-60"
                   >
-                    {{ purchasing ? 'Redirecionando...' : 'Comprar agora' }}
+                    {{ purchasing ? 'Redirecionando...' : purchaseButtonText }}
                   </button>
 
                   <p v-if="purchaseError" class="mt-3 text-sm text-red-600 text-center">
@@ -99,7 +111,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 import { fetchCourse } from '../api/courses'
-import { purchaseCourse, createCheckout } from '../api/enrollments'
+import { purchaseCourse, getMyEnrollments, createCheckout } from '../api/enrollments'
 import AppNavbar from '../components/AppNavbar.vue'
 
 const route = useRoute()
@@ -112,10 +124,13 @@ const loading = ref(true)
 const error = ref('')
 const purchasing = ref(false)
 const purchaseError = ref('')
+const enrollments = ref([])
+const enrollmentLoading = ref(false)
 
 const redirectPath = computed(() => route.fullPath)
 const loginWithRedirect = computed(() => ({ path: '/login', query: { redirect: redirectPath.value } }))
 const registerWithRedirect = computed(() => ({ path: '/register', query: { redirect: redirectPath.value } }))
+const courseEnrollment = computed(() => enrollments.value.find((e) => e.course_id === course.value?.id))
 
 function formatPrice(price) {
   if (price === 0 || price === null) return 'Gratuito'
@@ -141,14 +156,28 @@ async function startPurchase() {
   }
 }
 
+const purchaseButtonText = computed(() => {
+  if (courseEnrollment.value?.status === 'PENDENTE') return 'Finalizar pagamento'
+  if (courseEnrollment.value?.status === 'CANCELADA' || courseEnrollment.value?.status === 'CONCLUIDA') return 'Comprar novamente'
+  return 'Comprar agora'
+})
+
 onMounted(async () => {
   try {
+    await authStore.initializeUser()
     const { data } = await fetchCourse(route.params.id)
     course.value = data
+
+    if (authStore.isAuthenticated) {
+      enrollmentLoading.value = true
+      const { data: list } = await getMyEnrollments()
+      enrollments.value = list
+    }
   } catch (err) {
     error.value = err.response?.data?.detail || 'Curso não encontrado.'
   } finally {
     loading.value = false
+    enrollmentLoading.value = false
   }
 })
 </script>
