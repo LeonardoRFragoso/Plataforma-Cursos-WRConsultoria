@@ -117,8 +117,16 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="User is inactive",
         )
     
-    access_token = create_access_token({"sub": str(user.id), "role": user.role})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
+    refresh_token = create_refresh_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
     
     return {
         "access_token": access_token,
@@ -150,8 +158,16 @@ async def refresh_token(
             detail="User not found",
         )
     
-    access_token = create_access_token({"sub": user_id, "role": user.role})
-    refresh_token = create_refresh_token({"sub": user_id, "role": user.role})
+    access_token = create_access_token({
+        "sub": user_id,
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
+    refresh_token = create_refresh_token({
+        "sub": user_id,
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
     
     return {
         "access_token": access_token,

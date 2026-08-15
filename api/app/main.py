@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     auth,
@@ -13,6 +14,9 @@ from app.api.routes import (
     students,
 )
 from app.core.config import settings
+from app.core.context import current_tenant_id
+from app.core.database import AsyncSessionLocal
+from app.core.tenant import TenantResolver
 
 app = FastAPI(
     title="WR Plataforma de Cursos",
@@ -27,6 +31,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def tenant_middleware(request: Request, call_next):
+    """Resolve o tenant por host/custom domain e define o contexto da sessão."""
+    if request.url.path in ("/health", "/"):
+        return await call_next(request)
+
+    resolver = TenantResolver()
+    token = current_tenant_id.set(None)
+    async with AsyncSessionLocal() as db:
+        try:
+            tenant = await resolver.resolve(request, db)
+            token = current_tenant_id.set(tenant.id)
+            request.state.tenant_id = tenant.id
+        except HTTPException:
+            request.state.tenant_id = None
+            if not (
+                request.url.path.startswith("/api/v1/tenants")
+                or request.url.path.startswith("/api/v1/partner-leads")
+            ):
+                current_tenant_id.reset(token)
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "Tenant not found"},
+                )
+
+    try:
+        return await call_next(request)
+    finally:
+        current_tenant_id.reset(token)
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
