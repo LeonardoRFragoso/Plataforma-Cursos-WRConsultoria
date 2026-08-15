@@ -57,15 +57,25 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
-    tenant_id = payload.get("tenant_id")
-    if tenant_id:
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id:
         try:
-            tenant_id = UUID(tenant_id)
+            tenant_id = UUID(token_tenant_id)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid tenant in token",
             )
+    else:
+        tenant_id = None
+
+    resolved_tenant = current_tenant_id.get()
+    if resolved_tenant is not None and tenant_id != resolved_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token tenant does not match current tenant",
+        )
+
     return {
         "user_id": user_id,
         "role": payload.get("role", "student"),
