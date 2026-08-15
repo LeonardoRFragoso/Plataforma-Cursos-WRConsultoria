@@ -22,7 +22,11 @@ async def drop_uq():
     async with engine.begin() as conn:
         await conn.run_sync(
             lambda sync_conn: sync_conn.execute(
-                text("ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS uq_enrollment_student_class")
+                text(
+                    "ALTER TABLE enrollments "
+                    "DROP CONSTRAINT IF EXISTS uq_enrollment_student_class, "
+                    "DROP CONSTRAINT IF EXISTS uq_enrollment_tenant_student_class"
+                )
             )
         )
 

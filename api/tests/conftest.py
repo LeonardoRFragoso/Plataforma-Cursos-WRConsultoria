@@ -8,11 +8,30 @@ from app.core.config import settings
 
 settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test"
 
+from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.security import hash_password
 from app.core.utils import utc_now
 from app.main import app
+from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
+
+
+async def _insert_master_tenant():
+    async with AsyncSessionLocal() as session:
+        existing = await session.get(Tenant, WR_TENANT_ID)
+        if not existing:
+            session.add(
+                Tenant(
+                    id=WR_TENANT_ID,
+                    name="WR Consultoria e Soluções em QSMS",
+                    slug="wr",
+                    status=TenantStatus.ACTIVE,
+                    contact_name="Admin WR",
+                    contact_email="admin@wrconsultoriaesolucoes.com.br",
+                )
+            )
+            await session.commit()
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -21,6 +40,7 @@ async def setup_db():
     await engine.dispose()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await _insert_master_tenant()
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
