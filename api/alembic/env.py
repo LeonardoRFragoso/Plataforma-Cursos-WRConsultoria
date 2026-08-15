@@ -26,6 +26,7 @@ from app.models.certificate import Certificate
 from app.models.attendance import Attendance
 from app.models.company import Company
 from app.models.lesson import Lesson, LessonMaterial, LessonProgress
+from app.models.tenant import Tenant, PartnerLead
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

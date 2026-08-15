@@ -11,6 +11,13 @@ class Attendance(Base):
     __tablename__ = "attendances"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        
+        nullable=False,
+        index=True,
+    )
     enrollment_id = Column(UUID(as_uuid=True), ForeignKey("enrollments.id"), nullable=False)
     class_id = Column(UUID(as_uuid=True), ForeignKey("classes.id"), nullable=False)
     attendance_date = Column(Date, nullable=False)

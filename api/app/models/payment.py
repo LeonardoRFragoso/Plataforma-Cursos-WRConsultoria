@@ -24,6 +24,13 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        
+        nullable=False,
+        index=True,
+    )
     enrollment_id = Column(UUID(as_uuid=True), ForeignKey("enrollments.id"), nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     amount = Column(Float, nullable=False)

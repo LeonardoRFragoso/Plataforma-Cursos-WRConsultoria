@@ -12,8 +12,31 @@ class PaymentBase(BaseModel):
     method: PaymentMethod
     installments: str | None = None
 
-class PaymentCreate(PaymentBase):
-    pass
+class PaymentCreate(BaseModel):
+    """Schema público de criação de pagamento.
+
+    O valor (amount) NUNCA é informado pelo cliente. É calculado server-side
+    a partir da fonte confiável (Enrollment.price / Course.price) para evitar
+    que um aluno pague menos que o preço real do curso.
+    """
+
+    enrollment_id: UUID
+    method: PaymentMethod
+    installments: str | None = None
+
+
+class PaymentAdminCreate(BaseModel):
+    """Criação administrativa explícita e auditável de pagamento.
+
+    Reservada para ajustes manuais controlados (ex.: pagamento consolidado
+    em lote). Não exposta no fluxo público de checkout de curso.
+    """
+
+    enrollment_id: UUID
+    amount: float
+    method: PaymentMethod
+    installments: str | None = None
+
 
 class PaymentUpdate(BaseModel):
     status: PaymentStatus | None = None

@@ -18,6 +18,13 @@ class Class(Base):
     __tablename__ = "classes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        
+        nullable=False,
+        index=True,
+    )
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False)
     responsible_admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     start_date = Column(Date, nullable=False)

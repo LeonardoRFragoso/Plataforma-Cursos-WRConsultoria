@@ -31,12 +31,13 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       MERCADO_PAGO_ACCESS_TOKEN: ${MERCADO_PAGO_ACCESS_TOKEN:-}
       MERCADO_PAGO_PUBLIC_KEY: ${MERCADO_PAGO_PUBLIC_KEY:-}
+      MERCADO_PAGO_MOCK_MODE: ${MERCADO_PAGO_MOCK_MODE:-false}
       SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
-      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:5173"]}'
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:5173","http://localhost:4173"]}'
     ports:
       - "8000:8000"
     depends_on:

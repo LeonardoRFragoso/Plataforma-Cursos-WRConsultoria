@@ -182,7 +182,18 @@ const loadMyEnrollments = async () => {
   }
 }
 
+const loadStats = async () => {
+  if (!isAdmin.value) return
+  try {
+    const response = await api.get('/api/v1/dashboard/stats')
+    stats.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar estatísticas:', error)
+  }
+}
+
 onMounted(() => {
+  loadStats()
   loadMyEnrollments()
 })
 </script>

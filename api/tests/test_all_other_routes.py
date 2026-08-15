@@ -7,6 +7,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.utils import utc_now
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
+from app.services.mercado_pago_service import MercadoPagoService
 
 COMPANY_PAYLOAD = {
     "legal_name": "Empresa Teste LTDA",
@@ -113,6 +114,7 @@ class TestAuth:
             "email": f"user_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         response = await client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 200
@@ -134,6 +136,7 @@ class TestAuth:
             "email": "duplicate@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post("/api/v1/auth/register", json=payload)
@@ -144,6 +147,7 @@ class TestAuth:
             "email": "login@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -180,6 +184,7 @@ class TestAuth:
             "email": "wrongpass@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -194,6 +199,7 @@ class TestAuth:
             "email": "inactive@example.com",
             "full_name": "Usuário Inativo",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         async with AsyncSessionLocal() as session:
@@ -212,6 +218,7 @@ class TestAuth:
             "email": "refresh@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         login = await client.post(
@@ -466,6 +473,42 @@ class TestEnrollments:
         response = await client.post("/api/v1/enrollments/bulk", json=payload, headers=admin_headers)
         assert response.status_code == 404
 
+    async def test_purchase_enrollment(self, client, student_user):
+        response = await client.post(
+            "/api/v1/enrollments/purchase",
+            json={"course_id": str(student_user["course_id"])},
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 201
+        assert response.json()["enrollment"]["student_id"] == str(student_user["student_id"])
+        assert response.json()["payment"]["enrollment_id"] == response.json()["enrollment"]["id"]
+        assert response.json()["payment"]["status"] == "PENDENTE"
+
+    async def test_purchase_enrollment_idempotent(self, client, student_user):
+        payload = {"course_id": str(student_user["course_id"])}
+        first = await client.post(
+            "/api/v1/enrollments/purchase",
+            json=payload,
+            headers=student_user["headers"],
+        )
+        assert first.status_code == 201
+        second = await client.post(
+            "/api/v1/enrollments/purchase",
+            json=payload,
+            headers=student_user["headers"],
+        )
+        assert second.status_code == 201
+        assert first.json()["enrollment"]["id"] == second.json()["enrollment"]["id"]
+        assert first.json()["payment"]["id"] == second.json()["payment"]["id"]
+
+    async def test_purchase_enrollment_forbidden_for_admin(self, client, admin_headers):
+        response = await client.post(
+            "/api/v1/enrollments/purchase",
+            json={"course_id": str(uuid.uuid4())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 403
+
 
 class TestPayments:
     async def test_create_payment(self, client, admin_headers, student_user):
@@ -515,7 +558,7 @@ class TestPayments:
         response = await client.get(f"/api/v1/payments/{uuid.uuid4()}", headers=admin_headers)
         assert response.status_code == 404
 
-    async def test_mercado_pago_webhook(self, client, admin_headers, student_user):
+    async def test_mercado_pago_webhook(self, client, admin_headers, student_user, monkeypatch):
         course_id = await _create_course(client, admin_headers)
         admin_id = await _admin_id(client, admin_headers)
         class_id = await _create_class(client, admin_headers, course_id, admin_id)
@@ -528,9 +571,19 @@ class TestPayments:
             payment.status = PaymentStatus.PENDENTE
             await session.commit()
 
+        async def _fake_get_payment_info(payment_id, access_token=None):
+            return {
+                "id": payment_id,
+                "status": "approved",
+                "external_reference": str(enrollment_id),
+                "preference_id": "MP-123",
+            }
+
+        monkeypatch.setattr(MercadoPagoService, "get_payment_info", _fake_get_payment_info)
+
         response = await client.post(
             "/api/v1/payments/webhook/mercado-pago",
-            json={"id": "MP-123", "status": "approved"},
+            json={"id": "MP-123", "status": "approved", "external_reference": str(enrollment_id)},
         )
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
@@ -538,9 +591,71 @@ class TestPayments:
     async def test_mercado_pago_webhook_unknown(self, client):
         response = await client.post(
             "/api/v1/payments/webhook/mercado-pago",
-            json={"id": "MP-UNKNOWN", "status": "approved"},
+            json={"id": "MP-UNKNOWN", "status": "approved", "external_reference": str(uuid.uuid4())},
         )
         assert response.status_code == 404
+
+    async def test_mercado_pago_webhook_missing_reference(self, client):
+        response = await client.post(
+            "/api/v1/payments/webhook/mercado-pago",
+            json={"id": "MP-1", "status": "approved"},
+        )
+        assert response.status_code == 400
+
+    async def test_mercado_pago_webhook_invalid_reference(self, client):
+        response = await client.post(
+            "/api/v1/payments/webhook/mercado-pago",
+            json={"id": "MP-1", "status": "approved", "external_reference": "not-a-uuid"},
+        )
+        assert response.status_code == 400
+
+    async def test_mercado_pago_webhook_idempotent(self, client, admin_headers, student_user, monkeypatch):
+        course_id = await _create_course(client, admin_headers)
+        admin_id = await _admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, admin_id)
+        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
+        payment_id = await _create_payment(client, student_user["headers"], enrollment_id)
+
+        async with AsyncSessionLocal() as session:
+            payment = await session.get(Payment, uuid.UUID(payment_id))
+            payment.mercado_pago_id = "MP-123"
+            payment.status = PaymentStatus.APROVADO
+            await session.commit()
+
+        async def _fake_get_payment_info(payment_id, access_token=None):
+            return {
+                "id": payment_id,
+                "status": "approved",
+                "external_reference": str(enrollment_id),
+                "preference_id": "MP-123",
+            }
+
+        monkeypatch.setattr(MercadoPagoService, "get_payment_info", _fake_get_payment_info)
+
+        response = await client.post(
+            "/api/v1/payments/webhook/mercado-pago",
+            json={"id": "MP-123", "status": "approved", "external_reference": str(enrollment_id)},
+        )
+        assert response.status_code == 200
+
+    async def test_mercado_pago_checkout(self, client, admin_headers, student_user, monkeypatch):
+        course_id = await _create_course(client, admin_headers)
+        admin_id = await _admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, admin_id)
+        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
+        payment_id = await _create_payment(client, student_user["headers"], enrollment_id)
+
+        async def _fake_create_preference(*args, **kwargs):
+            return {"id": "PREF-1", "init_point": "https://checkout.test"}
+
+        monkeypatch.setattr(MercadoPagoService, "create_preference", _fake_create_preference)
+
+        response = await client.post(
+            f"/api/v1/payments/{payment_id}/checkout",
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 200
+        assert response.json()["checkout_url"] == "https://checkout.test"
 
 
 class TestCertificates:
@@ -586,6 +701,26 @@ class TestCertificates:
         response = await client.get(f"/api/v1/certificates/{cert_id}", headers=student_user["headers"])
         assert response.status_code == 200
         assert response.json()["id"] == cert_id
+
+    async def test_download_certificate(self, client, admin_headers, student_user):
+        course_id = await _create_course(client, admin_headers)
+        admin_id = await _admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, admin_id)
+        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
+        create = await client.post(
+            "/api/v1/certificates/",
+            json={"enrollment_id": str(enrollment_id)},
+            headers=admin_headers,
+        )
+        cert_id = create.json()["id"]
+
+        response = await client.get(
+            f"/api/v1/certificates/{cert_id}/download",
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "certificate-" in response.headers["content-disposition"]
 
     async def test_validate_certificate(self, client, admin_headers, student_user):
         course_id = await _create_course(client, admin_headers)

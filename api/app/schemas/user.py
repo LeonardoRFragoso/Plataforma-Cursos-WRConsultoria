@@ -12,7 +12,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    cpf: str | None = None
+    cpf: str
 
 class UserLogin(BaseModel):
     identifier: str

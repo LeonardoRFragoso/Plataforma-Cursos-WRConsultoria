@@ -3,16 +3,36 @@ from datetime import timedelta
 
 import httpx
 import pytest
+from sqlalchemy import text
 
 from app.core.config import settings
 
 settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test"
 
+from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.security import hash_password
 from app.core.utils import utc_now
 from app.main import app
+from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
+
+
+async def _insert_master_tenant():
+    async with AsyncSessionLocal() as session:
+        existing = await session.get(Tenant, WR_TENANT_ID)
+        if not existing:
+            session.add(
+                Tenant(
+                    id=WR_TENANT_ID,
+                    name="WR Consultoria e Soluções em QSMS",
+                    slug="wr",
+                    status=TenantStatus.ACTIVE,
+                    contact_name="Admin WR",
+                    contact_email="admin@wrconsultoriaesolucoes.com.br",
+                )
+            )
+            await session.commit()
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -20,7 +40,24 @@ async def setup_db():
     """Recria o esquema do banco para cada teste."""
     await engine.dispose()
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("""
+        DO $$
+        DECLARE
+            t text;
+        BEGIN
+            FOR t IN (
+                SELECT typname
+                FROM pg_type
+                JOIN pg_namespace n ON n.oid = pg_type.typnamespace
+                WHERE typtype = 'e' AND n.nspname = 'public'
+            ) LOOP
+                EXECUTE format('DROP TYPE IF EXISTS %I CASCADE', t);
+            END LOOP;
+        END $$;
+        """))
         await conn.run_sync(Base.metadata.create_all)
+    await _insert_master_tenant()
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -68,11 +105,44 @@ def admin_headers(admin_token):
 
 
 @pytest.fixture
+async def super_admin_token(client):
+    """Cria um usuário super_admin e autentica, retornando o access token."""
+    email = "superadmin@example.com"
+    password = "super123"
+
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email=email,
+            full_name="Super Admin",
+            cpf="99988877766",
+            password_hash=hash_password(password),
+            role=UserRole.SUPER_ADMIN,
+            is_active=True,
+            tenant_id=WR_TENANT_ID,
+        )
+        session.add(user)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"identifier": email, "password": password},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+@pytest.fixture
+def super_admin_headers(super_admin_token):
+    return {"Authorization": f"Bearer {super_admin_token}"}
+
+
+@pytest.fixture
 def test_user_data():
     return {
         "email": "test@example.com",
         "full_name": "Test User",
         "password": "testpassword123",
+        "cpf": "52988744005",
     }
 
 
@@ -148,6 +218,8 @@ async def student_user(client, admin_headers):
         "headers": {"Authorization": f"Bearer {token}"},
         "student_id": student_id,
         "email": email,
+        "course_id": course_id,
+        "class_id": class_id,
     }
 
 

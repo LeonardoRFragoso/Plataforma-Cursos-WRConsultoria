@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primary: #0056b3;
+  --color-secondary: #1a1a1a;
+  --color-accent: #ff6b35;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -17,3 +23,10 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+.bg-primary { background-color: var(--color-primary) !important; }
+.text-primary { color: var(--color-primary) !important; }
+.bg-secondary { background-color: var(--color-secondary) !important; }
+.text-secondary { color: var(--color-secondary) !important; }
+.bg-accent { background-color: var(--color-accent) !important; }
+.text-accent { color: var(--color-accent) !important; }

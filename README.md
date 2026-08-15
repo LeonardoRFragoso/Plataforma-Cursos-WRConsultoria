@@ -317,22 +317,30 @@ CORS_ORIGINS=https://seu-dominio.com
 VITE_API_URL=https://api.seu-dominio.com
 ```
 
+## Fases do white-label SaaS concluídas
+
+- [x] Fundação multi-tenant (`Tenant`, `tenant_id`, RLS, JWT tenant-aware)
+- [x] Branding dinâmico (cores, logos, CSS variables via Pinia)
+- [x] Onboarding de parceiros (`PartnerLead` + aprovação)
+- [x] Vitrine pública de cursos e venda
+- [x] Mercado Pago por tenant (credenciais em `Tenant.settings`)
+- [x] Certificados e validação pública
+- [x] Recuperação de senha (JWT reset token)
+- [x] Dashboard financeiro e operacional
+- [x] Planos e comercialização
+- [x] Custom domains, hardening, health check com latência
+
+## E2E Tests
+
+Spec de exemplo criado em `web/e2e/home.spec.js` (Playwright).
+
 ## Próximas Fases
 
-### Fase 2
-- [ ] Integração completa com Mercado Pago
+- [ ] Integração completa com Mercado Pago (notificações/webhooks)
 - [ ] Emissão de notas fiscais (NF-e)
-- [ ] Upload de materiais didáticos (PDF, vídeo)
 - [ ] Player de vídeo próprio ou integração com Vimeo
-- [ ] Dashboard financeiro avançado
+- [ ] Sistema de avaliações e notificações
 - [ ] Relatórios exportáveis (CSV/Excel)
-
-### Fase 3
-- [ ] Portal do aluno completo
-- [ ] Vitrine pública de cursos
-- [ ] Sistema de avaliações
-- [ ] Notificações por email
-- [ ] Integração com CRM
 
 ## Contribuindo
 

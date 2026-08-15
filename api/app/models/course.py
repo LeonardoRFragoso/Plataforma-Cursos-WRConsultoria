@@ -1,7 +1,7 @@
 import uuid
 from enum import Enum as PyEnum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -22,8 +22,19 @@ class CourseType(str, PyEnum):
 class Course(Base):
     __tablename__ = "courses"
 
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_course_tenant_code"),
+    )
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    code = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        
+        nullable=False,
+        index=True,
+    )
+    code = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     description = Column(Text, nullable=True)

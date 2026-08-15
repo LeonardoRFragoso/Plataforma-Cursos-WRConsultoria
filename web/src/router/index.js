@@ -18,6 +18,16 @@ export const routes = [
     component: () => import('../views/Register.vue'),
   },
   {
+    path: '/seja-parceiro',
+    name: 'Partner',
+    component: () => import('../views/Partner.vue'),
+  },
+  {
+    path: '/validar-certificado',
+    name: 'ValidateCertificate',
+    component: () => import('../views/ValidateCertificate.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/Dashboard.vue'),
@@ -30,10 +40,14 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
-    path: '/courses/:id',
+    path: '/cursos/:id',
     name: 'CourseDetail',
     component: () => import('../views/CourseDetail.vue'),
-    meta: { requiresAuth: true },
+  },
+  {
+    path: '/cursos',
+    name: 'CourseCatalog',
+    component: () => import('../views/Home.vue'),
   },
   {
     path: '/courses/:id/learn',

@@ -25,6 +25,8 @@ class CertificateService:
         certificate_number: str,
         validation_code: str,
         responsible_admin_name: str,
+        brand_name: str,
+        validation_url: str,
         issued_date: datetime | None = None,
     ) -> bytes:
         if issued_date is None:
@@ -119,7 +121,13 @@ class CertificateService:
         elements.append(Spacer(1, 0.2*inch))
         
         elements.append(Paragraph(
-            "Valide este certificado em: https://wrcursos.com.br/validar",
+            f"Emitido por <b>{brand_name}</b>",
+            footer_style
+        ))
+        elements.append(Spacer(1, 0.1*inch))
+
+        elements.append(Paragraph(
+            f"Valide em: {validation_url}",
             footer_style
         ))
         

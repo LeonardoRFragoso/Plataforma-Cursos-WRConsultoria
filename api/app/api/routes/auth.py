@@ -2,9 +2,11 @@ import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
@@ -23,6 +25,22 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
 )
+from app.services.one_time_token_service import OneTimeTokenService
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ActivateRequest(BaseModel):
+    token: str
+    new_password: str
+
 
 router = APIRouter()
 
@@ -45,40 +63,44 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
-    
-    if user_data.cpf:
-        stmt = select(User).where(User.cpf == user_data.cpf)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="CPF already registered",
-            )
-    
+
+    cpf = re.sub(r"[^0-9]", "", user_data.cpf)
+    if not is_cpf(cpf):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CPF must contain 11 digits",
+        )
+
+    stmt = select(User).where(User.cpf == cpf)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CPF already registered",
+        )
+
     user = User(
         email=user_data.email,
-        cpf=user_data.cpf,
+        cpf=cpf,
         full_name=user_data.full_name,
         password_hash=hash_password(user_data.password),
         role=UserRole.STUDENT,
     )
     db.add(user)
     await db.flush()
-    
-    # Criar Student automaticamente se o CPF foi informado
-    if user_data.cpf:
-        student = Student(
-            user_id=user.id,
-            cpf=user_data.cpf,
-            phone=None,
-            company=None,
-            address=None,
-            city=None,
-            state=None,
-            zip_code=None,
-        )
-        db.add(student)
-    
+
+    student = Student(
+        user_id=user.id,
+        cpf=cpf,
+        phone=None,
+        company=None,
+        address=None,
+        city=None,
+        state=None,
+        zip_code=None,
+    )
+    db.add(student)
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -105,7 +127,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Identifier must be a valid CPF (11 digits) or email",
         )
     
-    if not user or not verify_password(credentials.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -117,8 +139,16 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="User is inactive",
         )
     
-    access_token = create_access_token({"sub": str(user.id), "role": user.role})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
+    refresh_token = create_refresh_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
     
     return {
         "access_token": access_token,
@@ -150,8 +180,16 @@ async def refresh_token(
             detail="User not found",
         )
     
-    access_token = create_access_token({"sub": user_id, "role": user.role})
-    refresh_token = create_refresh_token({"sub": user_id, "role": user.role})
+    access_token = create_access_token({
+        "sub": user_id,
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
+    refresh_token = create_refresh_token({
+        "sub": user_id,
+        "role": user.role,
+        "tenant_id": str(user.tenant_id),
+    })
     
     return {
         "access_token": access_token,
@@ -167,11 +205,91 @@ async def get_current_user_info(
     stmt = select(User).where(User.id == current_user["user_id"])
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     return user
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(User).where(User.email == payload.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return {"detail": "If the email exists, a reset link was sent"}
+
+    raw, _token = await OneTimeTokenService.create(
+        db, str(user.id), "reset", ttl_hours=1
+    )
+    await db.commit()
+
+    # Em produção enviar e-mail via SMTP; em dev retornar o token
+    if all([settings.SMTP_SERVER, settings.SMTP_USER, settings.SMTP_PASSWORD]):
+        # Envio de e-mail omitido para simplicidade
+        return {"detail": "If the email exists, a reset link was sent"}
+
+    return {"reset_token": raw}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token = await OneTimeTokenService.consume(db, payload.token, "reset")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token",
+        )
+
+    stmt = select(User).where(User.id == token.user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    await db.commit()
+    return {"detail": "Password reset successfully"}
+
+
+@router.post("/activate")
+async def activate(
+    payload: ActivateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token = await OneTimeTokenService.consume(db, payload.token, "activation")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired activation token",
+        )
+
+    stmt = select(User).where(User.id == token.user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.is_active = True
+    await db.commit()
+    return {"detail": "Account activated successfully"}

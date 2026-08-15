@@ -18,10 +18,17 @@ class Enrollment(Base):
     __tablename__ = "enrollments"
 
     __table_args__ = (
-        UniqueConstraint("student_id", "class_id", name="uq_enrollment_student_class"),
+        UniqueConstraint("tenant_id", "student_id", "class_id", name="uq_enrollment_tenant_student_class"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        
+        nullable=False,
+        index=True,
+    )
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     class_id = Column(UUID(as_uuid=True), ForeignKey("classes.id"), nullable=False)
     status = Column(Enum(EnrollmentStatus), default=EnrollmentStatus.PENDENTE, nullable=False)

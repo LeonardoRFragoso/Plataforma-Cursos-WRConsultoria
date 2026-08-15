@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, fix/student-class-enrollment-hardening]
+    branches: [main, feat/white-label-saas-commerce-completion]
   pull_request:
     branches: [main]
 
@@ -64,27 +64,90 @@ jobs:
       - run: cd web && npm run test:run -- --coverage
       - run: cd web && npm run build
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci
+      - run: cd web && npx playwright install --with-deps chromium
+      - run: cd web && npm run build
+      # CI runs only the ui-mocked suite; the integration suite requires
+      # a running backend+postgres and is covered by the smoke job.
+      - run: cd web && npx playwright test --project=ui-mocked
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+
   smoke:
     runs-on: ubuntu-latest
     env:
-      SECRET_KEY: test-secret-key
-    timeout-minutes: 15
+      SECRET_KEY: test-secret-key-at-least-32-characters-long
+      MERCADO_PAGO_MOCK_MODE: "true"
+      PLAYWRIGHT_BASE_URL: http://localhost:5173
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # --- Node/Playwright setup BEFORE Docker up ---
+      # The web service bind-mounts ./web into the container and uses a
+      # named volume for /app/node_modules. If Docker starts first, the
+      # container may create/touch web/node_modules with root ownership,
+      # causing EACCES when the runner user later runs `npm ci`.
+      # Installing deps on the runner first ensures correct ownership.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install frontend deps (runner)
+        run: cd web && npm ci
+      - name: Install Playwright browsers (runner)
+        run: cd web && npx playwright install --with-deps chromium
+      # --- Docker stack ---
       - name: Docker Compose config
         run: docker compose config
-      - name: Build and start services
-        run: docker compose up -d --build --wait
+      - name: Build images
+        run: docker compose build
+      - name: Start PostgreSQL only
+        run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            docker compose exec -T postgres pg_isready -U postgres && break
+            sleep 2
+          done
+      - name: Run migrations on empty database
+        run: docker compose run --rm api alembic upgrade head
+      - name: Bootstrap E2E admin user
+        env:
+          E2E_TEST_MODE: "true"
+        run: docker compose run --rm -e E2E_TEST_MODE=true api python -m app.scripts.e2e_bootstrap
+      - name: Start API and frontend
+        run: docker compose up -d --wait api web
       - name: Verify running containers
         run: docker compose ps
-      - name: Apply migrations on empty database
-        run: docker compose exec -T api alembic upgrade head
       - name: Smoke API
         run: |
           curl --fail --retry 10 --retry-delay 3 --max-time 5 http://localhost:8000/docs || exit 1
       - name: Smoke frontend
         run: |
           curl --fail --retry 10 --retry-delay 3 --max-time 5 http://localhost:5173/ || exit 1
+      - name: Run full-stack integration Playwright
+        run: |
+          cd web && npx playwright test --project=integration
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-integration-report
+          path: web/playwright-report/
       - name: Print logs on failure
         if: failure()
         run: docker compose logs
