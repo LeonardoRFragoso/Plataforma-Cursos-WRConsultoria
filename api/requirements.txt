@@ -25,3 +25,5 @@ pytest-cov
 ruff
 aiosqlite==0.22.1
 boto3==1.43.70
+redis>=4,<6
+cryptography>=41,<45
