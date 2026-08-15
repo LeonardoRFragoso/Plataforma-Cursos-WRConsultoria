@@ -4,7 +4,8 @@
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link to="/" class="flex items-center">
-          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
+          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
+          <span v-else class="text-xl font-bold text-primary-600">{{ tenantName }}</span>
         </router-link>
         <nav class="flex items-center space-x-6">
           <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
@@ -35,7 +36,6 @@
         </h1>
         <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
           Plataforma de cursos da {{ tenantName }}.
-          Segurança, qualidade e meio ambiente para sua empresa.
         </p>
         <router-link
           to="/register"
@@ -50,7 +50,7 @@
     <section class="flex-1 bg-gray-50 py-20">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
-          <h2 class="text-3xl font-bold text-secondary-900 mb-4">Por que escolher a WR?</h2>
+          <h2 class="text-3xl font-bold text-secondary-900 mb-4">Por que escolher a {{ tenantName }}?</h2>
           <p class="text-gray-600 max-w-2xl mx-auto">
             Mais de uma década de experiência em consultoria QSMS para empresas de todos os portes.
           </p>
@@ -122,10 +122,10 @@
             </div>
             <div class="p-4 border-t border-gray-100 bg-gray-50">
               <router-link
-                to="/register"
+                :to="`/cursos/${course.id}`"
                 class="block w-full text-center py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors"
               >
-                Matricular
+                Ver detalhes
               </router-link>
             </div>
           </div>
@@ -140,9 +140,9 @@
     <!-- Footer -->
     <footer class="bg-primary-700 text-white/80 py-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <img src="../assets/brand/logo-wr-white.png" alt="WR Consultoria e Soluções em QSMS" class="h-10 w-auto mx-auto mb-4" />
-        <p class="text-sm">WR Consultoria e Soluções em QSMS — Treinamentos NR com certificação</p>
-        <p class="text-xs text-white/50 mt-2">&copy; 2026 WR Consultoria. Todos os direitos reservados.</p>
+        <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-10 w-auto mx-auto mb-4" />
+        <p class="text-sm">{{ tenantName }} — Treinamentos com certificação</p>
+        <p class="text-xs text-white/50 mt-2">&copy; {{ new Date().getFullYear() }} {{ tenantName }}. Todos os direitos reservados.</p>
       </div>
     </footer>
   </div>
@@ -156,7 +156,7 @@ import { fetchPublicCourses } from '../api/courses'
 const tenantStore = useTenantStore()
 const courses = ref([])
 const loading = ref(true)
-const tenantName = computed(() => tenantStore.name || 'WR Consultoria')
+const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 
 function formatPrice(price) {
   if (price === 0 || price === null) return 'Gratuito'

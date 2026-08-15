@@ -4,7 +4,8 @@
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link to="/" class="flex items-center">
-          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
+          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
+          <span v-else class="text-xl font-bold text-primary-600">{{ tenantStore.name || 'Plataforma de Cursos' }}</span>
         </router-link>
         <AppLink to="/login" variant="primary">
           Login
@@ -15,7 +16,7 @@
     <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
       <AppCard class="w-full max-w-md">
         <div class="text-center mb-6">
-          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-16 w-auto mx-auto mb-4" />
+          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-16 w-auto mx-auto mb-4" />
           <h2 class="text-2xl font-bold text-secondary-900">Cadastro</h2>
         </div>
       
@@ -69,7 +70,7 @@
         <div class="mt-6 text-center">
           <p class="text-gray-600">
             Já tem conta?
-            <AppLink to="/login" variant="primary">
+            <AppLink :to="{ path: '/login', query: { redirect: route.query.redirect } }" variant="primary">
               Faça login
             </AppLink>
           </p>
@@ -81,15 +82,18 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useTenantStore } from '../stores/tenant'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 import AppLink from '../components/AppLink.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 const fullName = ref('')
 const email = ref('')
@@ -120,7 +124,8 @@ const handleRegister = async () => {
     await authStore.register(email.value, fullName.value, password.value)
     success.value = true
     setTimeout(() => {
-      router.push('/login')
+      const redirect = route.query.redirect || '/dashboard'
+      router.push({ path: '/login', query: { redirect } })
     }, 2000)
   } catch (err) {
     error.value = 'Erro ao cadastrar. Tente novamente.'

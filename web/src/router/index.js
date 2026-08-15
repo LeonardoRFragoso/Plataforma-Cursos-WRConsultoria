@@ -40,10 +40,14 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
-    path: '/courses/:id',
+    path: '/cursos/:id',
     name: 'CourseDetail',
     component: () => import('../views/CourseDetail.vue'),
-    meta: { requiresAuth: true },
+  },
+  {
+    path: '/cursos',
+    name: 'CourseCatalog',
+    component: () => import('../views/Home.vue'),
   },
   {
     path: '/courses/:id/learn',

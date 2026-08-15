@@ -4,7 +4,8 @@
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link to="/" class="flex items-center">
-          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-12 w-auto" />
+          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
+          <span v-else class="text-xl font-bold text-primary-600">{{ tenantStore.name || 'Plataforma de Cursos' }}</span>
         </router-link>
         <AppLink to="/register" variant="primary">
           Cadastre-se
@@ -15,8 +16,8 @@
     <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
       <AppCard class="w-full max-w-md">
         <div class="text-center mb-6">
-          <img src="../assets/brand/logo-wr-color.png" alt="WR Consultoria e Soluções em QSMS" class="h-16 w-auto mx-auto mb-4" />
-          <h2 class="text-2xl font-bold text-secondary-900">Plataforma de Cursos</h2>
+          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-16 w-auto mx-auto mb-4" />
+          <h2 class="text-2xl font-bold text-secondary-900">{{ tenantStore.name || 'Plataforma de Cursos' }}</h2>
         </div>
         
         <form @submit.prevent="handleLogin" class="space-y-4">
@@ -75,15 +76,18 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useTenantStore } from '../stores/tenant'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 import AppLink from '../components/AppLink.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 const identifier = ref('')
 const password = ref('')
@@ -96,7 +100,8 @@ const handleLogin = async () => {
   
   try {
     await authStore.login(identifier.value, password.value)
-    router.push('/dashboard')
+    const redirect = route.query.redirect || '/dashboard'
+    router.push(redirect)
   } catch (err) {
     error.value = 'CPF/E-mail ou senha inválidos'
   } finally {
