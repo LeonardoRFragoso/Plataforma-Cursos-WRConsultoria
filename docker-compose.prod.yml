@@ -1,0 +1,130 @@
+# Production / staging compose for WR Plataforma de Cursos.
+#
+# This file is NOT for local development. Use docker-compose.yml for dev.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml config
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# All secrets must be provided via environment variables or .env file.
+# No plaintext secrets are stored in this file.
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wr-postgres-prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    # No ports exposed — only accessible within the internal network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: wr-redis-prod
+    # No ports exposed — only accessible within the internal network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.prod
+    container_name: wr-api-prod
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      SECRET_KEY: ${SECRET_KEY}
+      TENANT_SECRET_ENCRYPTION_KEY: ${TENANT_SECRET_ENCRYPTION_KEY}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      ALLOWED_HOSTS: '${ALLOWED_HOSTS}'
+      CORS_ORIGINS: '${CORS_ORIGINS}'
+      FRONTEND_URL: ${FRONTEND_URL}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+      MERCADO_PAGO_MOCK_MODE: ${MERCADO_PAGO_MOCK_MODE:-false}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-wr-videos}
+      STORAGE_REGION: ${STORAGE_REGION:-auto}
+      STORAGE_WATCH_URL_EXPIRATION: ${STORAGE_WATCH_URL_EXPIRATION:-7200}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - internal
+      - public
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.prod
+      # VITE_API_URL is a BUILD-TIME Vite configuration. Vite inlines
+      # import.meta.env.VITE_* into the compiled bundle, so the API endpoint
+      # is baked into the static assets at build time. It CANNOT be changed at
+      # runtime via environment variables on the nginx container — changing the
+      # API URL requires rebuilding the web image. This is public configuration,
+      # not a secret (every VITE_* value becomes browser-visible).
+      args:
+        VITE_API_URL: ${VITE_API_URL:?VITE_API_URL is required at web image build time}
+    container_name: wr-web-prod
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - public
+
+networks:
+  internal:
+    internal: true
+  public:
+
+volumes:
+  postgres_data:

@@ -1,0 +1,77 @@
+# Production frontend image for WR Plataforma de Cursos.
+#
+# Multi-stage build:
+#   1. builder — Node 20, npm ci, vite build → static dist/
+#   2. runtime — nginx:alpine serves static assets with SPA fallback
+#
+# No node_modules in runtime. No Vite dev server. Nginx provides:
+# - SPA fallback to index.html
+# - Cache immutable hashed assets (1 year)
+# - No-cache for index.html
+# - Gzip
+# - Security headers
+# - Health endpoint /health
+#
+# Usage:
+#   docker build -f Dockerfile.prod --build-arg VITE_API_URL=https://api.example.com -t wr-web:prod .
+#   docker run -p 8080:80 wr-web:prod
+#
+# VITE_API_URL is a BUILD-TIME configuration. Vite inlines import.meta.env.VITE_*
+# variables into the compiled bundle, so the API endpoint is baked into the static
+# assets at build time. It CANNOT be changed at runtime via environment variables
+# on the nginx container — changing the API URL requires rebuilding this image.
+#
+# VITE_API_URL is public configuration (not a secret): every value in VITE_* becomes
+# browser-visible in the compiled JS. Never put credentials in a VITE_* variable.
+#
+# The build fails fast if VITE_API_URL is empty/missing so a production image can
+# never be compiled while still pointing at the development fallback (localhost:8000).
+
+# ---- Stage 1: build static assets ----
+FROM node:20-alpine AS builder
+
+# Build-time API endpoint. Required — the build aborts if empty/missing.
+ARG VITE_API_URL
+
+WORKDIR /build
+
+# Validate the build argument before any expensive work. A clear, explicit
+# error message is preferable to a silently-misconfigured production bundle.
+RUN if [ -z "$VITE_API_URL" ]; then \
+      echo "ERROR: VITE_API_URL build argument is required." >&2; \
+      echo "       It is a build-time Vite configuration baked into the static bundle." >&2; \
+      echo "       Example: docker build --build-arg VITE_API_URL=https://api.example.com -f Dockerfile.prod ." >&2; \
+      exit 1; \
+    fi
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Expose VITE_API_URL to the Vite build process only. Vite reads import.meta.env.VITE_*
+# at build time and inlines the values into the compiled assets.
+ENV VITE_API_URL=${VITE_API_URL}
+
+RUN npm run build
+
+# ---- Stage 2: nginx runtime ----
+# The runtime image only serves static files. VITE_API_URL is NOT needed here —
+# the API endpoint was already inlined into the compiled assets at build time.
+FROM nginx:alpine AS runtime
+
+# Remove default nginx config and static site
+RUN rm /etc/nginx/conf.d/default.conf && rm -rf /usr/share/nginx/html/*
+
+# Custom nginx config
+COPY --from=builder /build/nginx.prod.conf /etc/nginx/conf.d/app.conf
+
+# Copy built static assets
+COPY --from=builder /build/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=5s \
+    CMD wget -qO- http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

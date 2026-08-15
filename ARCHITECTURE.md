@@ -1,5 +1,13 @@
 # Arquitetura da Plataforma WR Cursos
 
+> **NOTA (2026-08-15):** Este documento descreve a arquitetura original
+> single-tenant (v1.0). A plataforma agora é multi-tenant SaaS (v2.0).
+> Para a arquitetura multi-tenant atual, veja:
+> - `MULTI_TENANT_ARCHITECTURE.md` (arquitetura SaaS)
+> - `docs/DEPLOYMENT.md` (deploy production)
+> - `PRODUCTION_READINESS_AUDIT.md` (auditoria de produção)
+> - `CHANGELOG.md` (mudanças v2.0)
+
 ## Visão Geral
 
 A plataforma WR Cursos é uma aplicação web full-stack para gestão de cursos e treinamentos normativos (NRs). A arquitetura segue padrões modernos de desenvolvimento com separação clara entre frontend e backend.

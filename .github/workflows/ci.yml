@@ -160,3 +160,122 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+      # VITE_API_URL is now a required BUILD-TIME argument for the web image
+      # (see web/Dockerfile.prod). Provide a deterministic, non-secret value so
+      # `docker compose config` can interpolate the production compose file in CI.
+      - name: Validate production compose config
+        env:
+          VITE_API_URL: https://api.release-test.example
+          DB_USER: wr_app
+          DB_PASSWORD: dummy
+          DB_NAME: wr_cursos
+          SECRET_KEY: dummy-secret-key-at-least-32-characters-long-xxx
+          TENANT_SECRET_ENCRYPTION_KEY: dGhpcy1pcy1hLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=
+          ALLOWED_HOSTS: '["api.example.com"]'
+          CORS_ORIGINS: '["https://app.example.com"]'
+          FRONTEND_URL: https://app.example.com
+        run: docker compose -f docker-compose.prod.yml config
+
+  production-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production API image
+        run: docker build -f api/Dockerfile.prod -t wr-api:prod ./api
+      - name: Build production web image (without VITE_API_URL must fail)
+        run: |
+          set +e
+          docker build -f web/Dockerfile.prod -t wr-web:prod-no-arg ./web >/tmp/build-no-arg.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "ERROR: web image built successfully WITHOUT VITE_API_URL — the build-time contract is broken."
+            cat /tmp/build-no-arg.log
+            exit 1
+          fi
+          echo "PASS: web image build correctly failed without VITE_API_URL."
+          grep -q "VITE_API_URL build argument is required" /tmp/build-no-arg.log || {
+            echo "ERROR: build failed but not with the expected VITE_API_URL message.";
+            cat /tmp/build-no-arg.log;
+            exit 1;
+          }
+      - name: Build production web image (with VITE_API_URL)
+        run: |
+          docker build \
+            --build-arg VITE_API_URL=https://api.release-test.example \
+            -f web/Dockerfile.prod \
+            -t wr-web:prod \
+            ./web
+      - name: Verify frontend production API endpoint
+        run: |
+          # Inspect the ACTUAL compiled runtime assets inside the built image —
+          # not the source files. The release-test URL must be embedded and the
+          # development fallback (http://localhost:8000) must NOT appear as the
+          # API endpoint in the API client bundle.
+          docker run --rm --entrypoint sh wr-web:prod -c '
+            found=$(grep -rl "https://api.release-test.example" /usr/share/nginx/html/assets/ 2>/dev/null | head -1)
+            if [ -z "$found" ]; then
+              echo "FAIL: release-test API URL not found in compiled assets."
+              exit 1
+            fi
+            echo "PASS: release-test API URL embedded in: $found"
+            if grep -r "http://localhost:8000" /usr/share/nginx/html/assets/ 2>/dev/null; then
+              echo "FAIL: development fallback http://localhost:8000 found in compiled assets."
+              exit 1
+            fi
+            echo "PASS: no localhost:8000 fallback in compiled assets."
+          '
+      - name: Verify API image starts and healthcheck passes (dev mode)
+        run: |
+          docker run -d --name wr-api-test \
+            -e ENVIRONMENT=development \
+            -e SECRET_KEY=test-secret-key-at-least-32-characters-long \
+            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost:5432/dummy \
+            -p 18000:8000 \
+            wr-api:prod
+          sleep 5
+          curl -fsS http://localhost:18000/health/live || { docker logs wr-api-test; exit 1; }
+          docker rm -f wr-api-test
+      - name: Verify production-mode startup fail-closed contract
+        env:
+          # Safe, fake, non-secret test configuration. No real credentials.
+          # SECRET_KEY intentionally differs from the placeholder blocklist.
+          SECRET_KEY: ci-prod-smoke-secret-key-not-a-placeholder-32+
+          TENANT_SECRET_ENCRYPTION_KEY: dGhpcy1pcy1hLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=
+          ALLOWED_HOSTS: '["api.release-test.example"]'
+          CORS_ORIGINS: '["https://app.release-test.example"]'
+        run: |
+          # The API must boot in production mode with safe fake config and
+          # enforce the fail-closed contract (no docs, liveness works without DB).
+          docker run -d --name wr-api-prod-smoke \
+            -e ENVIRONMENT=production \
+            -e SECRET_KEY="$SECRET_KEY" \
+            -e TENANT_SECRET_ENCRYPTION_KEY="$TENANT_SECRET_ENCRYPTION_KEY" \
+            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost:5432/dummy \
+            -e ALLOWED_HOSTS="$ALLOWED_HOSTS" \
+            -e CORS_ORIGINS="$CORS_ORIGINS" \
+            -e MERCADO_PAGO_MOCK_MODE=false \
+            -e RATE_LIMIT_ENABLED=true \
+            -e DOCS_ENABLED=false \
+            -p 18001:8000 \
+            wr-api:prod
+          sleep 6
+          # /health/live must be 200 (no DB dependency). Use an allowed Host.
+          curl -fsS -H "Host: api.release-test.example" http://localhost:18001/health/live \
+            || { echo "--- /health/live failed; logs: ---"; docker logs wr-api-prod-smoke; exit 1; }
+          # /docs must be 404 (DOCS_ENABLED=false).
+          docs_status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: api.release-test.example" http://localhost:18001/docs)
+          if [ "$docs_status" != "404" ]; then
+            echo "FAIL: /docs returned $docs_status, expected 404 (DOCS_ENABLED=false)."
+            docker logs wr-api-prod-smoke
+            exit 1
+          fi
+          echo "PASS: /docs correctly disabled (404) in production mode."
+          docker rm -f wr-api-prod-smoke
+      - name: Verify web image serves static files
+        run: |
+          docker run -d --name wr-web-test -p 18080:80 wr-web:prod
+          sleep 3
+          curl -fsS http://localhost:18080/health || { docker logs wr-web-test; exit 1; }
+          docker rm -f wr-web-test

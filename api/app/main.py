@@ -6,6 +6,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.api.routes import (
     auth,
@@ -29,14 +30,25 @@ from app.api.routes import (
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSession, AsyncSessionLocal, get_db
+from app.core.logging_config import RequestLoggingMiddleware, setup_logging
+from app.core.proxy import get_client_ip
 from app.core.rate_limit import get_rate_limiter
-from app.core.secrets import validate_secrets
+from app.core.secrets import validate_production_config, validate_secrets
 from app.core.tenant import TenantResolver
+
+# Fail-closed: refuse to start in production with unsafe config.
+validate_production_config()
+
+# Structured logging
+setup_logging()
 
 app = FastAPI(
     title="Plataforma de Cursos",
     description="API para gestão de cursos e certificações",
     version="1.0.0",
+    docs_url="/docs" if settings.DOCS_ENABLED else None,
+    redoc_url="/redoc" if settings.DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
 )
 
 app.add_middleware(
@@ -53,6 +65,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -61,10 +75,15 @@ async def rate_limit_middleware(request: Request, call_next):
     Usa get_rate_limiter() para obter o singleton do backend, respeitando
     RATE_LIMIT_REDIS_URL. Evita criar nova conexão Redis por request.
     """
-    if not settings.RATE_LIMIT_ENABLED or request.url.path in ("/health", "/"):
+    if not settings.RATE_LIMIT_ENABLED or request.url.path in (
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/",
+    ):
         return await call_next(request)
 
-    client_host = request.client.host if request.client else "unknown"
+    client_host = get_client_ip(request)
     backend = get_rate_limiter()
     if not backend.is_allowed(
         client_host,
@@ -81,7 +100,18 @@ async def rate_limit_middleware(request: Request, call_next):
 @app.middleware("http")
 async def tenant_middleware(request: Request, call_next):
     """Resolve o tenant por host/custom domain e define o contexto da sessão."""
-    if request.url.path in ("/health", "/"):
+    # Framework-level paths that are never tenant-scoped: health probes, root,
+    # and OpenAPI/Swagger docs (which may be disabled via DOCS_ENABLED). These
+    # must bypass tenant resolution so they do not require DB connectivity.
+    if request.url.path in (
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    ):
         return await call_next(request)
 
     resolver = TenantResolver()
@@ -154,6 +184,40 @@ async def health(db: AsyncSession = Depends(get_db)):
     await db.execute(text("SELECT 1"))
     duration = round((time.perf_counter() - start) * 1000, 2)
     return {"status": "ok", "db_latency_ms": duration}
+
+
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe — process is alive. No dependency checks."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness probe — can serve requests. Checks DB connectivity.
+
+    Uses a dedicated DB session created directly inside the route's try block
+    instead of the ``get_db`` dependency. ``get_db`` executes
+    ``SET LOCAL app.current_tenant = ...`` before yielding the session, so if
+    PostgreSQL is unavailable the dependency raises before this handler runs —
+    producing an uncontrolled 500 instead of the intended 503.
+
+    This probe intentionally avoids tenant RLS context: it is a process-level
+    connectivity check, not a tenant-scoped request. SQLAlchemy connectivity
+    failures (OperationalError/InterfaceError) and low-level socket errors
+    (OSError) are mapped to 503 ``not_ready``.
+    """
+    start = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        duration = round((time.perf_counter() - start) * 1000, 2)
+        return {"status": "ok", "db_latency_ms": duration}
+    except (OperationalError, InterfaceError, OSError) as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "error": type(exc).__name__},
+        )
 
 
 @app.get("/api/v1/health/secrets")

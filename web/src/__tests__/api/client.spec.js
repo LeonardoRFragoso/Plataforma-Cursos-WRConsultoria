@@ -83,4 +83,13 @@ describe('API Client', () => {
     await expect(responseInterceptor(error)).rejects.toThrow('Refresh failed')
     expect(authStore.token).toBeNull()
   })
+
+  it('uses VITE_API_URL (build-time) as the base URL', () => {
+    // The API client must source its endpoint from the Vite build-time
+    // variable import.meta.env.VITE_API_URL, falling back to localhost only
+    // in development. This guards against regressions that would break the
+    // production build-time contract enforced by web/Dockerfile.prod.
+    const expected = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    expect(api.defaults.baseURL).toBe(expected)
+  })
 })
