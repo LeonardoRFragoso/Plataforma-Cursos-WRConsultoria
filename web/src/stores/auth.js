@@ -25,11 +25,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user_role', userRole.value)
   }
 
-  const register = async (email, fullName, password) => {
+  const register = async (email, fullName, password, cpf) => {
     await api.post('/api/v1/auth/register', {
       email,
       full_name: fullName,
       password,
+      cpf,
     })
   }
 

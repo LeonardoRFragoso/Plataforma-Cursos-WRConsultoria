@@ -114,6 +114,7 @@ class TestAuth:
             "email": f"user_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         response = await client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 200
@@ -135,6 +136,7 @@ class TestAuth:
             "email": "duplicate@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post("/api/v1/auth/register", json=payload)
@@ -145,6 +147,7 @@ class TestAuth:
             "email": "login@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -181,6 +184,7 @@ class TestAuth:
             "email": "wrongpass@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -195,6 +199,7 @@ class TestAuth:
             "email": "inactive@example.com",
             "full_name": "Usuário Inativo",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         async with AsyncSessionLocal() as session:
@@ -213,6 +218,7 @@ class TestAuth:
             "email": "refresh@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
+            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
         }
         await client.post("/api/v1/auth/register", json=payload)
         login = await client.post(

@@ -110,6 +110,7 @@ def test_user_data():
         "email": "test@example.com",
         "full_name": "Test User",
         "password": "testpassword123",
+        "cpf": "52988744005",
     }
 
 

@@ -38,6 +38,14 @@
           />
 
           <AppInput
+            v-model="cpf"
+            type="text"
+            label="CPF"
+            placeholder="000.000.000-00"
+            required
+          />
+
+          <AppInput
             v-model="password"
             type="password"
             label="Senha"
@@ -97,6 +105,7 @@ const tenantStore = useTenantStore()
 
 const fullName = ref('')
 const email = ref('')
+const cpf = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const loading = ref(false)
@@ -121,7 +130,7 @@ const handleRegister = async () => {
   success.value = false
   
   try {
-    await authStore.register(email.value, fullName.value, password.value)
+    await authStore.register(email.value, fullName.value, password.value, cpf.value)
     success.value = true
     setTimeout(() => {
       const redirect = route.query.redirect || '/dashboard'

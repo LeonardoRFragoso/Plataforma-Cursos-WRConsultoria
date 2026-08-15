@@ -63,40 +63,44 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
-    
-    if user_data.cpf:
-        stmt = select(User).where(User.cpf == user_data.cpf)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="CPF already registered",
-            )
-    
+
+    cpf = re.sub(r"[^0-9]", "", user_data.cpf)
+    if not is_cpf(cpf):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CPF must contain 11 digits",
+        )
+
+    stmt = select(User).where(User.cpf == cpf)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CPF already registered",
+        )
+
     user = User(
         email=user_data.email,
-        cpf=user_data.cpf,
+        cpf=cpf,
         full_name=user_data.full_name,
         password_hash=hash_password(user_data.password),
         role=UserRole.STUDENT,
     )
     db.add(user)
     await db.flush()
-    
-    # Criar Student automaticamente se o CPF foi informado
-    if user_data.cpf:
-        student = Student(
-            user_id=user.id,
-            cpf=user_data.cpf,
-            phone=None,
-            company=None,
-            address=None,
-            city=None,
-            state=None,
-            zip_code=None,
-        )
-        db.add(student)
-    
+
+    student = Student(
+        user_id=user.id,
+        cpf=cpf,
+        phone=None,
+        company=None,
+        address=None,
+        city=None,
+        state=None,
+        zip_code=None,
+    )
+    db.add(student)
+
     await db.commit()
     await db.refresh(user)
     return user
