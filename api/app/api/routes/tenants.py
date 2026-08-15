@@ -1,9 +1,14 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import get_current_admin, get_current_tenant_id
+from app.models.tenant import Tenant
+from app.schemas.tenant import CustomDomainIn, CustomDomainOut
 
 router = APIRouter()
 
@@ -66,3 +71,84 @@ async def list_plans():
             "features": ["Domínios ilimitados", "Alunos ilimitados", "Suporte 24/7", "API dedicada", "White label completo"],
         },
     ]
+
+
+def _normalize_domain(domain: str | None) -> str | None:
+    if not domain:
+        return None
+    return domain.strip().lower()
+
+
+@router.get("/custom-domain", response_model=CustomDomainOut)
+async def get_custom_domain(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    tenant_id = get_current_tenant_id()
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    return tenant
+
+
+@router.post("/custom-domain", response_model=CustomDomainOut)
+async def set_custom_domain(
+    data: CustomDomainIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    tenant_id = get_current_tenant_id()
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+
+    domain = _normalize_domain(data.custom_domain)
+    if not domain or not re.match(r"^[a-z0-9][a-z0-9\-\.]+[a-z0-9]+$", domain):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid custom domain",
+        )
+
+    existing = (
+        await db.execute(
+            select(Tenant).where(
+                Tenant.custom_domain == domain,
+                Tenant.id != tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Custom domain already in use",
+        )
+
+    tenant.custom_domain = domain
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
+@router.delete("/custom-domain", response_model=CustomDomainOut)
+async def remove_custom_domain(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    tenant_id = get_current_tenant_id()
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+
+    tenant.custom_domain = None
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
