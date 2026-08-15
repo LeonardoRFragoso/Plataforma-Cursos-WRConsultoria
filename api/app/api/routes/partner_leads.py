@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_super_admin, get_current_user
+from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
 from app.models.user import User, UserRole
@@ -57,13 +57,8 @@ async def create_partner_lead(
 @router.get("", response_model=list[PartnerLeadResponse])
 async def list_partner_leads(
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_super_admin),
 ):
-    if current_user.get("role") not in ("admin", "super_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions",
-        )
     result = await db.execute(select(PartnerLead))
     return result.scalars().all()
 
