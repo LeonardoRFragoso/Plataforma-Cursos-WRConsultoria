@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
+/**
+ * Two e2e suites:
+ * - ui-mocked: browser/UI integration with mocked API (no backend needed)
+ * - integration: full-stack with real FastAPI + PostgreSQL backend
+ *   (requires backend running on localhost:8000)
+ */
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -13,8 +19,16 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium',
+      name: 'ui-mocked',
+      testDir: './e2e/ui-mocked',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'integration',
+      testDir: './e2e/integration',
+      use: { ...devices['Desktop Chrome'] },
+      // Integration tests require a real backend; skip if not available
+      dependencies: [],
     },
   ],
   webServer: {

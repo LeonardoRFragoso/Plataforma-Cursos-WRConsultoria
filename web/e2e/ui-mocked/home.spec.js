@@ -126,6 +126,20 @@ test('fluxo 3: detalhe do curso mostra "Acessar curso" para matrícula concluíd
     localStorage.setItem('user_role', 'student')
   })
 
+  // Mock auth/me para evitar redirect do interceptor 401
+  await page.route(`${API_BASE}/api/v1/auth/me`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-1',
+        email: 'student@test.com',
+        full_name: 'Student Test',
+        role: 'student',
+      }),
+    })
+  )
+
   await page.goto(`/cursos/${courseId}`)
   await expect(page.locator('text=NR-35 Trabalho em Altura')).toBeVisible()
   // Para CONCLUIDA, o botão deve ser "Acessar curso", não "Comprar novamente"
