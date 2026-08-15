@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import get_db, get_db_privileged
 from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
@@ -61,16 +61,18 @@ async def list_partner_leads(
     current_user: dict = Depends(get_current_super_admin),
 ):
     result = await db.execute(select(PartnerLead))
-    return result.scalars().all()
+    leads = result.scalars().all()
+    return leads
 
 
 @router.post("/{lead_id}/approve")
 async def approve_partner_lead(
     lead_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_privileged),
     current_user: dict = Depends(get_current_super_admin),
 ):
-    result = await db.execute(select(PartnerLead).where(PartnerLead.id == lead_id))
+    stmt = select(PartnerLead).where(PartnerLead.id == lead_id)
+    result = await db.execute(stmt)
     lead = result.scalar_one_or_none()
     if not lead:
         raise HTTPException(

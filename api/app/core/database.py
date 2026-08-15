@@ -58,3 +58,14 @@ async def get_db():
             text(f"SET LOCAL app.current_tenant = '{tenant_id}'")
         )
         yield session
+
+
+async def get_db_privileged():
+    """Sessão que desvia do RLS para operações globais do super_admin."""
+    async with AsyncSessionLocal() as session:
+        session.info["tenant_id"] = WR_TENANT_ID
+        await session.execute(
+            text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'")
+        )
+        await session.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        yield session
