@@ -1,0 +1,64 @@
+# Production API image for WR Plataforma de Cursos.
+#
+# Multi-stage build:
+#   1. builder — installs dependencies (gcc needed for psycopg/argon2 compilation)
+#   2. runtime — slim image with only runtime deps, non-root user
+#
+# Worker strategy: single uvicorn worker with async (asyncpg + httpx).
+# The application uses async SQLAlchemy (asyncpg), async HTTP client
+# (httpx), and async Redis. Multiple uvicorn workers would each create
+# their own connection pool and Redis connection. The DB engine uses
+# pool_pre_ping with default pool_size=5. For a single-worker deployment
+# this is adequate for staging. To scale horizontally, run multiple
+# containers behind a load balancer rather than multiple workers in one
+# process — this gives better isolation and predictable connection
+# counts per container.
+#
+# Usage:
+#   docker build -f Dockerfile.prod -t wr-api:prod .
+#   docker run -e ENVIRONMENT=production -e SECRET_KEY=... -e DATABASE_URL=... wr-api:prod
+
+# ---- Stage 1: builder ----
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ---- Stage 2: runtime ----
+FROM python:3.11-slim AS runtime
+
+# Runtime deps only (no gcc)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+COPY --chown=appuser:appuser . .
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=30s \
+    CMD curl -fsS http://localhost:8000/health/live || exit 1
+
+# Single worker, async. Graceful shutdown timeout for in-flight requests.
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--no-access-log", \
+     "--timeout-graceful-shutdown", "30", \
+     "--proxy-headers", \
+     "--forwarded-allow-ips", "*"]
