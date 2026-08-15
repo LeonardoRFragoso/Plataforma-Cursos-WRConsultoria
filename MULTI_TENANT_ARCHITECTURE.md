@@ -1,5 +1,10 @@
 # Proposta de Arquitetura Multi-Tenant White-Label — "Seja Parceiro"
 
+> **NOTA (2026-08-15):** Esta era uma proposta de design. A arquitetura
+> multi-tenant agora está IMPLEMENTADA e em produção (v2.0). Este
+> documento é mantido como referência histórica do design. Para o
+> estado atual, veja `CHANGELOG.md` e `docs/DEPLOYMENT.md`.
+
 ## 1. Visão geral
 
 Transformar a plataforma de **single-tenant** (só a WR) para **multi-tenant** (WR + N parceiros), mantendo uma única instância de aplicação e um único banco de dados PostgreSQL.
