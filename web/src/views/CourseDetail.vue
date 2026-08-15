@@ -63,7 +63,7 @@
                   </div>
 
                   <router-link
-                    v-else-if="courseEnrollment?.status === 'CONFIRMADA'"
+                    v-else-if="courseEnrollment?.status === 'CONFIRMADA' || courseEnrollment?.status === 'CONCLUIDA'"
                     :to="`/courses/${course.id}/learn`"
                     class="block w-full py-3 px-4 bg-green-600 text-white text-center rounded-md hover:bg-green-700 font-semibold transition-colors"
                   >
@@ -158,7 +158,7 @@ async function startPurchase() {
 
 const purchaseButtonText = computed(() => {
   if (courseEnrollment.value?.status === 'PENDENTE') return 'Finalizar pagamento'
-  if (courseEnrollment.value?.status === 'CANCELADA' || courseEnrollment.value?.status === 'CONCLUIDA') return 'Comprar novamente'
+  if (courseEnrollment.value?.status === 'CANCELADA') return 'Comprar novamente'
   return 'Comprar agora'
 })
 
