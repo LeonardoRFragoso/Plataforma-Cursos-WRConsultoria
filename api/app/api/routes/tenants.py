@@ -55,28 +55,21 @@ async def get_branding_by_domain(
 
 
 @router.get("/plans")
-async def list_plans():
-    """Retorna os planos disponíveis para comercialização."""
-    return [
-        {
-            "name": "Starter",
-            "price": 97.0,
-            "description": "Ideal para pequenas consultorias iniciando com treinamentos digitais.",
-            "features": ["1 domínio customizado", "Até 50 alunos", "Suporte por e-mail"],
-        },
-        {
-            "name": "Pro",
-            "price": 297.0,
-            "description": "Para empresas que precisam escalar a capacitação.",
-            "features": ["5 domínios customizados", "Até 500 alunos", "Suporte prioritário", "Relatórios avançados"],
-        },
-        {
-            "name": "Enterprise",
-            "price": 997.0,
-            "description": "Solução completa com integrações e volume ilimitado.",
-            "features": ["Domínios ilimitados", "Alunos ilimitados", "Suporte 24/7", "API dedicada", "White label completo"],
-        },
-    ]
+async def list_plans(db: AsyncSession = Depends(get_db)):
+    """Retorna os planos comerciais públicos do catálogo da WR (DB).
+
+    Fonte única de verdade: tabela Plan (catálogo global, tenant_id NULL).
+    Equivalente a GET /api/v1/plans/public — mantido aqui por
+    compatibilidade de rota pública no storefront de tenants.
+    """
+    from app.models.plan import Plan
+
+    stmt = select(Plan).where(
+        Plan.tenant_id.is_(None),
+        Plan.is_active.is_(True),
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 def _normalize_domain(domain: str | None) -> str | None:
