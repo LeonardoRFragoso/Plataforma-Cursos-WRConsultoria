@@ -660,6 +660,26 @@ class TestCertificates:
         assert response.status_code == 200
         assert response.json()["id"] == cert_id
 
+    async def test_download_certificate(self, client, admin_headers, student_user):
+        course_id = await _create_course(client, admin_headers)
+        admin_id = await _admin_id(client, admin_headers)
+        class_id = await _create_class(client, admin_headers, course_id, admin_id)
+        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
+        create = await client.post(
+            "/api/v1/certificates/",
+            json={"enrollment_id": str(enrollment_id)},
+            headers=admin_headers,
+        )
+        cert_id = create.json()["id"]
+
+        response = await client.get(
+            f"/api/v1/certificates/{cert_id}/download",
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "certificate-" in response.headers["content-disposition"]
+
     async def test_validate_certificate(self, client, admin_headers, student_user):
         course_id = await _create_course(client, admin_headers)
         admin_id = await _admin_id(client, admin_headers)

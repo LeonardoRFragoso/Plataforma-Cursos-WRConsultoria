@@ -1,10 +1,11 @@
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
 from app.models.certificate import Certificate
@@ -12,6 +13,7 @@ from app.models.class_model import Class
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.student import Student
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.certificate import (
     CertificateCreate,
@@ -19,6 +21,7 @@ from app.schemas.certificate import (
     CertificateValidationRequest,
     CertificateValidationResponse,
 )
+from app.services.certificate_service import CertificateService
 
 router = APIRouter()
 
@@ -130,6 +133,71 @@ async def validate_certificate(
         student_name=user.full_name,
         course_name=course.name,
         issued_at=certificate.issued_at,
+    )
+
+@router.get("/{certificate_id}/download")
+async def download_certificate(
+    certificate_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    stmt = (
+        select(Certificate, Enrollment, Student, User, Class, Course, Tenant)
+        .join(Enrollment, Certificate.enrollment_id == Enrollment.id)
+        .join(Student, Enrollment.student_id == Student.id)
+        .join(User, Student.user_id == User.id)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .join(Tenant, Certificate.tenant_id == Tenant.id)
+        .where(Certificate.id == certificate_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate not found",
+        )
+
+    certificate, _enrollment, _student, user, class_obj, course, tenant = row
+
+    is_owner = str(user.id) == current_user["user_id"]
+    is_admin = current_user.get("role") in ("admin", "super_admin")
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot download this certificate",
+        )
+
+    admin_result = await db.execute(
+        select(User).where(User.id == class_obj.responsible_admin_id)
+    )
+    admin = admin_result.scalar_one_or_none()
+    responsible_admin_name = admin.full_name if admin else "Administrador"
+
+    validation_url = (
+        f"{settings.FRONTEND_URL}/certificates/validate?code={certificate.validation_code}"
+    )
+
+    pdf = CertificateService.generate_certificate_pdf(
+        student_name=user.full_name,
+        course_name=course.name,
+        course_code=course.code,
+        carga_horaria=course.carga_horaria,
+        certificate_number=certificate.certificate_number,
+        validation_code=certificate.validation_code,
+        responsible_admin_name=responsible_admin_name,
+        brand_name=tenant.name,
+        validation_url=validation_url,
+        issued_date=certificate.issued_at,
+    )
+
+    filename = f"certificate-{certificate.certificate_number}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 @router.delete("/{certificate_id}", status_code=status.HTTP_204_NO_CONTENT)

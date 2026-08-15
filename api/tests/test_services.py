@@ -25,6 +25,8 @@ def test_certificate_service_generates_pdf():
         certificate_number="CERT-123",
         validation_code="VAL-123",
         responsible_admin_name="Responsável Teste",
+        brand_name="Marca Teste",
+        validation_url="https://example.com/validate",
     )
     assert isinstance(pdf, bytes)
     assert len(pdf) > 0
@@ -39,6 +41,8 @@ def test_certificate_service_with_issued_date():
         certificate_number="CERT-123",
         validation_code="VAL-123",
         responsible_admin_name="Responsável Teste",
+        brand_name="Marca Teste",
+        validation_url="https://example.com/validate",
         issued_date=datetime(2024, 1, 1, tzinfo=UTC),
     )
     assert isinstance(pdf, bytes)
