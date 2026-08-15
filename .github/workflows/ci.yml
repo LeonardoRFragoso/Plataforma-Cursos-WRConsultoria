@@ -160,3 +160,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+      - run: docker compose -f docker-compose.prod.yml config
+
+  production-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production API image
+        run: docker build -f api/Dockerfile.prod -t wr-api:prod ./api
+      - name: Build production web image
+        run: docker build -f web/Dockerfile.prod -t wr-web:prod ./web
+      - name: Verify API image starts and healthcheck passes
+        run: |
+          docker run -d --name wr-api-test \
+            -e ENVIRONMENT=development \
+            -e SECRET_KEY=test-secret-key-at-least-32-characters-long \
+            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost:5432/dummy \
+            -p 18000:8000 \
+            wr-api:prod
+          sleep 5
+          curl -fsS http://localhost:18000/health/live || { docker logs wr-api-test; exit 1; }
+          docker rm -f wr-api-test
+      - name: Verify web image serves static files
+        run: |
+          docker run -d --name wr-web-test -p 18080:80 wr-web:prod
+          sleep 3
+          curl -fsS http://localhost:18080/health || { docker logs wr-web-test; exit 1; }
+          docker rm -f wr-web-test
