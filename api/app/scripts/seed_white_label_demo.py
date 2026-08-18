@@ -11,12 +11,14 @@ Creates two tenants (WR + Alfa) with distinct datasets:
 - Certificates
 
 Gated by DEMO_SEED_MODE=true AND ENVIRONMENT != production.
-Credentials come from environment variables — never hardcoded.
+Credentials come from environment variables — never hardcoded, never
+defaulted. All four passwords are required.
 
 Usage:
     DEMO_SEED_MODE=true \
     DEMO_WR_ADMIN_EMAIL=... DEMO_WR_ADMIN_PASSWORD=... \
     DEMO_ALFA_ADMIN_EMAIL=... DEMO_ALFA_ADMIN_PASSWORD=... \
+    DEMO_WR_STUDENT_PASSWORD=... DEMO_ALFA_STUDENT_PASSWORD=... \
     python -m app.scripts.seed_white_label_demo
 """
 
@@ -45,6 +47,9 @@ from app.models.tenant import Tenant, TenantStatus
 from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
 from app.models.user import User, UserRole
 
+# Deterministic demo class location prefix for idempotent lookup.
+_DEMO_CLASS_LOCATION = "DEMO-EAD"
+
 
 def _check_gate():
     if not settings.DEMO_SEED_MODE:
@@ -55,8 +60,9 @@ def _check_gate():
         sys.exit(1)
 
 
-def _env(name, default=None):
-    val = os.environ.get(name, default)
+def _require_env(name):
+    """Require an environment variable. No defaults for passwords."""
+    val = os.environ.get(name)
     if not val:
         print(f"ABORT: environment variable {name} is required.")
         sys.exit(1)
@@ -131,7 +137,22 @@ async def _get_or_create_course(db, tenant_id, code, name, category, carga, pric
     return course
 
 
-async def _get_or_create_class(db, tenant_id, course_id, admin_id, location):
+async def _get_or_create_demo_class(db, tenant_id, course_id, admin_id):
+    """Deterministic class lookup by tenant + course + demo location.
+
+    This ensures idempotency: running the seed twice does NOT create
+    duplicate classes. The demo location prefix is a stable marker
+    that distinguishes seed-created classes from real business classes.
+    """
+    stmt = select(Class).where(
+        Class.tenant_id == tenant_id,
+        Class.course_id == course_id,
+        Class.location == _DEMO_CLASS_LOCATION,
+    )
+    result = await db.execute(stmt)
+    cls = result.scalar_one_or_none()
+    if cls:
+        return cls
     cls = Class(
         tenant_id=tenant_id,
         course_id=course_id,
@@ -139,12 +160,69 @@ async def _get_or_create_class(db, tenant_id, course_id, admin_id, location):
         start_date=utc_now().date(),
         end_date=(utc_now() + timedelta(days=90)).date(),
         max_students=50,
-        location=location,
+        location=_DEMO_CLASS_LOCATION,
         status=ClassStatus.ABERTA,
     )
     db.add(cls)
     await db.flush()
     return cls
+
+
+async def _get_or_create_enrollment(db, tenant_id, student_id, class_id, price):
+    stmt = select(Enrollment).where(
+        Enrollment.student_id == student_id,
+        Enrollment.class_id == class_id,
+    )
+    result = await db.execute(stmt)
+    enrollment = result.scalar_one_or_none()
+    if enrollment:
+        return enrollment, False
+    enrollment = Enrollment(
+        tenant_id=tenant_id,
+        student_id=student_id,
+        class_id=class_id,
+        status=EnrollmentStatus.CONFIRMADA,
+        price=price,
+    )
+    db.add(enrollment)
+    await db.flush()
+    return enrollment, True
+
+
+async def _get_or_create_payment(db, tenant_id, enrollment_id, amount):
+    stmt = select(Payment).where(Payment.enrollment_id == enrollment_id)
+    result = await db.execute(stmt)
+    payment = result.scalar_one_or_none()
+    if payment:
+        return payment, False
+    payment = Payment(
+        tenant_id=tenant_id,
+        enrollment_id=enrollment_id,
+        amount=amount,
+        status=PaymentStatus.APROVADO,
+        method=PaymentMethod.PIX,
+        paid_at=utc_now(),
+    )
+    db.add(payment)
+    await db.flush()
+    return payment, True
+
+
+async def _get_or_create_certificate(db, tenant_id, enrollment_id):
+    stmt = select(Certificate).where(Certificate.enrollment_id == enrollment_id)
+    result = await db.execute(stmt)
+    cert = result.scalar_one_or_none()
+    if cert:
+        return cert, False
+    cert = Certificate(
+        tenant_id=tenant_id,
+        enrollment_id=enrollment_id,
+        certificate_number=f"CERT-{uuid4().hex[:12].upper()}",
+        validation_code=uuid4().hex[:16].upper(),
+    )
+    db.add(cert)
+    await db.flush()
+    return cert, True
 
 
 async def _seed_tenant(
@@ -183,13 +261,14 @@ async def _seed_tenant(
             course_objs[c["code"]] = course
             print(f"  [{slug}] Course: {c['code']} — {c['name']}")
 
-        # Classes (one per course)
+        # Classes (deterministic — one demo class per course)
         class_objs = {}
         for code, course in course_objs.items():
-            cls = await _get_or_create_class(db, tenant_id, course.id, admin.id, f"{slug.upper()} EAD")
+            cls = await _get_or_create_demo_class(db, tenant_id, course.id, admin.id)
             class_objs[code] = cls
 
         # Students + enrollments + payments + certificate
+        first_code = next(iter(course_objs.keys()))
         for spec in student_specs:
             stu_user, stu_created = await _get_or_create_user(
                 db,
@@ -203,51 +282,23 @@ async def _seed_tenant(
             if stu_created:
                 print(f"  [{slug}] Student: {spec['email']}")
 
-            # Enroll in first course's class
-            first_code = next(iter(course_objs.keys()))
             cls = class_objs[first_code]
             course = course_objs[first_code]
 
-            stmt = select(Enrollment).where(
-                Enrollment.student_id == student.id,
-                Enrollment.class_id == cls.id,
+            enrollment, _enr_created = await _get_or_create_enrollment(
+                db, tenant_id, student.id, cls.id, course.price
             )
-            existing = (await db.execute(stmt)).scalar_one_or_none()
-            if not existing:
-                enrollment = Enrollment(
-                    tenant_id=tenant_id,
-                    student_id=student.id,
-                    class_id=cls.id,
-                    status=EnrollmentStatus.CONFIRMADA,
-                    price=course.price,
-                )
-                db.add(enrollment)
-                await db.flush()
 
-                payment = Payment(
-                    tenant_id=tenant_id,
-                    enrollment_id=enrollment.id,
-                    amount=course.price,
-                    status=PaymentStatus.APROVADO,
-                    method=PaymentMethod.PIX,
-                    paid_at=utc_now(),
-                )
-                db.add(payment)
+            _payment, _pay_created = await _get_or_create_payment(
+                db, tenant_id, enrollment.id, course.price
+            )
 
-                # Certificate for first student only
-                if spec.get("certificate"):
-                    cert_stmt = select(Certificate).where(
-                        Certificate.enrollment_id == enrollment.id
-                    )
-                    if not (await db.execute(cert_stmt)).scalar_one_or_none():
-                        cert = Certificate(
-                            tenant_id=tenant_id,
-                            enrollment_id=enrollment.id,
-                            certificate_number=f"CERT-{uuid4().hex[:12].upper()}",
-                            validation_code=uuid4().hex[:16].upper(),
-                        )
-                        db.add(cert)
-                        print(f"  [{slug}] Certificate for {spec['email']}")
+            if spec.get("certificate"):
+                _cert, cert_created = await _get_or_create_certificate(
+                    db, tenant_id, enrollment.id
+                )
+                if cert_created:
+                    print(f"  [{slug}] Certificate for {spec['email']}")
     finally:
         current_tenant_id.reset(token)
 
@@ -255,10 +306,13 @@ async def _seed_tenant(
 async def main():
     _check_gate()
 
-    wr_admin_email = _env("DEMO_WR_ADMIN_EMAIL", "admin@wr.demo")
-    wr_admin_password = _env("DEMO_WR_ADMIN_PASSWORD")
-    alfa_admin_email = _env("DEMO_ALFA_ADMIN_EMAIL", "admin@alfa.demo")
-    alfa_admin_password = _env("DEMO_ALFA_ADMIN_PASSWORD")
+    # All four passwords are required — no defaults.
+    wr_admin_email = _require_env("DEMO_WR_ADMIN_EMAIL")
+    wr_admin_password = _require_env("DEMO_WR_ADMIN_PASSWORD")
+    alfa_admin_email = _require_env("DEMO_ALFA_ADMIN_EMAIL")
+    alfa_admin_password = _require_env("DEMO_ALFA_ADMIN_PASSWORD")
+    wr_student_password = _require_env("DEMO_WR_STUDENT_PASSWORD")
+    alfa_student_password = _require_env("DEMO_ALFA_STUDENT_PASSWORD")
 
     print("=== White Label Demo Seed ===")
     print(f"ENVIRONMENT: {settings.ENVIRONMENT}")
@@ -358,8 +412,8 @@ async def main():
                 {"code": "NR-12", "name": "NR-12 Máquinas e Equipamentos", "category": "Segurança", "carga": 12, "price": 199.90},
             ],
             student_specs=[
-                {"email": "aluno1@wr.demo", "name": "João Silva", "password": _env("DEMO_WR_STUDENT_PASSWORD", "demo123"), "certificate": True},
-                {"email": "aluno2@wr.demo", "name": "Maria Santos", "password": _env("DEMO_WR_STUDENT_PASSWORD", "demo123")},
+                {"email": "aluno1@wr.demo", "name": "João Silva", "password": wr_student_password, "certificate": True},
+                {"email": "aluno2@wr.demo", "name": "Maria Santos", "password": wr_student_password},
             ],
         )
 
@@ -382,8 +436,8 @@ async def main():
                 {"code": "OPS-01", "name": "Treinamento Operacional", "category": "Operacional", "carga": 12, "price": 249.90},
             ],
             student_specs=[
-                {"email": "aluno1@alfa.demo", "name": "Carlos Engenheiro", "password": _env("DEMO_ALFA_STUDENT_PASSWORD", "demo123"), "certificate": True},
-                {"email": "aluno2@alfa.demo", "name": "Ana Técnica", "password": _env("DEMO_ALFA_STUDENT_PASSWORD", "demo123")},
+                {"email": "aluno1@alfa.demo", "name": "Carlos Engenheiro", "password": alfa_student_password, "certificate": True},
+                {"email": "aluno2@alfa.demo", "name": "Ana Técnica", "password": alfa_student_password},
             ],
         )
 
@@ -391,8 +445,8 @@ async def main():
         break
 
     print("\n=== Seed complete ===")
-    print(f"WR admin:    {wr_admin_email}")
-    print(f"Alfa admin:  {alfa_admin_email}")
+    print(f"WR admin email:    {wr_admin_email}")
+    print(f"Alfa admin email:  {alfa_admin_email}")
     print("Passwords were NOT printed. Check your env variables.")
 
 
