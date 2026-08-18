@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Idempotent staging/demo seed for the White Label CEO demo.
 
 Creates two tenants (WR + Alfa) with distinct datasets:

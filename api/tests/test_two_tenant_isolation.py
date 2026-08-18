@@ -11,13 +11,11 @@ X-Tenant-Slug to verify isolation at the application layer.
 import uuid
 
 import pytest
-from sqlalchemy import select
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.core.security import create_access_token, hash_password
 from app.models.course import Course, CourseModality, CourseType
-from app.models.student import Student
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
 
@@ -98,9 +96,9 @@ async def test_wr_admin_does_not_see_alfa_courses(client):
     """WR admin listando cursos não vê cursos do tenant Alfa."""
     alfa_id = await _seed_alfa_tenant()
     # Create a course in Alfa
-    alfa_course_id = await _create_course(alfa_id, "ALFA-ISO-01", "Alfa Isolation Test")
+    await _create_course(alfa_id, "ALFA-ISO-01", "Alfa Isolation Test")
     # Create a course in WR (via privileged session)
-    wr_course_id = await _create_course(WR_TENANT_ID, "WR-ISO-01", "WR Isolation Test")
+    await _create_course(WR_TENANT_ID, "WR-ISO-01", "WR Isolation Test")
 
     wr_admin_id = await _create_admin("isowr@wr.test", WR_TENANT_ID)
     token = create_access_token(

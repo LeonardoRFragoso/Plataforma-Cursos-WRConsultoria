@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.tenant import CustomDomainStatus, TenantStatus
 
@@ -54,7 +54,7 @@ class TenantBrandingUpdate(BaseModel):
         if v is None:
             return v
         # Aceita http(s) URLs; rejeita javascript:/data: perigosos.
-        if not (v.startswith("http://") or v.startswith("https://")):
+        if not v.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
         return v
 
