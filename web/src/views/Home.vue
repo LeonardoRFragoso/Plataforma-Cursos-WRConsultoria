@@ -32,7 +32,7 @@
       <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
       <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
         <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
-          Treinamentos NR com<br />certificação reconhecida
+          Cursos e certificações<br />com qualidade reconhecida
         </h1>
         <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
           Plataforma de cursos da {{ tenantName }}.
@@ -52,7 +52,7 @@
         <div class="text-center mb-16">
           <h2 class="text-3xl font-bold text-secondary-900 mb-4">Por que escolher a {{ tenantName }}?</h2>
           <p class="text-gray-600 max-w-2xl mx-auto">
-            Mais de uma década de experiência em consultoria QSMS para empresas de todos os portes.
+            Cursos profissionais com conteúdo atualizado, instrutores qualificados e certificação reconhecida.
           </p>
         </div>
 

@@ -45,14 +45,18 @@
     </main>
 
     <footer class="bg-gray-100 py-4 text-center text-sm text-gray-500">
-      &copy; 2026 WR Consultoria. Todos os direitos reservados.
+      &copy; {{ new Date().getFullYear() }} {{ tenantName }}. Todos os direitos reservados.
     </footer>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { validateCertificate } from '../api/certificates'
+import { useTenantStore } from '../stores/tenant'
+
+const tenantStore = useTenantStore()
+const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 
 const code = ref('')
 const result = ref(null)
