@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin
+from app.core.security import get_current_admin, get_current_tenant_id
 from app.models.course import Course
 from app.schemas.course import CourseCreate, CourseResponse, CourseUpdate
 
@@ -37,14 +37,16 @@ async def list_courses(
     skip: int = 0,
     limit: int = 100,
 ):
-    stmt = select(Course).offset(skip).limit(limit)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Course).where(Course.tenant_id == tenant_id).offset(skip).limit(limit)
     result = await db.execute(stmt)
     courses = result.scalars().all()
     return courses
 
 @router.get("/{course_id}", response_model=CourseResponse)
 async def get_course(course_id: UUID, db: AsyncSession = Depends(get_db)):
-    stmt = select(Course).where(Course.id == course_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Course).where(Course.id == course_id, Course.tenant_id == tenant_id)
     result = await db.execute(stmt)
     course = result.scalar_one_or_none()
     
