@@ -29,8 +29,8 @@
         <div v-if="payment.status === 'APROVADO'" class="text-center mb-4">
           <p class="text-green-600 font-medium">Pagamento aprovado! Matrícula confirmada.</p>
           <router-link
-            v-if="payment.enrollment_status === 'CONFIRMADA'"
-            :to="`/courses/${courseId}/learn`"
+            v-if="payment.enrollment_status === 'CONFIRMADA' && payment.course_id"
+            :to="`/courses/${payment.course_id}/learn`"
             class="mt-3 inline-block bg-primary-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
           >
             Acessar Curso
@@ -72,7 +72,6 @@ import api from '../api/client'
 
 const route = useRoute()
 const paymentId = route.params.paymentId
-const courseId = ref(null)
 
 const payment = ref({})
 const loading = ref(true)
