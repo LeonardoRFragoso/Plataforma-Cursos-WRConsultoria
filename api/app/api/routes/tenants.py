@@ -10,7 +10,13 @@ from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id
 from app.core.utils import utc_now
 from app.models.tenant import CustomDomainStatus, Tenant
-from app.schemas.tenant import CustomDomainIn, CustomDomainOut, CustomDomainVerifyOut
+from app.schemas.tenant import (
+    CustomDomainIn,
+    CustomDomainOut,
+    CustomDomainVerifyOut,
+    TenantBrandingResponse,
+    TenantBrandingUpdate,
+)
 from app.services.domain_verification import (
     build_dns_instructions,
     get_domain_verification_provider,
@@ -52,6 +58,34 @@ async def get_branding_by_domain(
         secondary_color=tenant.secondary_color,
         accent_color=tenant.accent_color,
     )
+
+
+@router.put("/branding", response_model=TenantBrandingResponse)
+async def update_tenant_branding(
+    data: TenantBrandingUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """Atualiza branding do tenant atual (admin ou super_admin).
+
+    Permite apenas campos de identidade visual. Campos estruturais
+    (slug, status, plano, domínio, segurança) não são expostos.
+    """
+    tenant_id = get_current_tenant_id()
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+
+    updates = data.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(tenant, field, value)
+
+    await db.commit()
+    await db.refresh(tenant)
+    return TenantBrandingResponse.model_validate(tenant)
 
 
 @router.get("/plans")

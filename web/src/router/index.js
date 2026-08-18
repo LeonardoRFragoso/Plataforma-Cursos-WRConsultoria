@@ -92,6 +92,18 @@ export const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/settings/white-label',
+    name: 'WhiteLabelSettings',
+    component: () => import('../views/WhiteLabelSettings.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/super-admin',
+    name: 'SuperAdmin',
+    component: () => import('../views/SuperAdmin.vue'),
+    meta: { requiresAuth: true, requiresSuperAdmin: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFound.vue'),
@@ -116,7 +128,11 @@ export async function navigationGuard(to) {
     return { path: '/login' }
   }
 
-  if (to.meta.requiresAdmin && userRole !== 'admin') {
+  if (to.meta.requiresAdmin && userRole !== 'admin' && userRole !== 'super_admin') {
+    return { path: '/dashboard' }
+  }
+
+  if (to.meta.requiresSuperAdmin && userRole !== 'super_admin') {
     return { path: '/dashboard' }
   }
 
