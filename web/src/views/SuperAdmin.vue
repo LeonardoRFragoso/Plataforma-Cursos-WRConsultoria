@@ -12,6 +12,7 @@
           v-for="tab in tabs"
           :key="tab"
           @click="activeTab = tab"
+          :data-testid="`tab-${tab}`"
           :class="[
             'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
             activeTab === tab
@@ -46,6 +47,7 @@
                   <button
                     v-if="lead.status === 'NEW'"
                     @click="handleApprove(lead.id)"
+                    :data-testid="`approve-partner-${lead.id}`"
                     class="text-primary-600 hover:text-primary-700 font-medium"
                   >
                     Aprovar
@@ -147,9 +149,9 @@
                 <span :class="statusClass(s.status)">{{ s.status }}</span>
               </td>
               <td class="px-4 py-3 text-sm space-x-2">
-                <button v-if="s.status !== 'ACTIVE'" @click="handleActivate(s.id)" class="text-green-600 hover:text-green-700 font-medium">Ativar</button>
-                <button v-if="s.status === 'ACTIVE'" @click="handleSuspend(s.id)" class="text-yellow-600 hover:text-yellow-700 font-medium">Suspender</button>
-                <button v-if="s.status === 'SUSPENDED'" @click="handleActivate(s.id)" class="text-green-600 hover:text-green-700 font-medium">Reativar</button>
+                <button v-if="s.status !== 'ACTIVE'" @click="handleActivate(s.id)" :data-testid="`activate-sub-${s.id}`" class="text-green-600 hover:text-green-700 font-medium">Ativar</button>
+                <button v-if="s.status === 'ACTIVE'" @click="handleSuspend(s.id)" :data-testid="`suspend-sub-${s.id}`" class="text-yellow-600 hover:text-yellow-700 font-medium">Suspender</button>
+                <button v-if="s.status === 'SUSPENDED'" @click="handleActivate(s.id)" :data-testid="`activate-sub-${s.id}`" class="text-green-600 hover:text-green-700 font-medium">Reativar</button>
                 <button @click="handleRenew(s.id)" class="text-blue-600 hover:text-blue-700 font-medium">Renovar</button>
               </td>
             </tr>

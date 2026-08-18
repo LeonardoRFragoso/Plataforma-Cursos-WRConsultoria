@@ -31,6 +31,7 @@
           <router-link
             v-if="payment.enrollment_status === 'CONFIRMADA' && payment.course_id"
             :to="`/courses/${payment.course_id}/learn`"
+            data-testid="access-course-link"
             class="mt-3 inline-block bg-primary-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
           >
             Acessar Curso
@@ -41,6 +42,7 @@
           <button
             @click="simulate('approve')"
             :disabled="acting"
+            data-testid="approve-btn"
             class="w-full bg-green-600 text-white py-3 rounded-md font-medium hover:bg-green-700 disabled:opacity-50"
           >
             Simular Pagamento Aprovado
@@ -48,6 +50,7 @@
           <button
             @click="simulate('pending')"
             :disabled="acting"
+            data-testid="pending-btn"
             class="w-full bg-yellow-500 text-white py-2 rounded-md text-sm font-medium hover:bg-yellow-600 disabled:opacity-50"
           >
             Simular Pendente
@@ -55,6 +58,7 @@
           <button
             @click="simulate('reject')"
             :disabled="acting"
+            data-testid="reject-btn"
             class="w-full bg-red-500 text-white py-2 rounded-md text-sm font-medium hover:bg-red-600 disabled:opacity-50"
           >
             Simular Rejeitado
