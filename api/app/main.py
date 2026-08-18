@@ -121,7 +121,7 @@ async def tenant_middleware(request: Request, call_next):
             tenant = await resolver.resolve(request, db)
             token = current_tenant_id.set(tenant.id)
             request.state.tenant_id = tenant.id
-        except HTTPException:
+        except HTTPException as exc:
             request.state.tenant_id = None
             if not (
                 request.url.path.startswith("/api/v1/tenants")
@@ -131,8 +131,8 @@ async def tenant_middleware(request: Request, call_next):
             ):
                 current_tenant_id.reset(token)
                 return JSONResponse(
-                    status_code=404,
-                    content={"detail": "Tenant not found"},
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
                 )
 
     try:

@@ -11,6 +11,22 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Multi-tenant frontend context trust.
+    # When the API is served on a different host than the frontend (e.g.
+    # Vercel + Railway), the backend cannot derive the tenant from its own
+    # Host header. The frontend sends X-Tenant-Slug, but only Origins listed
+    # here are allowed to set it in staging/production. Empty list = trust
+    # nobody via this header (fall back to Host/custom_domain resolution).
+    TRUSTED_FRONTEND_ORIGINS: list[str] = []
+
+    # Master host used by TenantResolver to map "the API's own host" to the
+    # WR tenant (e.g. the Railway API hostname). Defaults to localhost.
+    MASTER_HOST: str = "localhost"
+
+    # Demo/staging seed gate. The demo seed script refuses to run unless
+    # this is true AND ENVIRONMENT != production.
+    DEMO_SEED_MODE: bool = False
     RATE_LIMIT_ENABLED: bool = False
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW_SECONDS: int = 60
