@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_user
 from app.core.utils import utc_now
@@ -25,6 +26,20 @@ from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoServi
 from app.services.tenant_secret_service import get_mercado_pago_access_token
 
 router = APIRouter()
+
+
+def _demo_payment_guard():
+    """Garante que endpoints de demo só existam fora de produção com mock mode."""
+    if settings.ENVIRONMENT.lower() == "production":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+    if not settings.MERCADO_PAGO_MOCK_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo payment endpoints require MERCADO_PAGO_MOCK_MODE=true",
+        )
 
 
 def _amounts_match(a: float, b: float) -> bool:
@@ -362,3 +377,115 @@ async def create_mercado_pago_checkout(
     await db.commit()
 
     return {"checkout_url": preference.get("init_point"), "preference_id": preference.get("id")}
+
+
+# ------------------------------------------------------------------
+# Demo payment simulator — only available in non-production with mock mode.
+# Uses the REAL webhook reconciliation logic to confirm enrollments.
+# ------------------------------------------------------------------
+
+@router.get("/demo/{payment_id}", response_model=dict)
+async def demo_payment_status(
+    payment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Retorna detalhes do pagamento para a tela de simulação demo."""
+    _demo_payment_guard()
+
+    stmt = (
+        select(Payment, Enrollment, Student, User, Class, Course)
+        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+        .join(Student, Enrollment.student_id == Student.id)
+        .join(User, Student.user_id == User.id)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(Payment.id == payment_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    payment, enrollment, _student, user, _class, course = row
+    is_owner = str(user.id) == current_user["user_id"]
+    is_admin = current_user.get("role") in ("admin", "super_admin")
+    if not (is_owner or is_admin):
+        raise HTTPException(status_code=403, detail="Cannot view this payment")
+
+    return {
+        "payment_id": str(payment.id),
+        "course_name": course.name,
+        "amount": payment.amount,
+        "status": payment.status,
+        "student_name": user.full_name,
+        "enrollment_status": enrollment.status,
+    }
+
+
+@router.post("/demo/{payment_id}/approve", response_model=dict)
+async def demo_payment_approve(
+    payment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Simula pagamento aprovado usando a reconciliação real do webhook."""
+    _demo_payment_guard()
+
+    stmt = (
+        select(Payment, Enrollment)
+        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+        .where(Payment.id == payment_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    payment, enrollment = row
+    payment.status = PaymentStatus.APROVADO
+    payment.paid_at = utc_now()
+    if _amounts_match(payment.amount, enrollment.price) and enrollment.status != EnrollmentStatus.CONFIRMADA:
+        enrollment.status = EnrollmentStatus.CONFIRMADA
+    await db.commit()
+    return {"status": "approved", "payment_status": payment.status, "enrollment_status": enrollment.status}
+
+
+@router.post("/demo/{payment_id}/reject", response_model=dict)
+async def demo_payment_reject(
+    payment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Simula pagamento rejeitado."""
+    _demo_payment_guard()
+
+    stmt = select(Payment).where(Payment.id == payment_id)
+    result = await db.execute(stmt)
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    payment.status = PaymentStatus.RECUSADO
+    await db.commit()
+    return {"status": "rejected", "payment_status": payment.status}
+
+
+@router.post("/demo/{payment_id}/pending", response_model=dict)
+async def demo_payment_pending(
+    payment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Simula pagamento pendente."""
+    _demo_payment_guard()
+
+    stmt = select(Payment).where(Payment.id == payment_id)
+    result = await db.execute(stmt)
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    payment.status = PaymentStatus.PROCESSANDO
+    await db.commit()
+    return {"status": "pending", "payment_status": payment.status}

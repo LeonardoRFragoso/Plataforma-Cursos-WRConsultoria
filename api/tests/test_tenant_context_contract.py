@@ -17,7 +17,6 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.core.constants import WR_TENANT_ID
-from app.core.context import current_tenant_id
 from app.core.database import AsyncSessionLocal
 from app.core.security import create_access_token, hash_password
 from app.core.tenant import TenantResolver

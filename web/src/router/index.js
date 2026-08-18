@@ -104,6 +104,12 @@ export const routes = [
     meta: { requiresAuth: true, requiresSuperAdmin: true },
   },
   {
+    path: '/demo/payment/:paymentId',
+    name: 'DemoPayment',
+    component: () => import('../views/DemoPayment.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFound.vue'),
