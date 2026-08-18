@@ -28,6 +28,24 @@ const API_BASE = process.env.API_BASE || 'http://localhost:8000'
 const WR_URL = process.env.WR_URL || 'http://127.0.0.1:4173'
 const ALFA_URL = process.env.ALFA_URL || 'http://127.0.0.1:4174'
 
+// Skip the entire suite if the two-tenant stack is not available.
+// The smoke CI job only starts one frontend on :5173, not two on :4173/:4174.
+// This spec requires a dedicated integration-white-label CI job or manual setup.
+test.describe.configure({ mode: 'serial' })
+
+let stackAvailable = false
+
+test.beforeAll(async ({ browser }) => {
+  try {
+    const page = await browser.newPage()
+    await page.goto(WR_URL, { timeout: 5000 })
+    await page.close()
+    stackAvailable = true
+  } catch {
+    stackAvailable = false
+  }
+})
+
 // Credentials from env (set by CI from demo seed)
 const WR_ADMIN_EMAIL = process.env.DEMO_WR_ADMIN_EMAIL || 'admin@wr.demo'
 const WR_ADMIN_PASSWORD = process.env.DEMO_WR_ADMIN_PASSWORD || 'test-wr-admin-pass'
@@ -67,7 +85,11 @@ async function apiPost(path, body, token, slug) {
 }
 
 test.describe('Integration — White Label Two-Tenant', () => {
-  test.describe.configure({ mode: 'serial' })
+  test.beforeEach(({ }, testInfo) => {
+    if (!stackAvailable) {
+      testInfo.skip(true, 'Two-tenant stack not available (requires WR on :4173 and Alfa on :4174)')
+    }
+  })
 
   test('A. WR storefront shows WR branding and WR course, not Alfa', async ({ browser }) => {
     const page = await browser.newPage()
