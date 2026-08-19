@@ -237,6 +237,27 @@ jobs:
           sleep 5
           curl -fsS http://localhost:18000/health/live || { docker logs wr-api-test; exit 1; }
           docker rm -f wr-api-test
+      - name: Verify API honors runtime PORT env (PORT=18080)
+        run: |
+          # The production Dockerfile must bind to ${PORT}, not a hardcoded 8000.
+          # Run with PORT=18080 and map host 18080 → container 18080 to prove
+          # the application itself bound to the non-default port.
+          docker run -d --name wr-api-port-test \
+            -e ENVIRONMENT=development \
+            -e SECRET_KEY=test-secret-key-at-least-32-characters-long \
+            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost:5432/dummy \
+            -e PORT=18080 \
+            -p 18080:18080 \
+            wr-api:prod
+          sleep 5
+          if curl -fsS http://localhost:18080/health/live; then
+            echo "PASS: API bound to PORT=18080 successfully."
+          else
+            echo "FAIL: API did not bind to PORT=18080."
+            docker logs wr-api-port-test
+            exit 1
+          fi
+          docker rm -f wr-api-port-test
       - name: Verify production-mode startup fail-closed contract
         env:
           # Safe, fake, non-secret test configuration. No real credentials.
@@ -275,9 +296,9 @@ jobs:
           docker rm -f wr-api-prod-smoke
       - name: Verify web image serves static files
         run: |
-          docker run -d --name wr-web-test -p 18080:80 wr-web:prod
+          docker run -d --name wr-web-test -p 18090:80 wr-web:prod
           sleep 3
-          curl -fsS http://localhost:18080/health || { docker logs wr-web-test; exit 1; }
+          curl -fsS http://localhost:18090/health || { docker logs wr-web-test; exit 1; }
           docker rm -f wr-web-test
 
   white-label-integration:

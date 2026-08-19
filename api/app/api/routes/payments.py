@@ -407,12 +407,13 @@ async def create_mercado_pago_checkout(
     payment.status = PaymentStatus.PROCESSANDO
     await db.commit()
 
-    # In mock mode (non-production), redirect to the frontend demo payment
-    # page instead of the fake mock-mp.test URL. This connects the real
-    # CEO journey: Comprar agora → /demo/payment/<id>
+    # In mock mode (non-production), return a RELATIVE URL so the browser
+    # stays on whichever tenant frontend it is currently using. This avoids
+    # redirecting an Alfa purchase to the WR frontend when FRONTEND_URL
+    # points to WR. The browser's window.location.origin determines the
+    # tenant frontend automatically.
     if settings.MERCADO_PAGO_MOCK_MODE and settings.ENVIRONMENT.lower() != "production":
-        frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
-        checkout_url = f"{frontend_url}/demo/payment/{payment_id}"
+        checkout_url = f"/demo/payment/{payment_id}"
         return {"checkout_url": checkout_url, "preference_id": preference.get("id")}
 
     return {"checkout_url": preference.get("init_point"), "preference_id": preference.get("id")}

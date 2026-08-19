@@ -1,5 +1,31 @@
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _normalize_database_url(url: str) -> str:
+    """Normalize the DATABASE_URL scheme for SQLAlchemy async (asyncpg).
+
+    Railway and other platforms may expose ``postgres://`` or
+    ``postgresql://`` URLs. SQLAlchemy async requires
+    ``postgresql+asyncpg://``. Only the scheme is replaced; host, port,
+    credentials, database name, and query parameters are preserved.
+
+    Non-PostgreSQL schemes (e.g. sqlite) are returned unchanged.
+    """
+    if not url:
+        return url
+    # Only normalize known PostgreSQL schemes. Leave everything else
+    # (sqlite, mysql, etc.) untouched so we don't silently convert
+    # unrelated databases.
+    for prefix in ("postgresql+asyncpg://", "postgresql+psycopg://"):
+        if url.startswith(prefix):
+            return url  # already async-compatible
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url[len("postgresql://"):]
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url[len("postgres://"):]
+    return url
 
 
 class Settings(BaseSettings):
@@ -7,6 +33,11 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        return _normalize_database_url(v)
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
