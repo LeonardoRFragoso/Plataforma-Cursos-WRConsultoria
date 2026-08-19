@@ -78,6 +78,12 @@ async def get_current_user(
     resolved_tenant = current_tenant_id.get()
     if resolved_tenant is None:
         resolved_tenant = getattr(request.state, "tenant_id", None)
+    import logging
+    logging.getLogger(__name__).debug(
+        "get_current_user: token_tenant=%s resolved_tenant=%s ctx=%s state=%s",
+        tenant_id, resolved_tenant, current_tenant_id.get(),
+        getattr(request.state, "tenant_id", None),
+    )
     if resolved_tenant is not None and tenant_id != resolved_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
