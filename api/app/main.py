@@ -170,7 +170,6 @@ async def tenant_middleware(request: Request, call_next):
             # Also store in raw ASGI scope for reliable propagation through
             # BaseHTTPMiddleware (request.state may not propagate in Starlette 0.27)
             request.scope["resolved_tenant_id"] = str(tenant.id)
-            print(f"[tenant_middleware] Resolved tenant: {tenant.slug} ({tenant.id}) for path={request.url.path} slug_header={request.headers.get('x-tenant-slug')} origin={request.headers.get('origin')}", flush=True)
         except HTTPException as exc:
             request.state.tenant_id = None
             if not (

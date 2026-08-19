@@ -211,14 +211,14 @@ test.describe('Integration — White Label Two-Tenant', () => {
     alfaCourseId = body[0].id
   })
 
-  // ─── E. JWT cross-tenant ───
+  // ─── E. JWT cross-tenant (uses protected dashboard endpoint) ───
   test('E1. WR token + Alfa context → 403', async () => {
-    const { status } = await apiGet('/api/v1/courses', wrToken, 'alfa', ALFA_ORIGIN)
+    const { status } = await apiGet('/api/v1/dashboard/stats', wrToken, 'alfa', ALFA_ORIGIN)
     expect(status).toBe(403)
   })
 
   test('E2. Alfa token + WR context → 403', async () => {
-    const { status } = await apiGet('/api/v1/courses', alfaToken, 'wr', WR_ORIGIN)
+    const { status } = await apiGet('/api/v1/dashboard/stats', alfaToken, 'wr', WR_ORIGIN)
     expect(status).toBe(403)
   })
 
