@@ -355,7 +355,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
   })
 
   // ─── I. Payment journey ───
-  test('I1. Alfa student checkout → /demo/payment/<id>', async () => {
+  test('I1. Alfa student checkout → relative /demo/payment/<id>', async () => {
     // Login as Alfa student
     const login = await loginViaAPI(ALFA_STUDENT_EMAIL, ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     const studentToken = login.access_token
@@ -383,7 +383,8 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(paymentId).toBeTruthy()
     alfaPaymentId = paymentId
 
-    // Checkout — should return /demo/payment/<id> URL
+    // Checkout — must return a RELATIVE URL (no scheme/host) so the browser
+    // stays on whichever tenant frontend it is currently using.
     const { body: checkout } = await apiPost(
       `/api/v1/payments/${alfaPaymentId}/checkout`,
       null,
@@ -394,6 +395,10 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(checkout.checkout_url).toContain('/demo/payment/')
     expect(checkout.checkout_url).toContain(alfaPaymentId)
     expect(checkout.checkout_url).not.toContain('mock-mp.test')
+    // Relative URL — no scheme or host
+    expect(checkout.checkout_url).not.toContain('http://')
+    expect(checkout.checkout_url).not.toContain('https://')
+    expect(checkout.checkout_url.startsWith('/demo/payment/')).toBe(true)
 
     // Approve via demo simulator
     const { body: approveResult } = await apiPost(
@@ -415,6 +420,48 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(paymentDetail.course_id).toBeTruthy()
     expect(paymentDetail.enrollment_status).toBe('CONFIRMADA')
+  })
+
+  // ─── I2. Alfa checkout stays on Alfa origin in browser ───
+  test('I2. Alfa checkout URL navigates within Alfa origin + Acessar Curso link', async ({ browser }) => {
+    // Login as Alfa student to get a token for the browser
+    const login = await loginViaAPI(ALFA_STUDENT_EMAIL, ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
+    const studentToken = login.access_token
+
+    // Open the Alfa frontend and inject the auth token into localStorage
+    // so the DemoPayment page can make authenticated API calls.
+    const page = await browser.newPage()
+    await page.goto(ALFA_URL)
+    await page.evaluate((token) => {
+      localStorage.setItem('access_token', token)
+    }, studentToken)
+
+    // Navigate to the Alfa demo payment page using the relative URL
+    await page.goto(`${ALFA_URL}/demo/payment/${alfaPaymentId}`)
+    await page.waitForTimeout(3000)
+
+    // Verify we are still on the Alfa origin (not WR)
+    expect(page.url()).toContain('127.0.0.1:4174')
+    expect(page.url()).not.toContain('127.0.0.1:4173')
+
+    // The payment should already be APROVADO from I1, so the "Acessar Curso"
+    // link should be visible. Wait for the page to load payment data.
+    const link = page.locator('[data-testid="access-course-link"]')
+    await expect(link).toBeVisible({ timeout: 10000 })
+
+    // Verify the link points to /courses/<real_course_id>/learn
+    const href = await link.getAttribute('href') || await link.getAttribute('to')
+    expect(href).toBeTruthy()
+    expect(href).toContain('/courses/')
+    expect(href).toContain('/learn')
+    expect(href).not.toContain('null')
+    expect(href).not.toContain('undefined')
+
+    // Verify the link stays on Alfa (relative, no external host)
+    expect(href).not.toContain('127.0.0.1:4173')
+    expect(href.startsWith('/courses/')).toBe(true)
+
+    await page.close()
   })
 
   // ─── J. Payment ownership ───
