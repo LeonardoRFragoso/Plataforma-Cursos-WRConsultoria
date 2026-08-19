@@ -306,13 +306,15 @@ async def _seed_tenant(
 async def main():
     _check_gate()
 
-    # All four passwords are required — no defaults.
+    # All six credentials are required — no defaults.
     wr_admin_email = _require_env("DEMO_WR_ADMIN_EMAIL")
     wr_admin_password = _require_env("DEMO_WR_ADMIN_PASSWORD")
     alfa_admin_email = _require_env("DEMO_ALFA_ADMIN_EMAIL")
     alfa_admin_password = _require_env("DEMO_ALFA_ADMIN_PASSWORD")
     wr_student_password = _require_env("DEMO_WR_STUDENT_PASSWORD")
     alfa_student_password = _require_env("DEMO_ALFA_STUDENT_PASSWORD")
+    super_admin_email = _require_env("DEMO_SUPER_ADMIN_EMAIL")
+    super_admin_password = _require_env("DEMO_SUPER_ADMIN_PASSWORD")
 
     print("=== White Label Demo Seed ===")
     print(f"ENVIRONMENT: {settings.ENVIRONMENT}")
@@ -393,6 +395,24 @@ async def main():
                 db.add(sub)
                 print(f"  Subscription for {tenant.slug}: {status}")
 
+        # --- SUPER_ADMIN (bound to WR tenant, manages all tenants) ---
+        token = current_tenant_id.set(WR_TENANT_ID)
+        try:
+            _super_admin, sa_created = await _get_or_create_user(
+                db,
+                super_admin_email,
+                WR_TENANT_ID,
+                "Super Administrador",
+                UserRole.SUPER_ADMIN,
+                super_admin_password,
+            )
+            if sa_created:
+                print(f"SUPER_ADMIN created: {super_admin_email}")
+            else:
+                print(f"SUPER_ADMIN exists: {super_admin_email}")
+        finally:
+            current_tenant_id.reset(token)
+
         # --- WR Data ---
         print("\n--- WR Tenant ---")
         await _seed_tenant(
@@ -445,8 +465,9 @@ async def main():
         break
 
     print("\n=== Seed complete ===")
-    print(f"WR admin email:    {wr_admin_email}")
-    print(f"Alfa admin email:  {alfa_admin_email}")
+    print(f"WR admin email:       {wr_admin_email}")
+    print(f"Alfa admin email:     {alfa_admin_email}")
+    print(f"SUPER_ADMIN email:    {super_admin_email}")
     print("Passwords were NOT printed. Check your env variables.")
 
 

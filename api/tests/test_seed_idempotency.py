@@ -85,6 +85,8 @@ def _seed_env():
         "DEMO_ALFA_ADMIN_PASSWORD": "test-alfa-admin-pass",
         "DEMO_WR_STUDENT_PASSWORD": "test-wr-student-pass",
         "DEMO_ALFA_STUDENT_PASSWORD": "test-alfa-student-pass",
+        "DEMO_SUPER_ADMIN_EMAIL": "super@wr.demo",
+        "DEMO_SUPER_ADMIN_PASSWORD": "test-super-admin-pass",
     }
 
 
@@ -136,12 +138,12 @@ async def test_seed_requires_all_passwords(monkeypatch):
     monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
     monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
 
-    # Set all except student password
+    # Set all except super admin password
     env = _seed_env()
-    del env["DEMO_WR_STUDENT_PASSWORD"]
+    del env["DEMO_SUPER_ADMIN_PASSWORD"]
     for k, v in env.items():
         os.environ[k] = v
-    os.environ.pop("DEMO_WR_STUDENT_PASSWORD", None)
+    os.environ.pop("DEMO_SUPER_ADMIN_PASSWORD", None)
 
     from app.scripts.seed_white_label_demo import main
 
