@@ -570,10 +570,10 @@ jobs:
             exit 1
           fi
           # Check for skips in the output
-          skipped=$(grep -c "skipped" /tmp/pw-output.txt || echo "0")
-          echo "Skipped tests (from output): $skipped"
-          if [ "$skipped" != "0" ]; then
-            echo "FAIL: $skipped required tests were skipped — zero skips allowed."
+          skipped=$(grep -c "skipped" /tmp/pw-output.txt 2>/dev/null || true)
+          echo "Skipped tests (from output): ${skipped:-0}"
+          if [ "${skipped:-0}" != "0" ]; then
+            echo "FAIL: ${skipped} required tests were skipped — zero skips allowed."
             exit 1
           fi
           echo "PASS: all required tests passed, zero skipped."
