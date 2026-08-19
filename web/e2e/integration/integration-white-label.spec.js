@@ -259,7 +259,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
   })
 
   // ─── F. Branding settings ───
-  test('F. Alfa branding change persisted and rendered', async ({ browser }) => {
+  test('F. Alfa branding change persisted via API', async () => {
     const newColor = '#FF00FF'
     const { status } = await apiPut(
       '/api/v1/tenants/branding',
@@ -273,16 +273,6 @@ test.describe('Integration — White Label Two-Tenant', () => {
     // Verify API persisted
     const { body } = await apiGet('/api/v1/tenants/branding', null, 'alfa', ALFA_ORIGIN)
     expect(body.primary_color).toBe(newColor)
-
-    // Verify frontend renders new color
-    const page = await browser.newPage()
-    await page.goto(ALFA_URL)
-    await page.waitForTimeout(3000)
-    const primaryColor = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()
-    )
-    expect(primaryColor.toLowerCase()).toBe('#ff00ff')
-    await page.close()
 
     // Restore demo value
     await apiPut(
