@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -48,7 +48,10 @@ def decode_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
     token = credentials.credentials
     payload = decode_token(token)
     user_id: str = payload.get("sub")
@@ -69,7 +72,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     else:
         tenant_id = None
 
+    # Resolve the current tenant from ContextVar (works in tests via create_all)
+    # or from request.state (set by middleware in staging/production where
+    # BaseHTTPMiddleware may not propagate ContextVars correctly).
     resolved_tenant = current_tenant_id.get()
+    if resolved_tenant is None:
+        resolved_tenant = getattr(request.state, "tenant_id", None)
     if resolved_tenant is not None and tenant_id != resolved_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
