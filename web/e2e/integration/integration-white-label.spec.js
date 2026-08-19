@@ -458,14 +458,10 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
   // ─── K. Certificate white-label ───
   test('K. Alfa certificate PDF contains tenant name', async () => {
-    // Login as Alfa student 1 (has certificate from seed)
-    const login = await loginViaAPI(ALFA_STUDENT_EMAIL, ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
-    const studentToken = login.access_token
-
-    // List certificates
+    // List certificates as admin (list endpoint requires admin role)
     const { status: certStatus, body: certs } = await apiGet(
       '/api/v1/certificates',
-      studentToken,
+      alfaToken,
       'alfa',
       ALFA_ORIGIN,
     )
@@ -475,10 +471,10 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     const certId = certs[0].id
 
-    // Download PDF
+    // Download PDF (any authenticated user can download by ID)
     const { status: dlStatus, buf } = await apiGetBinary(
       `/api/v1/certificates/${certId}/download`,
-      studentToken,
+      alfaToken,
       'alfa',
       ALFA_ORIGIN,
     )
