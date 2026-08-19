@@ -73,17 +73,20 @@ async def get_current_user(
         tenant_id = None
 
     # Resolve the current tenant from ContextVar (works in tests via create_all)
-    # or from request.state (set by middleware in staging/production where
+    # or from ASGI scope (set by middleware in staging/production where
     # BaseHTTPMiddleware may not propagate ContextVars correctly).
     resolved_tenant = current_tenant_id.get()
     if resolved_tenant is None:
+        # Try request.state first
         resolved_tenant = getattr(request.state, "tenant_id", None)
-    import logging
-    logging.getLogger(__name__).debug(
-        "get_current_user: token_tenant=%s resolved_tenant=%s ctx=%s state=%s",
-        tenant_id, resolved_tenant, current_tenant_id.get(),
-        getattr(request.state, "tenant_id", None),
-    )
+    if resolved_tenant is None:
+        # Fall back to raw ASGI scope (most reliable propagation)
+        scope_tenant = request.scope.get("resolved_tenant_id")
+        if scope_tenant:
+            try:
+                resolved_tenant = UUID(scope_tenant)
+            except (ValueError, TypeError):
+                pass
     if resolved_tenant is not None and tenant_id != resolved_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

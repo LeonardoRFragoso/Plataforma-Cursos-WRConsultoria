@@ -167,6 +167,9 @@ async def tenant_middleware(request: Request, call_next):
             tenant = await resolver.resolve(request, db)
             token = current_tenant_id.set(tenant.id)
             request.state.tenant_id = tenant.id
+            # Also store in raw ASGI scope for reliable propagation through
+            # BaseHTTPMiddleware (request.state may not propagate in Starlette 0.27)
+            request.scope["resolved_tenant_id"] = str(tenant.id)
         except HTTPException as exc:
             request.state.tenant_id = None
             if not (
