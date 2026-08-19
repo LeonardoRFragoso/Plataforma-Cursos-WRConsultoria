@@ -1,13 +1,13 @@
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_user
+from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.models.certificate import Certificate
 from app.models.class_model import Class
 from app.models.course import Course
@@ -31,22 +31,125 @@ def generate_certificate_number() -> str:
 def generate_validation_code() -> str:
     return f"{uuid.uuid4().hex[:16].upper()}"
 
+
+def _resolve_trusted_frontend_url(request: Request, tenant: Tenant | None) -> str:
+    """Derive the validation frontend URL from the trusted request Origin.
+
+    The tenant middleware already validates the Origin header against
+    TRUSTED_FRONTEND_ORIGINS in staging/production. If the Origin is
+    present and matches a trusted origin, use it for the validation URL
+    so certificates point to the correct tenant frontend.
+
+    Falls back to settings.FRONTEND_URL when Origin is absent or untrusted
+    (e.g. API-only requests without a browser Origin header).
+    """
+    origin = request.headers.get("origin")
+    if origin:
+        origin = origin.strip().rstrip("/")
+    if origin and origin in {
+        o.strip().rstrip("/") for o in getattr(settings, "TRUSTED_FRONTEND_ORIGINS", []) if o
+    }:
+        return origin
+    return settings.FRONTEND_URL
+
+
+async def _load_certificate_with_tenant(
+    db: AsyncSession, certificate_id: UUID
+):
+    """Load certificate joined to enrollment, student, user, class, course, tenant.
+
+    Returns (certificate, enrollment, student, user, class_obj, course, tenant) or None.
+    """
+    stmt = (
+        select(Certificate, Enrollment, Student, User, Class, Course, Tenant)
+        .join(Enrollment, Certificate.enrollment_id == Enrollment.id)
+        .join(Student, Enrollment.student_id == Student.id)
+        .join(User, Student.user_id == User.id)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .join(Tenant, Certificate.tenant_id == Tenant.id)
+        .where(Certificate.id == certificate_id)
+    )
+    result = await db.execute(stmt)
+    return result.first()
+
+
+def _authorize_certificate_access(
+    certificate: Certificate,
+    user: User,
+    current_user: dict,
+    resolved_tenant_id: UUID,
+) -> None:
+    """Shared authorization for certificate get/download/delete.
+
+    Contract:
+    - SUPER_ADMIN: allowed (platform operator, JWT binding already limits
+      to resolved tenant context).
+    - Tenant ADMIN: allowed only if certificate.tenant_id == resolved_tenant_id.
+    - STUDENT: allowed only if certificate belongs to them AND tenant matches.
+    - Other student same tenant: 403.
+    - Cross-tenant admin: 404 (non-disclosing).
+    - Cross-tenant student: 404 (non-disclosing).
+
+    Raises HTTPException if unauthorized.
+    """
+    is_super_admin = current_user.get("role") == "super_admin"
+    is_admin = current_user.get("role") in ("admin", "super_admin")
+    is_owner = str(user.id) == current_user["user_id"]
+
+    # Cross-tenant: return 404 (non-disclosing) to avoid leaking existence.
+    if certificate.tenant_id != resolved_tenant_id and not is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate not found",
+        )
+
+    if is_admin:
+        return
+
+    if is_owner:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Cannot access this certificate",
+    )
+
+
 @router.post("/", response_model=CertificateResponse, status_code=status.HTTP_201_CREATED)
 async def create_certificate(
     cert_data: CertificateCreate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Enrollment).where(Enrollment.id == cert_data.enrollment_id)
+    tenant_id = get_current_tenant_id()
+
+    # Load enrollment joined to class and course to verify tenant ownership.
+    stmt = (
+        select(Enrollment, Class, Course)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(Enrollment.id == cert_data.enrollment_id)
+    )
     result = await db.execute(stmt)
-    enrollment = result.scalar_one_or_none()
-    
-    if not enrollment:
+    row = result.first()
+
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
-    
+
+    _enrollment, _class, course = row
+
+    # Defense in depth: verify enrollment belongs to the resolved tenant
+    # via the course's tenant_id. Do not trust enrollment_id alone.
+    if course.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Enrollment not found",
+        )
+
     stmt = select(Certificate).where(Certificate.enrollment_id == cert_data.enrollment_id)
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
@@ -54,9 +157,10 @@ async def create_certificate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Certificate already exists for this enrollment",
         )
-    
+
     certificate = Certificate(
         enrollment_id=cert_data.enrollment_id,
+        tenant_id=tenant_id,
         certificate_number=generate_certificate_number(),
         validation_code=generate_validation_code(),
     )
@@ -72,7 +176,13 @@ async def list_certificates(
     skip: int = 0,
     limit: int = 100,
 ):
-    stmt = select(Certificate).offset(skip).limit(limit)
+    tenant_id = get_current_tenant_id()
+    stmt = (
+        select(Certificate)
+        .where(Certificate.tenant_id == tenant_id)
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     certificates = result.scalars().all()
     return certificates
@@ -83,16 +193,34 @@ async def get_certificate(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = select(Certificate).where(Certificate.id == certificate_id)
+    tenant_id = get_current_tenant_id()
+
+    # For students, load with full context to verify ownership.
+    if current_user.get("role") == "student":
+        row = await _load_certificate_with_tenant(db, certificate_id)
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Certificate not found",
+            )
+        certificate, _enrollment, _student, user, _class, _course, _tenant = row
+        _authorize_certificate_access(certificate, user, current_user, tenant_id)
+        return certificate
+
+    # Admins: tenant-filtered query (no need to load joins).
+    stmt = select(Certificate).where(
+        Certificate.id == certificate_id,
+        Certificate.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     certificate = result.scalar_one_or_none()
-    
+
     if not certificate:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Certificate not found",
         )
-    
+
     return certificate
 
 @router.post("/validate", response_model=CertificateValidationResponse)
@@ -138,21 +266,12 @@ async def validate_certificate(
 @router.get("/{certificate_id}/download")
 async def download_certificate(
     certificate_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = (
-        select(Certificate, Enrollment, Student, User, Class, Course, Tenant)
-        .join(Enrollment, Certificate.enrollment_id == Enrollment.id)
-        .join(Student, Enrollment.student_id == Student.id)
-        .join(User, Student.user_id == User.id)
-        .join(Class, Enrollment.class_id == Class.id)
-        .join(Course, Class.course_id == Course.id)
-        .join(Tenant, Certificate.tenant_id == Tenant.id)
-        .where(Certificate.id == certificate_id)
-    )
-    result = await db.execute(stmt)
-    row = result.first()
+    tenant_id = get_current_tenant_id()
+    row = await _load_certificate_with_tenant(db, certificate_id)
 
     if not row:
         raise HTTPException(
@@ -162,13 +281,7 @@ async def download_certificate(
 
     certificate, _enrollment, _student, user, class_obj, course, tenant = row
 
-    is_owner = str(user.id) == current_user["user_id"]
-    is_admin = current_user.get("role") in ("admin", "super_admin")
-    if not (is_owner or is_admin):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot download this certificate",
-        )
+    _authorize_certificate_access(certificate, user, current_user, tenant_id)
 
     admin_result = await db.execute(
         select(User).where(User.id == class_obj.responsible_admin_id)
@@ -177,7 +290,8 @@ async def download_certificate(
     responsible_admin_name = admin.full_name if admin else "Administrador"
 
     validation_url = (
-        f"{settings.FRONTEND_URL}/certificates/validate?code={certificate.validation_code}"
+        f"{_resolve_trusted_frontend_url(request, tenant)}"
+        f"/certificates/validate?code={certificate.validation_code}"
     )
 
     pdf = CertificateService.generate_certificate_pdf(
@@ -208,15 +322,19 @@ async def delete_certificate(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Certificate).where(Certificate.id == certificate_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Certificate).where(
+        Certificate.id == certificate_id,
+        Certificate.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     certificate = result.scalar_one_or_none()
-    
+
     if not certificate:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Certificate not found",
         )
-    
+
     await db.delete(certificate)
     await db.commit()
