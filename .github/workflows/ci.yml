@@ -562,38 +562,16 @@ jobs:
       # ─── Run integration-white-label Playwright ───
       - name: Run white-label integration Playwright
         run: |
-          cd web && npx playwright test e2e/integration/integration-white-label.spec.js --project=integration --reporter=json --output=/tmp/pw-results > /tmp/pw-result.json 2>&1
-          exit_code=$?
-          # Display the results
-          cat /tmp/pw-result.json | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          stats = data.get('stats', {})
-          print(f'Passed: {stats.get(\"expected\", 0)}')
-          print(f'Failed: {stats.get(\"unexpected\", 0)}')
-          print(f'Skipped: {stats.get(\"skipped\", 0)}')
-          print(f'Flaky: {stats.get(\"flaky\", 0)}')
-          for s in data.get('suites', []):
-              for spec in s.get('specs', []):
-                  for t in spec.get('tests', []):
-                      status = t.get('status', 'unknown')
-                      title = spec.get('title', 'unknown')
-                      print(f'  {status.upper()}: {title}')
-          sys.exit(0)
-          " || true
-          # Check for failures
+          cd web && npx playwright test e2e/integration/integration-white-label.spec.js --project=integration --reporter=list 2>&1 | tee /tmp/pw-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "Playwright exit code: $exit_code"
           if [ $exit_code -ne 0 ]; then
             echo "FAIL: Playwright tests failed (exit code $exit_code)"
             exit 1
           fi
-          # Check for skips
-          skipped=$(python3 -c "
-          import json
-          with open('/tmp/pw-result.json') as f:
-              data = json.load(f)
-          print(data.get('stats', {}).get('skipped', 0))
-          " 2>/dev/null || echo "unknown")
-          echo "Skipped tests: $skipped"
+          # Check for skips in the output
+          skipped=$(grep -c "skipped" /tmp/pw-output.txt || echo "0")
+          echo "Skipped tests (from output): $skipped"
           if [ "$skipped" != "0" ]; then
             echo "FAIL: $skipped required tests were skipped — zero skips allowed."
             exit 1
