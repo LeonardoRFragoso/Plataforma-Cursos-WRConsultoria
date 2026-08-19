@@ -87,6 +87,7 @@ async def get_current_user(
                 resolved_tenant = UUID(scope_tenant)
             except (ValueError, TypeError):
                 pass
+    print(f"[get_current_user] token_tenant={tenant_id} resolved_tenant={resolved_tenant} ctx={current_tenant_id.get()} state={getattr(request.state, 'tenant_id', None)} scope={request.scope.get('resolved_tenant_id')} path={request.url.path}", flush=True)
     if resolved_tenant is not None and tenant_id != resolved_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
