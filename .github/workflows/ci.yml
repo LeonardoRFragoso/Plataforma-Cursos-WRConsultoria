@@ -560,6 +560,12 @@ jobs:
           done
 
       # ─── Run integration-white-label Playwright ───
+      - name: Dump API log (debug)
+        run: |
+          echo "=== API LOG (last 100 lines) ==="
+          tail -100 /tmp/api.log || echo "No API log found"
+          echo "=== END API LOG ==="
+
       - name: Run white-label integration Playwright
         run: |
           cd web && npx playwright test e2e/integration/integration-white-label.spec.js --project=integration --reporter=list 2>&1 | tee /tmp/pw-output.txt
