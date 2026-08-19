@@ -234,13 +234,15 @@ test.describe('Integration — White Label Two-Tenant', () => {
   })
 
   test('L3. X-Tenant-Id rejected in staging', async () => {
-    // X-Tenant-Id should be ignored in staging; falls through to host-based resolution
-    const resp = await fetch(`${API_BASE}/api/v1/courses`, {
+    // X-Tenant-Id should be ignored in staging; falls through to host-based resolution.
+    // Use a protected endpoint: without a valid token, it should return 401.
+    // If X-Tenant-Id were accepted, it might try to resolve a non-existent tenant → 404.
+    // Either way, it should NOT return 200 (which would mean the header was accepted
+    // and the request was processed as that tenant).
+    const resp = await fetch(`${API_BASE}/api/v1/dashboard/stats`, {
       headers: { 'x-tenant-id': '00000000-0000-0000-0000-000000000000' },
     })
-    // Should NOT switch to the requested tenant; either 200 (WR fallback) or other
-    // but NOT the fake UUID tenant
-    expect(resp.status).not.toBe(200) // no auth → likely 401
+    expect(resp.status).not.toBe(200)
   })
 
   // ─── F. Branding settings ───
