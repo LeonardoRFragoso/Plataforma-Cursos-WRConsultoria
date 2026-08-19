@@ -34,6 +34,26 @@ const ALFA_ORIGIN = ALFA_URL
 
 const REQUIRED = process.env.WHITE_LABEL_INTEGRATION_REQUIRED === 'true'
 
+// When NOT in required mode (e.g. smoke job), skip if the two-tenant stack
+// is unavailable. When in required mode (white-label-integration job),
+// tests MUST run and pass — no skips allowed.
+let stackAvailable = false
+
+test.beforeAll(async ({ browser }) => {
+  if (REQUIRED) {
+    stackAvailable = true // required mode: assume stack is up, fail if not
+    return
+  }
+  try {
+    const page = await browser.newPage()
+    await page.goto(WR_URL, { timeout: 5000 })
+    await page.close()
+    stackAvailable = true
+  } catch {
+    stackAvailable = false
+  }
+})
+
 // Credentials from env (set by CI from demo seed)
 const WR_ADMIN_EMAIL = process.env.DEMO_WR_ADMIN_EMAIL || 'admin@wr.demo'
 const WR_ADMIN_PASSWORD = process.env.DEMO_WR_ADMIN_PASSWORD || 'test-wr-admin-pass'
@@ -98,6 +118,14 @@ let alfaSubId
 
 test.describe('Integration — White Label Two-Tenant', () => {
   test.describe.configure({ mode: 'serial' })
+
+  // Skip individual tests when stack is unavailable AND not in required mode.
+  // In required mode (white-label-integration CI job), tests MUST run.
+  test.beforeEach(({ }, testInfo) => {
+    if (!stackAvailable && !REQUIRED) {
+      testInfo.skip(true, 'Two-tenant stack not available (requires WR :4173 and Alfa :4174)')
+    }
+  })
 
   // ─── A. WR storefront ───
   test('A. WR storefront shows WR branding and WR course, not Alfa', async ({ browser }) => {

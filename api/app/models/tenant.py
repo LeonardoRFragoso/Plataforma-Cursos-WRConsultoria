@@ -55,7 +55,7 @@ class Tenant(Base):
     secondary_color = Column(String, nullable=True)
     accent_color = Column(String, nullable=True)
     status = Column(
-        Enum(TenantStatus, values_callable=lambda x: [e.value for e in x]),
+        Enum(TenantStatus, values_callable=lambda x: [e.value for e in x], native_enum=False),
         default=TenantStatus.ACTIVE,
         nullable=False,
     )
@@ -86,7 +86,7 @@ class PartnerLead(Base):
     contact_phone = Column(String, nullable=True)
     message = Column(Text, nullable=True)
     status = Column(
-        Enum(PartnerLeadStatus, values_callable=lambda x: [e.value for e in x]),
+        Enum(PartnerLeadStatus, values_callable=lambda x: [e.value for e in x], native_enum=False),
         default=PartnerLeadStatus.NEW,
         nullable=False,
     )
