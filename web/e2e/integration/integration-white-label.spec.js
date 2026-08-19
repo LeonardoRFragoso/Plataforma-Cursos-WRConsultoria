@@ -101,6 +101,19 @@ async function apiPost(path, body, token, slug, origin) {
   return { status: resp.status, body: await resp.json().catch(() => null) }
 }
 
+async function apiPut(path, body, token, slug, origin) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  if (slug) headers['x-tenant-slug'] = slug
+  if (origin) headers['origin'] = origin
+  const resp = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return { status: resp.status, body: await resp.json().catch(() => null) }
+}
+
 async function apiGetBinary(path, token, slug, origin) {
   const headers = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -248,7 +261,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
   // ─── F. Branding settings ───
   test('F. Alfa branding change persisted and rendered', async ({ browser }) => {
     const newColor = '#FF00FF'
-    const { status } = await apiPost(
+    const { status } = await apiPut(
       '/api/v1/tenants/branding',
       { primary_color: newColor },
       alfaToken,
@@ -272,7 +285,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     await page.close()
 
     // Restore demo value
-    await apiPost(
+    await apiPut(
       '/api/v1/tenants/branding',
       { primary_color: '#E86A17' },
       alfaToken,
