@@ -31,6 +31,35 @@ from app.services.secret_crypto import decrypt
 router = APIRouter()
 
 
+# ------------------------------------------------------------------
+# Tenants — listagem para o painel do SUPER_ADMIN
+# ------------------------------------------------------------------
+
+@router.get("/tenants", response_model=list[dict])
+async def super_list_tenants(
+    db: AsyncSession = Depends(get_db_privileged),
+    current_user: dict = Depends(get_current_super_admin),
+):
+    """Lista todos os tenants para o painel do SUPER_ADMIN."""
+    result = await db.execute(select(Tenant))
+    tenants = result.scalars().all()
+    return [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "slug": t.slug,
+            "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+            "primary_color": t.primary_color,
+            "custom_domain": t.custom_domain,
+            "custom_domain_status": t.custom_domain_status,
+            "contact_name": t.contact_name,
+            "contact_email": t.contact_email,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in tenants
+    ]
+
+
 def _end_date_for_cycle(start: datetime, billing_cycle: str):
     if billing_cycle == BillingCycle.MONTHLY:
         return start + timedelta(days=30)

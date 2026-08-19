@@ -191,6 +191,8 @@ async def download_certificate(
         brand_name=tenant.name,
         validation_url=validation_url,
         issued_date=certificate.issued_at,
+        brand_primary_color=tenant.primary_color,
+        brand_logo_url=tenant.logo_url,
     )
 
     filename = f"certificate-{certificate.certificate_number}.pdf"

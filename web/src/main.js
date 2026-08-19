@@ -4,19 +4,20 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 import { useTenantStore } from './stores/tenant'
+import { TENANT_SLUG } from './utils/tenantSlug'
 
 const app = createApp(App)
 
 app.use(createPinia())
 
 const tenantStore = useTenantStore()
-const slug = window.location.hostname.split('.')[0] || 'wr'
-tenantStore.loadBranding(slug).then(() => {
+tenantStore.loadBranding(TENANT_SLUG).then(() => {
   tenantStore.applyColors()
   const name = tenantStore.name || 'Plataforma de Cursos'
   document.title = name
   const meta = document.querySelector('meta[name="description"]')
   if (meta) meta.content = `Cursos e certificações - ${name}`
+  tenantStore.applyFavicon()
 })
 
 app.use(router)

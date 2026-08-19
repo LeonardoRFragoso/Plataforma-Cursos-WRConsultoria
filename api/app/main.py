@@ -68,6 +68,52 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 
 
+# Paths exempt from subscription enforcement (SUPER_ADMIN management,
+# tenant branding read, partner leads, auth, health, public plans).
+_ENFORCEMENT_EXEMPT_EXACT = frozenset({
+    "/", "/health", "/health/live", "/health/ready",
+    "/docs", "/redoc", "/openapi.json",
+})
+_ENFORCEMENT_EXEMPT_PREFIXES = (
+    "/api/v1/super-admin",
+    "/api/v1/partner-leads",
+    "/api/v1/plans/public",
+    "/api/v1/tenants/branding",
+    "/api/v1/auth",
+    "/health",
+)
+
+
+def _is_enforcement_exempt(request: Request) -> bool:
+    path = request.url.path
+    if path in _ENFORCEMENT_EXEMPT_EXACT:
+        return True
+    return any(path.startswith(p) for p in _ENFORCEMENT_EXEMPT_PREFIXES)
+
+
+async def _get_tenant_subscription_status(tenant_id) -> str | None:
+    """Returns the most recent subscription status for a tenant, or None."""
+    from sqlalchemy import select as _select
+
+    from app.models.tenant_subscription import TenantSubscription
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = tenant_id
+        await db.execute(
+            text(f"SET LOCAL app.current_tenant = '{tenant_id}'")
+        )
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        stmt = (
+            _select(TenantSubscription)
+            .where(TenantSubscription.tenant_id == tenant_id)
+            .order_by(TenantSubscription.updated_at.desc())
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        sub = result.scalar_one_or_none()
+        return sub.status if sub else None
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     """Rate limiting por IP usando o backend configurado (Memory ou Redis).
@@ -121,7 +167,10 @@ async def tenant_middleware(request: Request, call_next):
             tenant = await resolver.resolve(request, db)
             token = current_tenant_id.set(tenant.id)
             request.state.tenant_id = tenant.id
-        except HTTPException:
+            # Also store in raw ASGI scope for reliable propagation through
+            # BaseHTTPMiddleware (request.state may not propagate in Starlette 0.27)
+            request.scope["resolved_tenant_id"] = str(tenant.id)
+        except HTTPException as exc:
             request.state.tenant_id = None
             if not (
                 request.url.path.startswith("/api/v1/tenants")
@@ -131,11 +180,25 @@ async def tenant_middleware(request: Request, call_next):
             ):
                 current_tenant_id.reset(token)
                 return JSONResponse(
-                    status_code=404,
-                    content={"detail": "Tenant not found"},
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
                 )
 
     try:
+        # Subscription enforcement: block tenant business operations when
+        # SUSPENDED or CANCELLED. SUPER_ADMIN paths and public/system paths
+        # are exempt so the WR operator can still manage the tenant.
+        tenant_id = getattr(request.state, "tenant_id", None)
+        if tenant_id and not _is_enforcement_exempt(request):
+            sub_status = await _get_tenant_subscription_status(tenant_id)
+            if sub_status in ("SUSPENDED", "CANCELLED"):
+                return JSONResponse(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    content={
+                        "detail": "Plataforma temporariamente indisponível.",
+                        "subscription_status": sub_status,
+                    },
+                )
         return await call_next(request)
     finally:
         current_tenant_id.reset(token)

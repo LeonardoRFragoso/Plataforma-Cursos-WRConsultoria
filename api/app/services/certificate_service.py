@@ -28,19 +28,28 @@ class CertificateService:
         brand_name: str,
         validation_url: str,
         issued_date: datetime | None = None,
+        brand_primary_color: str | None = None,
+        brand_logo_url: str | None = None,
     ) -> bytes:
         if issued_date is None:
             issued_date = utc_now()
-        
+
+        # Use tenant primary color if provided; fall back to a sensible default
+        # instead of the old hardcoded WR blue.
+        try:
+            title_color = colors.HexColor(brand_primary_color or "#0056b3")
+        except (ValueError, TypeError):
+            title_color = colors.HexColor("#0056b3")
+
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        
+
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
             fontSize=28,
-            textColor=colors.HexColor('#0066cc'),
+            textColor=title_color,
             spaceAfter=30,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',

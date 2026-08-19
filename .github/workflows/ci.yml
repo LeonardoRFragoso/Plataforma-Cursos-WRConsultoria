@@ -279,3 +279,322 @@ jobs:
           sleep 3
           curl -fsS http://localhost:18080/health || { docker logs wr-web-test; exit 1; }
           docker rm -f wr-web-test
+
+  white-label-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wr_white_label
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Staging mode — exercises trusted Origin tenant security
+      ENVIRONMENT: staging
+      SECRET_KEY: ci-white-label-secret-key-at-least-32-chars
+      TENANT_SECRET_ENCRYPTION_KEY: dGhpcy1pcy1hLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/wr_white_label
+      MERCADO_PAGO_MOCK_MODE: "true"
+      DEMO_SEED_MODE: "true"
+      DOCS_ENABLED: "false"
+      RATE_LIMIT_ENABLED: "false"
+      MASTER_HOST: localhost
+      CORS_ORIGINS: '["http://127.0.0.1:4173","http://127.0.0.1:4174"]'
+      TRUSTED_FRONTEND_ORIGINS: '["http://127.0.0.1:4173","http://127.0.0.1:4174"]'
+      ALLOWED_HOSTS: '["localhost","127.0.0.1"]'
+      # Demo seed credentials (deterministic, CI-only)
+      DEMO_WR_ADMIN_EMAIL: admin@wr.demo
+      DEMO_WR_ADMIN_PASSWORD: test-wr-admin-pass
+      DEMO_ALFA_ADMIN_EMAIL: admin@alfa.demo
+      DEMO_ALFA_ADMIN_PASSWORD: test-alfa-admin-pass
+      DEMO_WR_STUDENT_PASSWORD: test-wr-student-pass
+      DEMO_ALFA_STUDENT_PASSWORD: test-alfa-student-pass
+      DEMO_SUPER_ADMIN_EMAIL: super@wr.demo
+      DEMO_SUPER_ADMIN_PASSWORD: test-super-admin-pass
+      # Playwright spec env
+      WHITE_LABEL_INTEGRATION_REQUIRED: "true"
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      API_BASE: http://localhost:8000
+      WR_URL: http://127.0.0.1:4173
+      ALFA_URL: http://127.0.0.1:4174
+      DEMO_ALFA_STUDENT_EMAIL: aluno1@alfa.demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # ─── Backend deps ───
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+
+      # ─── Frontend deps ───
+      - name: Install frontend deps
+        run: cd web && npm ci
+
+      # ─── Playwright ───
+      - name: Install Playwright browsers
+        run: cd web && npx playwright install --with-deps chromium
+
+      # ─── Wait for PostgreSQL ───
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 2
+          done
+
+      # ─── Run real Alembic migrations ───
+      - name: Run Alembic migrations
+        run: cd api && alembic upgrade head
+
+      # ─── Seed first run ───
+      - name: Run demo seed (first run)
+        run: cd api && python -m app.scripts.seed_white_label_demo
+
+      # ─── Record counts after first seed ───
+      - name: Record counts after first seed
+        id: counts1
+        run: |
+          cd api && python -c "
+          import asyncio, os
+          from sqlalchemy import select, func
+          from app.core.database import AsyncSessionLocal
+          from app.models.tenant import Tenant, PartnerLead
+          from app.models.user import User
+          from app.models.student import Student
+          from app.models.course import Course
+          from app.models.class_model import Class
+          from app.models.enrollment import Enrollment
+          from app.models.payment import Payment
+          from app.models.certificate import Certificate
+          from app.models.plan import Plan
+          from app.models.tenant_subscription import TenantSubscription
+
+          async def main():
+              async with AsyncSessionLocal() as db:
+                  for label, model in [
+                      ('tenants', Tenant), ('users', User), ('students', Student),
+                      ('courses', Course), ('classes', Class), ('enrollments', Enrollment),
+                      ('payments', Payment), ('certificates', Certificate),
+                      ('plans', Plan), ('subscriptions', TenantSubscription),
+                  ]:
+                      count = (await db.execute(select(func.count()).select_from(model))).scalar()
+                      print(f'{label}={count}')
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                          f.write(f'{label}={count}\n')
+                      print(f'{label}={count}')
+
+          asyncio.run(main())
+          "
+
+      # ─── Seed second run (idempotency) ───
+      - name: Run demo seed (second run — idempotency)
+        run: cd api && python -m app.scripts.seed_white_label_demo
+
+      # ─── Verify counts match ───
+      - name: Verify idempotency (counts unchanged)
+        run: |
+          cd api && python -c "
+          import asyncio
+          from sqlalchemy import select, func
+          from app.core.database import AsyncSessionLocal
+          from app.models.tenant import Tenant
+          from app.models.user import User
+          from app.models.student import Student
+          from app.models.course import Course
+          from app.models.class_model import Class
+          from app.models.enrollment import Enrollment
+          from app.models.payment import Payment
+          from app.models.certificate import Certificate
+          from app.models.plan import Plan
+          from app.models.tenant_subscription import TenantSubscription
+
+          expected = {
+              'tenants': ${{ steps.counts1.outputs.tenants }},
+              'users': ${{ steps.counts1.outputs.users }},
+              'students': ${{ steps.counts1.outputs.students }},
+              'courses': ${{ steps.counts1.outputs.courses }},
+              'classes': ${{ steps.counts1.outputs.classes }},
+              'enrollments': ${{ steps.counts1.outputs.enrollments }},
+              'payments': ${{ steps.counts1.outputs.payments }},
+              'certificates': ${{ steps.counts1.outputs.certificates }},
+              'plans': ${{ steps.counts1.outputs.plans }},
+              'subscriptions': ${{ steps.counts1.outputs.subscriptions }},
+          }
+
+          async def main():
+              async with AsyncSessionLocal() as db:
+                  for label, model in [
+                      ('tenants', Tenant), ('users', User), ('students', Student),
+                      ('courses', Course), ('classes', Class), ('enrollments', Enrollment),
+                      ('payments', Payment), ('certificates', Certificate),
+                      ('plans', Plan), ('subscriptions', TenantSubscription),
+                  ]:
+                      count = (await db.execute(select(func.count()).select_from(model))).scalar()
+                      exp = expected[label]
+                      if count != exp:
+                          print(f'FAIL: {label} count changed: {exp} → {count}')
+                          raise SystemExit(1)
+                      print(f'OK: {label}={count}')
+
+          asyncio.run(main())
+          print('Idempotency verified: all counts stable across two seed runs.')
+          "
+
+      # ─── Verify SUPER_ADMIN exists and is unique ───
+      - name: Verify SUPER_ADMIN exists and is unique
+        run: |
+          cd api && python -c "
+          import asyncio
+          from sqlalchemy import select, func
+          from app.core.database import AsyncSessionLocal
+          from app.models.user import User, UserRole
+
+          async def main():
+              async with AsyncSessionLocal() as db:
+                  count = (await db.execute(
+                      select(func.count()).select_from(User).where(User.role == UserRole.SUPER_ADMIN)
+                  )).scalar()
+                  if count != 1:
+                      print(f'FAIL: expected 1 SUPER_ADMIN, found {count}')
+                      raise SystemExit(1)
+                  print(f'OK: SUPER_ADMIN count={count}')
+
+          asyncio.run(main())
+          "
+
+      # ─── Start FastAPI in staging mode ───
+      - name: Start FastAPI (staging)
+        run: |
+          cd api && uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 &
+          echo $! > /tmp/api.pid
+
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            curl -fsS http://localhost:8000/health/live && break
+            sleep 2
+          done
+
+      # ─── Build WR frontend ───
+      - name: Build WR frontend
+        run: |
+          cd web
+          VITE_API_URL=http://localhost:8000 VITE_TENANT_SLUG=wr npm run build
+          mv dist /tmp/wr-dist
+
+      # ─── Build Alfa frontend ───
+      - name: Build Alfa frontend
+        run: |
+          cd web
+          VITE_API_URL=http://localhost:8000 VITE_TENANT_SLUG=alfa npm run build
+          mv dist /tmp/alfa-dist
+
+      # ─── Start WR frontend (:4173) ───
+      - name: Start WR frontend (:4173)
+        run: |
+          cat > /tmp/spa-server.js << 'SCRIPT'
+          const http = require('http');
+          const fs = require('fs');
+          const path = require('path');
+          const root = process.argv[2];
+          const port = parseInt(process.argv[3]);
+          const mime = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.woff':'font/woff', '.woff2':'font/woff2', '.map':'application/json' };
+          const server = http.createServer((req, res) => {
+            let urlPath = req.url.split('?')[0];
+            let filePath = path.join(root, urlPath);
+            if (urlPath === '/' || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+              if (!fs.existsSync(filePath) && !urlPath.startsWith('/assets/')) {
+                filePath = path.join(root, 'index.html');
+              } else if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+                filePath = path.join(filePath, 'index.html');
+              }
+            }
+            fs.readFile(filePath, (err, data) => {
+              if (err) { res.writeHead(404); res.end('Not found'); return; }
+              const ext = path.extname(filePath);
+              res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+              res.end(data);
+            });
+          });
+          server.listen(port, '127.0.0.1', () => console.log(`SPA server on :${port}`));
+          SCRIPT
+          node /tmp/spa-server.js /tmp/wr-dist 4173 > /tmp/wr-fe.log 2>&1 &
+          echo $! > /tmp/wr-fe.pid
+
+      # ─── Start Alfa frontend (:4174) ───
+      - name: Start Alfa frontend (:4174)
+        run: |
+          node /tmp/spa-server.js /tmp/alfa-dist 4174 > /tmp/alfa-fe.log 2>&1 &
+          echo $! > /tmp/alfa-fe.pid
+
+      # ─── Health checks ───
+      - name: Health check WR frontend
+        run: |
+          for i in {1..15}; do
+            curl -fsS http://127.0.0.1:4173/ && break
+            sleep 2
+          done
+      - name: Health check Alfa frontend
+        run: |
+          for i in {1..15}; do
+            curl -fsS http://127.0.0.1:4174/ && break
+            sleep 2
+          done
+
+      # ─── Run integration-white-label Playwright ───
+      - name: Run white-label integration Playwright
+        run: |
+          cd web && npx playwright test e2e/integration/integration-white-label.spec.js --project=integration --reporter=list 2>&1 | tee /tmp/pw-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "Playwright exit code: $exit_code"
+          if [ $exit_code -ne 0 ]; then
+            echo "FAIL: Playwright tests failed (exit code $exit_code)"
+            exit 1
+          fi
+          # Check for skips in the output
+          skipped=$(grep -c "skipped" /tmp/pw-output.txt 2>/dev/null || true)
+          echo "Skipped tests (from output): ${skipped:-0}"
+          if [ "${skipped:-0}" != "0" ]; then
+            echo "FAIL: ${skipped} required tests were skipped — zero skips allowed."
+            exit 1
+          fi
+          echo "PASS: all required tests passed, zero skipped."
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-white-label-report
+          path: web/playwright-report/
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo "=== API LOG ===" && cat /tmp/api.log 2>/dev/null | tail -50
+          echo "=== WR FE LOG ===" && cat /tmp/wr-fe.log 2>/dev/null | tail -20
+          echo "=== ALFA FE LOG ===" && cat /tmp/alfa-fe.log 2>/dev/null | tail -20
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kill $(cat /tmp/api.pid 2>/dev/null) 2>/dev/null || true
+          kill $(cat /tmp/wr-fe.pid 2>/dev/null) 2>/dev/null || true
+          kill $(cat /tmp/alfa-fe.pid 2>/dev/null) 2>/dev/null || true

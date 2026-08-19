@@ -34,11 +34,30 @@ export const useTenantStore = defineStore('tenant', {
       }
     },
 
+    async refreshBranding(slug) {
+      await this.loadBranding(slug)
+      this.applyColors()
+      const name = this.name || 'Plataforma de Cursos'
+      document.title = name
+      this.applyFavicon()
+    },
+
     applyColors() {
       const root = document.documentElement
       if (this.primary_color) root.style.setProperty('--color-primary', this.primary_color)
       if (this.secondary_color) root.style.setProperty('--color-secondary', this.secondary_color)
       if (this.accent_color) root.style.setProperty('--color-accent', this.accent_color)
+    },
+
+    applyFavicon() {
+      if (!this.favicon_url) return
+      let link = document.querySelector("link[rel~='icon']")
+      if (!link) {
+        link = document.createElement('link')
+        link.rel = 'icon'
+        document.head.appendChild(link)
+      }
+      link.href = this.favicon_url
     },
   },
 })

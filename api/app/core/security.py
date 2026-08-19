@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -48,7 +48,10 @@ def decode_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
     token = credentials.credentials
     payload = decode_token(token)
     user_id: str = payload.get("sub")
@@ -69,7 +72,21 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     else:
         tenant_id = None
 
+    # Resolve the current tenant from ContextVar (works in tests via create_all)
+    # or from ASGI scope (set by middleware in staging/production where
+    # BaseHTTPMiddleware may not propagate ContextVars correctly).
     resolved_tenant = current_tenant_id.get()
+    if resolved_tenant is None:
+        # Try request.state first
+        resolved_tenant = getattr(request.state, "tenant_id", None)
+    if resolved_tenant is None:
+        # Fall back to raw ASGI scope (most reliable propagation)
+        scope_tenant = request.scope.get("resolved_tenant_id")
+        if scope_tenant:
+            try:
+                resolved_tenant = UUID(scope_tenant)
+            except (ValueError, TypeError):
+                pass
     if resolved_tenant is not None and tenant_id != resolved_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
