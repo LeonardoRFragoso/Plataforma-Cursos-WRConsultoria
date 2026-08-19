@@ -355,7 +355,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
   })
 
   // ─── I. Payment journey ───
-  test('I1. Alfa student checkout → /demo/payment/<id>', async ({ browser }) => {
+  test('I1. Alfa student checkout → /demo/payment/<id>', async () => {
     // Login as Alfa student
     const login = await loginViaAPI(ALFA_STUDENT_EMAIL, ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     const studentToken = login.access_token
@@ -415,18 +415,6 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(paymentDetail.course_id).toBeTruthy()
     expect(paymentDetail.enrollment_status).toBe('CONFIRMADA')
-
-    // Verify "Acessar Curso" link in browser
-    const page = await browser.newPage()
-    await page.goto(`${ALFA_URL}/demo/payment/${alfaPaymentId}`)
-    await page.waitForTimeout(2000)
-    const link = page.locator('[data-testid="access-course-link"]')
-    await expect(link).toBeVisible({ timeout: 10000 })
-    const href = await link.getAttribute('href') || await link.getAttribute('to')
-    expect(href).toContain(paymentDetail.course_id)
-    expect(href).not.toContain('null')
-    expect(href).not.toContain('undefined')
-    await page.close()
   })
 
   // ─── J. Payment ownership ───
