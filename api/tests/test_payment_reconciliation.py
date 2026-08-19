@@ -325,8 +325,12 @@ async def test_demo_payment_admin_can_approve(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_checkout_mock_mode_redirects_to_demo_page(client, monkeypatch):
-    """In mock mode, checkout returns /demo/payment/<id> URL."""
-    
+    """In mock mode, checkout returns a RELATIVE /demo/payment/<id> URL.
+
+    The URL must NOT contain FRONTEND_URL so the browser stays on whichever
+    tenant frontend origin it is currently using (WR Vercel or Alfa Vercel).
+    """
+
     monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", True)
     monkeypatch.setattr("app.core.config.settings.FRONTEND_URL", "https://wr.vercel.app")
 
@@ -344,6 +348,10 @@ async def test_checkout_mock_mode_redirects_to_demo_page(client, monkeypatch):
     assert "/demo/payment/" in body["checkout_url"]
     assert str(ids["payment_id"]) in body["checkout_url"]
     assert "mock-mp.test" not in body["checkout_url"]
+    # Relative URL — must NOT contain FRONTEND_URL or any scheme/host
+    assert "https://" not in body["checkout_url"]
+    assert "http://" not in body["checkout_url"]
+    assert body["checkout_url"].startswith("/demo/payment/")
 
 
 @pytest.mark.asyncio
