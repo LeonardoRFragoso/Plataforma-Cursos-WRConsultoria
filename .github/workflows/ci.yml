@@ -373,9 +373,9 @@ jobs:
         id: counts1
         run: |
           cd api && python -c "
-          import asyncio
+          import asyncio, os
           from sqlalchemy import select, func
-          from app.db.session import AsyncSessionLocal
+          from app.core.database import AsyncSessionLocal
           from app.models.tenant import Tenant, PartnerLead
           from app.models.user import User
           from app.models.student import Student
@@ -396,7 +396,9 @@ jobs:
                       ('plans', Plan), ('subscriptions', TenantSubscription),
                   ]:
                       count = (await db.execute(select(func.count()).select_from(model))).scalar()
-                      print(f'::set-output name={label}::{count}')
+                      print(f'{label}={count}')
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                          f.write(f'{label}={count}\n')
                       print(f'{label}={count}')
 
           asyncio.run(main())
@@ -412,7 +414,7 @@ jobs:
           cd api && python -c "
           import asyncio
           from sqlalchemy import select, func
-          from app.db.session import AsyncSessionLocal
+          from app.core.database import AsyncSessionLocal
           from app.models.tenant import Tenant
           from app.models.user import User
           from app.models.student import Student
@@ -462,7 +464,7 @@ jobs:
           cd api && python -c "
           import asyncio
           from sqlalchemy import select, func
-          from app.db.session import AsyncSessionLocal
+          from app.core.database import AsyncSessionLocal
           from app.models.user import User, UserRole
 
           async def main():
