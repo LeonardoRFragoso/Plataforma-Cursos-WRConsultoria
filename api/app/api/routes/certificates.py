@@ -54,9 +54,13 @@ def _resolve_trusted_frontend_url(request: Request, tenant: Tenant | None) -> st
 
 
 async def _load_certificate_with_tenant(
-    db: AsyncSession, certificate_id: UUID
+    db: AsyncSession, certificate_id: UUID, tenant_id: UUID | None = None
 ):
     """Load certificate joined to enrollment, student, user, class, course, tenant.
+
+    When tenant_id is provided, the query is filtered by
+    Certificate.tenant_id == tenant_id so cross-tenant certificates
+    are never loaded (defense in depth at the DB layer).
 
     Returns (certificate, enrollment, student, user, class_obj, course, tenant) or None.
     """
@@ -70,6 +74,8 @@ async def _load_certificate_with_tenant(
         .join(Tenant, Certificate.tenant_id == Tenant.id)
         .where(Certificate.id == certificate_id)
     )
+    if tenant_id is not None:
+        stmt = stmt.where(Certificate.tenant_id == tenant_id)
     result = await db.execute(stmt)
     return result.first()
 
@@ -82,23 +88,23 @@ def _authorize_certificate_access(
 ) -> None:
     """Shared authorization for certificate get/download/delete.
 
-    Contract:
-    - SUPER_ADMIN: allowed (platform operator, JWT binding already limits
-      to resolved tenant context).
-    - Tenant ADMIN: allowed only if certificate.tenant_id == resolved_tenant_id.
+    Contract (applies to ALL roles including SUPER_ADMIN):
+    - ADMIN/SUPER_ADMIN: allowed only if certificate.tenant_id == resolved_tenant_id.
     - STUDENT: allowed only if certificate belongs to them AND tenant matches.
     - Other student same tenant: 403.
-    - Cross-tenant admin: 404 (non-disclosing).
-    - Cross-tenant student: 404 (non-disclosing).
+    - Cross-tenant (any role): 404 (non-disclosing).
+
+    SUPER_ADMIN behaves as a tenant admin on regular /certificates routes.
+    Global certificate management must use explicit /super-admin/ routes.
 
     Raises HTTPException if unauthorized.
     """
-    is_super_admin = current_user.get("role") == "super_admin"
     is_admin = current_user.get("role") in ("admin", "super_admin")
     is_owner = str(user.id) == current_user["user_id"]
 
     # Cross-tenant: return 404 (non-disclosing) to avoid leaking existence.
-    if certificate.tenant_id != resolved_tenant_id and not is_super_admin:
+    # No role bypasses this — including SUPER_ADMIN.
+    if certificate.tenant_id != resolved_tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Certificate not found",
@@ -196,8 +202,9 @@ async def get_certificate(
     tenant_id = get_current_tenant_id()
 
     # For students, load with full context to verify ownership.
+    # DB-layer tenant filter ensures cross-tenant certs are never loaded.
     if current_user.get("role") == "student":
-        row = await _load_certificate_with_tenant(db, certificate_id)
+        row = await _load_certificate_with_tenant(db, certificate_id, tenant_id)
         if not row:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -271,7 +278,8 @@ async def download_certificate(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    row = await _load_certificate_with_tenant(db, certificate_id)
+    # DB-layer tenant filter: cross-tenant certificates are never loaded.
+    row = await _load_certificate_with_tenant(db, certificate_id, tenant_id)
 
     if not row:
         raise HTTPException(
@@ -281,6 +289,7 @@ async def download_certificate(
 
     certificate, _enrollment, _student, user, class_obj, course, tenant = row
 
+    # Defense in depth: re-check tenant boundary in memory.
     _authorize_certificate_access(certificate, user, current_user, tenant_id)
 
     admin_result = await db.execute(

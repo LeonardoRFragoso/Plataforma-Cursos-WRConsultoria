@@ -2,14 +2,14 @@
 
 Verifies the authorization contract:
 - Tenant ADMIN: may list/get/download/delete ONLY own-tenant certificates.
+- SUPER_ADMIN: behaves as tenant admin on /certificates routes — same
+  resolved tenant only, cross-tenant is 404.
 - STUDENT: may get/download ONLY their own certificate in the resolved tenant.
 - Other student same tenant: 403.
-- Cross-tenant admin: 404 (non-disclosing).
-- Cross-tenant student: 404 (non-disclosing).
+- Cross-tenant (any role): 404 (non-disclosing).
 - Cross-tenant create: 404 (enrollment not found in tenant).
 - Cross-tenant delete: 404.
 - Public validation: allowed without auth.
-- SUPER_ADMIN: allowed within resolved tenant context.
 - PDF branding: WR cert has WR identity, Alfa cert has Alfa identity.
 - Tenant-aware validation URL: derived from trusted request Origin.
 """
@@ -523,52 +523,322 @@ async def test_public_validation_allowed(client):
 
 
 # ─── SUPER_ADMIN behavior ───
+# SUPER_ADMIN must behave as a tenant admin on regular /certificates routes.
+# No implicit cross-tenant privilege. Global management requires /super-admin/.
 
-@pytest.mark.asyncio
-async def test_super_admin_same_tenant_allowed(client):
-    """SUPER_ADMIN within resolved tenant context can access certificates."""
-    _, wr_student_sid = await _create_student(
-        "wrstusa@wr.test", "WR SA Student", WR_TENANT_ID
-    )
-    cert_id, _ = await _create_course_class_enrollment_cert(
-        WR_TENANT_ID, wr_student_sid, "WR-SA-01", "WR SA Course"
-    )
-
-    # Create super_admin user
+async def _create_super_admin(email, tenant_id):
+    """Create a SUPER_ADMIN user bound to tenant_id."""
     async with AsyncSessionLocal() as db:
-        db.info["tenant_id"] = WR_TENANT_ID
-        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+        db.info["tenant_id"] = tenant_id
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}'"))
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
-        sa_user = User(
-            email="sacert@wr.test",
-            full_name="Super Admin Cert",
-            cpf="99988877766",
+        user = User(
+            email=email,
+            full_name=f"SuperAdmin {email}",
+            cpf=str(uuid.uuid4().int)[:11],
             password_hash=hash_password("pass123"),
             role=UserRole.SUPER_ADMIN,
             is_active=True,
-            tenant_id=WR_TENANT_ID,
+            tenant_id=tenant_id,
         )
-        db.add(sa_user)
+        db.add(user)
         await db.commit()
-        await db.refresh(sa_user)
-        sa_user_id = sa_user.id
+        await db.refresh(user)
+        return user.id
 
-    token = _token(sa_user_id, "super_admin", WR_TENANT_ID)
 
-    # SUPER_ADMIN can list
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_list_wr_only(client):
+    """SUPER_ADMIN in WR context list → WR certificates only."""
+    alfa_id = await _seed_alfa_tenant()
+    _, wr_student_sid = await _create_student(
+        "sawrlist@wr.test", "SA WR List Student", WR_TENANT_ID
+    )
+    _, alfa_student_sid = await _create_student(
+        "saalfalist@alfa.test", "SA Alfa List Student", alfa_id
+    )
+    wr_cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "SA-WR-LIST-01", "SA WR List Course"
+    )
+    alfa_cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-LIST-01", "SA Alfa List Course"
+    )
+
+    sa_id = await _create_super_admin("sawr@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
     resp = await client.get(
         "/api/v1/certificates/",
         headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
     )
     assert resp.status_code == 200
+    cert_ids = [c["id"] for c in resp.json()]
+    assert str(wr_cert_id) in cert_ids
+    assert str(alfa_cert_id) not in cert_ids, \
+        "SUPER_ADMIN in WR context must NOT see Alfa certificates"
 
-    # SUPER_ADMIN can download
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_get_wr_allowed(client):
+    """SUPER_ADMIN in WR context GET WR cert → 200."""
+    _, wr_student_sid = await _create_student(
+        "sawrget@wr.test", "SA WR Get Student", WR_TENANT_ID
+    )
+    cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "SA-WR-GET-01", "SA WR Get Course"
+    )
+
+    sa_id = await _create_super_admin("sawrget2@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{cert_id}",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(cert_id)
+
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_get_alfa_denied(client):
+    """SUPER_ADMIN in WR context GET Alfa cert → 404."""
+    alfa_id = await _seed_alfa_tenant()
+    _, alfa_student_sid = await _create_student(
+        "saalfaget@alfa.test", "SA Alfa Get Student", alfa_id
+    )
+    alfa_cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-GET-01", "SA Alfa Get Course"
+    )
+
+    sa_id = await _create_super_admin("sawrget3@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{alfa_cert_id}",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_download_wr_allowed(client):
+    """SUPER_ADMIN in WR context download WR cert → 200."""
+    _, wr_student_sid = await _create_student(
+        "sawrdl@wr.test", "SA WR DL Student", WR_TENANT_ID
+    )
+    cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "SA-WR-DL-01", "SA WR DL Course"
+    )
+
+    sa_id = await _create_super_admin("sawrdl2@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
     resp = await client.get(
         f"/api/v1/certificates/{cert_id}/download",
         headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
     )
     assert resp.status_code == 200
     assert resp.content[:5] == b"%PDF-"
+
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_download_alfa_denied(client):
+    """SUPER_ADMIN in WR context download Alfa cert → 404."""
+    alfa_id = await _seed_alfa_tenant()
+    _, alfa_student_sid = await _create_student(
+        "saalfadl@alfa.test", "SA Alfa DL Student", alfa_id
+    )
+    alfa_cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-DL-01", "SA Alfa DL Course"
+    )
+
+    sa_id = await _create_super_admin("sawrdl3@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{alfa_cert_id}/download",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_delete_alfa_denied(client):
+    """SUPER_ADMIN in WR context delete Alfa cert → 404."""
+    alfa_id = await _seed_alfa_tenant()
+    _, alfa_student_sid = await _create_student(
+        "saalfadel@alfa.test", "SA Alfa Del Student", alfa_id
+    )
+    alfa_cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-DEL-01", "SA Alfa Del Course"
+    )
+
+    sa_id = await _create_super_admin("sawrdel@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
+    resp = await client.delete(
+        f"/api/v1/certificates/{alfa_cert_id}",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_super_admin_wr_context_create_alfa_enrollment_denied(client):
+    """SUPER_ADMIN in WR context create cert for Alfa enrollment → 404."""
+    alfa_id = await _seed_alfa_tenant()
+
+    # Create Alfa enrollment (without certificate)
+    _, alfa_student_sid = await _create_student(
+        "saalfacr@alfa.test", "SA Alfa CR Student", alfa_id
+    )
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = alfa_id
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{alfa_id}'"))
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        admin_user = User(
+            email=f"saadmin_{uuid.uuid4().hex[:6]}@alfa.test",
+            full_name="SA Alfa Admin",
+            cpf=str(uuid.uuid4().int)[:11],
+            password_hash=hash_password("pass123"),
+            role=UserRole.ADMIN,
+            is_active=True,
+            tenant_id=alfa_id,
+        )
+        db.add(admin_user)
+        await db.flush()
+        course = Course(
+            tenant_id=alfa_id,
+            code=f"SA-ALFA-CR-{uuid.uuid4().hex[:4].upper()}",
+            name="SA Alfa CR Course",
+            category="Test",
+            carga_horaria=8,
+            modality=CourseModality.EAD,
+            tipo_curso=CourseType.FORMACAO,
+            price=99.90,
+        )
+        db.add(course)
+        await db.flush()
+        cls = Class(
+            tenant_id=alfa_id,
+            course_id=course.id,
+            responsible_admin_id=admin_user.id,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            max_students=20,
+            status=ClassStatus.ABERTA,
+        )
+        db.add(cls)
+        await db.flush()
+        enrollment = Enrollment(
+            tenant_id=alfa_id,
+            student_id=alfa_student_sid,
+            class_id=cls.id,
+            price=99.90,
+            status=EnrollmentStatus.CONCLUIDA,
+        )
+        db.add(enrollment)
+        await db.commit()
+        await db.refresh(enrollment)
+        alfa_enrollment_id = enrollment.id
+
+    sa_id = await _create_super_admin("sawrcr@wr.test", WR_TENANT_ID)
+    token = _token(sa_id, "super_admin", WR_TENANT_ID)
+
+    resp = await client.post(
+        "/api/v1/certificates/",
+        json={"enrollment_id": str(alfa_enrollment_id)},
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"},
+    )
+    assert resp.status_code == 404
+
+
+# ─── SUPER_ADMIN in Alfa context ───
+
+@pytest.mark.asyncio
+async def test_super_admin_alfa_context_get_alfa_allowed(client):
+    """SUPER_ADMIN in Alfa context GET Alfa cert → 200."""
+    alfa_id = await _seed_alfa_tenant()
+    _, alfa_student_sid = await _create_student(
+        "saalfaget2@alfa.test", "SA Alfa Get2 Student", alfa_id
+    )
+    cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-GET2-01", "SA Alfa Get2 Course"
+    )
+
+    sa_id = await _create_super_admin("saalfa@alfa.test", alfa_id)
+    token = _token(sa_id, "super_admin", alfa_id)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{cert_id}",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "alfa"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(cert_id)
+
+
+@pytest.mark.asyncio
+async def test_super_admin_alfa_context_get_wr_denied(client):
+    """SUPER_ADMIN in Alfa context GET WR cert → 404."""
+    alfa_id = await _seed_alfa_tenant()
+    _, wr_student_sid = await _create_student(
+        "sawrget4@wr.test", "SA WR Get4 Student", WR_TENANT_ID
+    )
+    wr_cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "SA-WR-GET4-01", "SA WR Get4 Course"
+    )
+
+    sa_id = await _create_super_admin("saalfa2@alfa.test", alfa_id)
+    token = _token(sa_id, "super_admin", alfa_id)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{wr_cert_id}",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "alfa"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_super_admin_alfa_context_download_alfa_allowed(client):
+    """SUPER_ADMIN in Alfa context download Alfa cert → 200."""
+    alfa_id = await _seed_alfa_tenant()
+    _, alfa_student_sid = await _create_student(
+        "saalfadl2@alfa.test", "SA Alfa DL2 Student", alfa_id
+    )
+    cert_id, _ = await _create_course_class_enrollment_cert(
+        alfa_id, alfa_student_sid, "SA-ALFA-DL2-01", "SA Alfa DL2 Course"
+    )
+
+    sa_id = await _create_super_admin("saalfa3@alfa.test", alfa_id)
+    token = _token(sa_id, "super_admin", alfa_id)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{cert_id}/download",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "alfa"},
+    )
+    assert resp.status_code == 200
+    assert resp.content[:5] == b"%PDF-"
+
+
+@pytest.mark.asyncio
+async def test_super_admin_alfa_context_download_wr_denied(client):
+    """SUPER_ADMIN in Alfa context download WR cert → 404."""
+    alfa_id = await _seed_alfa_tenant()
+    _, wr_student_sid = await _create_student(
+        "sawrdl4@wr.test", "SA WR DL4 Student", WR_TENANT_ID
+    )
+    wr_cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "SA-WR-DL4-01", "SA WR DL4 Course"
+    )
+
+    sa_id = await _create_super_admin("saalfa4@alfa.test", alfa_id)
+    token = _token(sa_id, "super_admin", alfa_id)
+
+    resp = await client.get(
+        f"/api/v1/certificates/{wr_cert_id}/download",
+        headers={"Authorization": f"Bearer {token}", "x-tenant-slug": "alfa"},
+    )
+    assert resp.status_code == 404
 
 
 # ─── PDF branding ───
@@ -661,10 +931,8 @@ async def test_wr_validation_url_uses_wr_origin(client):
         )
         assert resp.status_code == 200
         import io
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            from PyPDF2 import PdfReader
+
+        from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(resp.content))
         text = " ".join(page.extract_text() or "" for page in reader.pages)
         assert "http://wr.test/certificates/validate" in text, \
@@ -703,10 +971,8 @@ async def test_alfa_validation_url_uses_alfa_origin(client):
         )
         assert resp.status_code == 200
         import io
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            from PyPDF2 import PdfReader
+
+        from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(resp.content))
         text = " ".join(page.extract_text() or "" for page in reader.pages)
         assert "http://alfa.test/certificates/validate" in text, \
@@ -715,3 +981,48 @@ async def test_alfa_validation_url_uses_alfa_origin(client):
             "Alfa validation URL should NOT point to WR frontend"
     finally:
         settings.TRUSTED_FRONTEND_ORIGINS = original_trusted
+
+
+@pytest.mark.asyncio
+async def test_untrusted_origin_not_reflected(client):
+    """Untrusted Origin must NOT be reflected in the validation URL (no open redirect)."""
+    _, wr_student_sid = await _create_student(
+        "wrstuuntr@wr.test", "WR Untr Student", WR_TENANT_ID
+    )
+    cert_id, _ = await _create_course_class_enrollment_cert(
+        WR_TENANT_ID, wr_student_sid, "WR-UNTR-01", "WR Untr Course"
+    )
+
+    wr_admin_id = await _create_admin("wruntr@wr.test", WR_TENANT_ID)
+    token = _token(wr_admin_id, "admin", WR_TENANT_ID)
+
+    from app.core.config import settings
+    original_trusted = settings.TRUSTED_FRONTEND_ORIGINS
+    original_frontend = settings.FRONTEND_URL
+    settings.TRUSTED_FRONTEND_ORIGINS = [
+        "http://wr.test", "http://alfa.test"
+    ]
+    settings.FRONTEND_URL = "http://fallback.test"
+    try:
+        resp = await client.get(
+            f"/api/v1/certificates/{cert_id}/download",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "x-tenant-slug": "wr",
+                "origin": "http://evil.test",
+            },
+        )
+        assert resp.status_code == 200
+        import io
+
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(resp.content))
+        text = " ".join(page.extract_text() or "" for page in reader.pages)
+        # Must use fallback FRONTEND_URL, NOT the untrusted origin
+        assert "http://fallback.test/certificates/validate" in text, \
+            "Untrusted Origin must fall back to FRONTEND_URL"
+        assert "http://evil.test" not in text, \
+            "Untrusted Origin must NOT be reflected in validation URL (open redirect)"
+    finally:
+        settings.TRUSTED_FRONTEND_ORIGINS = original_trusted
+        settings.FRONTEND_URL = original_frontend
