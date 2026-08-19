@@ -48,17 +48,21 @@ COPY --chown=appuser:appuser . .
 
 USER appuser
 
-EXPOSE 8000
+ENV PORT=8000
+EXPOSE ${PORT}
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=30s \
-    CMD curl -fsS http://localhost:8000/health/live || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health/live" || exit 1
 
 # Single worker, async. Graceful shutdown timeout for in-flight requests.
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "1", \
-     "--no-access-log", \
-     "--timeout-graceful-shutdown", "30", \
-     "--proxy-headers", \
-     "--forwarded-allow-ips", "*"]
+# Shell form is required so ${PORT} is expanded at runtime (deploy platforms
+# like Railway inject PORT via environment). Proxy headers and graceful
+# shutdown are preserved.
+CMD uvicorn app.main:app \
+     --host 0.0.0.0 \
+     --port ${PORT:-8000} \
+     --workers 1 \
+     --no-access-log \
+     --timeout-graceful-shutdown 30 \
+     --proxy-headers \
+     --forwarded-allow-ips "*"
