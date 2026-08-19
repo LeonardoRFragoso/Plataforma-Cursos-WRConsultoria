@@ -270,8 +270,8 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(status).toBe(200)
 
-    // Verify API persisted
-    const { body } = await apiGet('/api/v1/tenants/branding', null, 'alfa', ALFA_ORIGIN)
+    // Verify API persisted (branding endpoint uses ?slug= query param)
+    const { body } = await apiGet('/api/v1/tenants/branding?slug=alfa', null, 'alfa', ALFA_ORIGIN)
     expect(body.primary_color).toBe(newColor)
 
     // Restore demo value
