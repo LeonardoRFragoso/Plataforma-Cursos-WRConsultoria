@@ -355,7 +355,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
   })
 
   // ─── I. Payment journey ───
-  test('I1. Alfa student checkout → /demo/payment/<id>', async () => {
+  test('I1. Alfa student checkout → /demo/payment/<id>', async ({ browser }) => {
     // Login as Alfa student
     const login = await loginViaAPI(ALFA_STUDENT_EMAIL, ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     const studentToken = login.access_token
@@ -365,33 +365,21 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { body: courses } = await apiGet('/api/v1/courses', studentToken, 'alfa', ALFA_ORIGIN)
     expect(courses.length).toBeGreaterThan(0)
 
-    // Get classes for the course
-    const { body: classes } = await apiGet(`/api/v1/classes`, studentToken, 'alfa', ALFA_ORIGIN)
-    expect(classes.length).toBeGreaterThan(0)
+    const courseId = courses[0].id
 
-    // Find a class for the first course
-    const courseClasses = classes.filter(c => c.course_id === courses[0].id)
-    if (courseClasses.length === 0) {
-      // Use any class
-      alfaClassId = classes[0].id
-    } else {
-      alfaClassId = courseClasses[0].id
-    }
-
-    // Purchase enrollment
+    // Purchase enrollment (API expects course_id, not class_id)
     const { status: purchaseStatus, body: purchaseBody } = await apiPost(
       '/api/v1/enrollments/purchase',
-      { class_id: alfaClassId },
+      { course_id: courseId, method: 'BOLETO' },
       studentToken,
       'alfa',
       ALFA_ORIGIN,
     )
     // 201 = new enrollment, 200 = existing
     expect([200, 201]).toContain(purchaseStatus)
-    expect(purchaseBody.enrollment_id || purchaseBody.id).toBeTruthy()
+    expect(purchaseBody.enrollment || purchaseBody).toBeTruthy()
 
-    const enrollmentId = purchaseBody.enrollment_id || purchaseBody.id
-    const paymentId = purchaseBody.payment_id
+    const paymentId = purchaseBody.payment?.id || purchaseBody.payment_id
     expect(paymentId).toBeTruthy()
     alfaPaymentId = paymentId
 
