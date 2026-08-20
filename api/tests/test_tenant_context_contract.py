@@ -276,4 +276,5 @@ async def test_http_refresh_token_does_not_switch_tenant(client):
             assert resp2.status_code == 403
         else:
             # Se o refresh rejeitar por contexto, também é aceitável.
-            assert resp.status_code in (403, 404)
+            # 401 = refresh token tenant mismatch (auth security hardening)
+            assert resp.status_code in (401, 403, 404)
