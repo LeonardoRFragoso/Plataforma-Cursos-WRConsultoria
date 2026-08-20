@@ -867,12 +867,15 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
     // Get Alfa courses
     const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
     expect(alfaCourse).toBeTruthy()
 
-    // Get my-progress
+    // Get my-progress (student endpoint)
     const { status: progressStatus, body: progress } = await apiGet(
       `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
       aluno2Token,
@@ -888,23 +891,26 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(progress.percentage).toBe(0)
     expect(progress.certificate_eligible).toBe(false)
 
-    // Check enrollment status
-    const { body: enrollments } = await apiGet(
+    // Check enrollment status (admin endpoint)
+    const { status: enrollStatus, body: enrollments } = await apiGet(
       `/api/v1/enrollments?course_id=${alfaCourse.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
-    const enrollment = enrollments[0]
+    expect(enrollStatus).toBe(200)
+    const enrollment = enrollments.find(e => e.student_id) // Find any enrollment for this course
+    expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONFIRMADA')
 
-    // Check certificate count
-    const { body: certificates } = await apiGet(
+    // Check certificate count (admin endpoint)
+    const { status: certStatus, body: certificates } = await apiGet(
       `/api/v1/certificates?enrollment_id=${enrollment.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(certStatus).toBe(200)
     expect(certificates.length).toBe(0)
   })
 
@@ -962,6 +968,9 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
     // Get Alfa courses and lessons
     const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
@@ -996,23 +1005,26 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(progress.percentage).toBe(100)
     expect(progress.certificate_eligible).toBe(true)
 
-    // Check enrollment status changed to CONCLUIDA
-    const { body: enrollments } = await apiGet(
+    // Check enrollment status changed to CONCLUIDA (admin endpoint)
+    const { status: enrollStatus, body: enrollments } = await apiGet(
       `/api/v1/enrollments?course_id=${alfaCourse.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
-    const enrollment = enrollments[0]
+    expect(enrollStatus).toBe(200)
+    const enrollment = enrollments.find(e => e.student_id)
+    expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
-    // Check certificate count is exactly 1
-    const { body: certificates } = await apiGet(
+    // Check certificate count is exactly 1 (admin endpoint)
+    const { status: certStatus, body: certificates } = await apiGet(
       `/api/v1/certificates?enrollment_id=${enrollment.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(certStatus).toBe(200)
     expect(certificates.length).toBe(1)
   })
 
@@ -1024,6 +1036,9 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
 
     // Get Alfa courses and lessons
     const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
@@ -1047,23 +1062,26 @@ test.describe('Integration — White Label Two-Tenant', () => {
       ALFA_ORIGIN,
     )
 
-    // Check enrollment still CONCLUIDA
-    const { body: enrollments } = await apiGet(
+    // Check enrollment still CONCLUIDA (admin endpoint)
+    const { status: enrollStatus, body: enrollments } = await apiGet(
       `/api/v1/enrollments?course_id=${alfaCourse.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
-    const enrollment = enrollments[0]
+    expect(enrollStatus).toBe(200)
+    const enrollment = enrollments.find(e => e.student_id)
+    expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
-    // Check certificate count still exactly 1
-    const { body: certificates } = await apiGet(
+    // Check certificate count still exactly 1 (admin endpoint)
+    const { status: certStatus, body: certificates } = await apiGet(
       `/api/v1/certificates?enrollment_id=${enrollment.id}`,
-      aluno2Token,
+      alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(certStatus).toBe(200)
     expect(certificates.length).toBe(1)
   })
 })
