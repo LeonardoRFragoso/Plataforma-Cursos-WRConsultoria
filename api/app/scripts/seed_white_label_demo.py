@@ -204,11 +204,27 @@ async def _get_or_create_enrollment(db, tenant_id, student_id, class_id, price):
 
 
 async def _get_or_create_payment(db, tenant_id, enrollment_id, amount):
-    stmt = select(Payment).where(Payment.enrollment_id == enrollment_id)
+    """Get or create a demo payment, handling multiple pre-existing payments idempotently.
+    
+    If multiple payments exist for the same enrollment (e.g., from previous failed attempts),
+    select a deterministic existing payment rather than creating another.
+    
+    Preference order:
+    1. Approved payment (most likely to be legitimate)
+    2. Oldest payment (most deterministic)
+    """
+    stmt = select(Payment).where(Payment.enrollment_id == enrollment_id).order_by(
+        Payment.status == PaymentStatus.APROVADO,  # Approved first
+        Payment.created_at,  # Then oldest
+    )
     result = await db.execute(stmt)
-    payment = result.scalar_one_or_none()
-    if payment:
-        return payment, False
+    payments = result.scalars().all()
+    
+    if payments:
+        # Return the first (most preferred) existing payment
+        return payments[0], False
+    
+    # No payment exists; create a new one
     payment = Payment(
         tenant_id=tenant_id,
         enrollment_id=enrollment_id,

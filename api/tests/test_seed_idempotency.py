@@ -188,3 +188,73 @@ async def test_seed_refuses_in_production(monkeypatch):
     with pytest.raises(SystemExit) as exc_info:
         await main()
     assert exc_info.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_handles_multiple_preexisting_payments(monkeypatch):
+    """Seed succeeds even if multiple payments already exist for an enrollment.
+    
+    This tests the fix for the idempotency issue where pre-existing duplicate
+    Payment records would cause scalar_one_or_none() to fail.
+    
+    Scenario:
+    - Run seed once (creates enrollment + payment)
+    - Manually create a second payment for the same enrollment
+    - Run seed again
+    - Expected: seed succeeds, payment count does not increase
+    """
+    from app.core.config import settings
+    from app.core.context import current_tenant_id
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    # First run
+    await main()
+
+    # Get the first enrollment and create a duplicate payment
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+
+        # Find the first enrollment
+        result = await db.execute(select(Enrollment).limit(1))
+        enrollment = result.scalar_one()
+
+        # Create a second payment for the same enrollment
+        from app.models.payment import PaymentStatus, PaymentMethod
+        from app.core.utils import utc_now
+
+        second_payment = Payment(
+            tenant_id=enrollment.tenant_id,
+            enrollment_id=enrollment.id,
+            amount=enrollment.price,
+            status=PaymentStatus.PENDENTE,  # Different status to test preference
+            method=PaymentMethod.CARTAO,
+            created_at=utc_now(),
+        )
+        db.add(second_payment)
+        await db.commit()
+
+    # Count payments before second seed run
+    counts_before = await _count_all()
+    payments_before = counts_before["payments"]
+
+    # Second run should succeed despite multiple payments
+    await main()
+
+    # Count payments after second seed run
+    counts_after = await _count_all()
+    payments_after = counts_after["payments"]
+
+    # Payment count must not increase (seed selected existing, not created new)
+    assert payments_after == payments_before, (
+        f"Payment count increased: before={payments_before}, after={payments_after}. "
+        f"Seed did not handle multiple pre-existing payments correctly!"
+    )
