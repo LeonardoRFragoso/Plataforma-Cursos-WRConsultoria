@@ -141,6 +141,8 @@ async function apiGetBinary(path, token, slug, origin) {
 let wrToken, alfaToken, superToken
 let alfaCourseId, alfaClassId, alfaPaymentId, alfaCertId
 let alfaSubId
+// Aluno2 progression state
+let aluno2EnrollmentId, aluno2CertId, seg01CourseId, seg01Lessons
 
 test.describe('Integration — White Label Two-Tenant', () => {
   test.describe.configure({ mode: 'serial' })
@@ -858,7 +860,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(superAlfaStatus).toBe(401)
   })
 
-  test('M6. Aluno2 initial state: 0% progress, CONFIRMADA, 0 certificates', async () => {
+  test('M6. Aluno2 initial API state: 0% progress, CONFIRMADA, 0 certificates', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -870,15 +872,27 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(alfaAdminToken).toBeTruthy()
 
-    // Get Alfa courses
+    // Resolve SEG-01
     const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
     expect(coursesStatus).toBe(200)
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
     expect(alfaCourse).toBeTruthy()
+    seg01CourseId = alfaCourse.id
+
+    // Get lessons for SEG-01
+    const { status: lessonsStatus, body: lessons } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/lessons`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(lessonsStatus).toBe(200)
+    expect(lessons.length).toBe(5)
+    seg01Lessons = lessons
 
     // Get my-progress (student endpoint)
     const { status: progressStatus, body: progress } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
       aluno2Token,
       'alfa',
       ALFA_ORIGIN,
@@ -892,42 +906,79 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(progress.percentage).toBe(0)
     expect(progress.certificate_eligible).toBe(false)
 
-    // Resolve aluno2 student ID deterministically (admin endpoint)
-    const { status: studentsStatus, body: students } = await apiGet(
-      '/api/v1/students/',
-      alfaAdminToken,
+    // Resolve exact enrollment via student /me endpoint (includes course_id)
+    const { status: myEnrollStatus, body: myEnrollments } = await apiGet(
+      '/api/v1/enrollments/me',
+      aluno2Token,
       'alfa',
       ALFA_ORIGIN,
     )
-    expect(studentsStatus).toBe(200)
-    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
-    expect(aluno2Student).toBeTruthy()
-    const aluno2Id = aluno2Student.id
+    expect(myEnrollStatus).toBe(200)
+    const myEnrollment = myEnrollments.find(e => e.course_id === seg01CourseId)
+    expect(myEnrollment).toBeTruthy()
+    expect(myEnrollment.status).toBe('CONFIRMADA')
+    aluno2EnrollmentId = myEnrollment.id
 
-    // Check enrollment status (admin endpoint) - find exact aluno2+SEG01 enrollment
-    const { status: enrollStatus, body: enrollments } = await apiGet(
-      '/api/v1/enrollments/',
+    // Admin verifies enrollment status independently
+    const { status: adminEnrollStatus, body: adminEnrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
-    expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
-    expect(enrollment).toBeTruthy()
-    expect(enrollment.status).toBe('CONFIRMADA')
+    expect(adminEnrollStatus).toBe(200)
+    expect(adminEnrollment.status).toBe('CONFIRMADA')
 
     // Check certificate count for THAT exact enrollment (admin endpoint)
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
+      '/api/v1/certificates/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(certStatus).toBe(200)
-    expect(certificates.length).toBe(0)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(0)
   })
 
-  test('M7. Aluno2 after first required lesson: 25% progress', async () => {
+  test('M7. Aluno2 browser initial state: 0% visible progress', async ({ browser }) => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    // Login through the real UI
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Navigate to CourseLearn
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // Assert course name visible
+    const bodyText = await page.textContent('body')
+    expect(bodyText).toContain('Integração de Segurança')
+
+    // Assert lesson titles visible in order
+    expect(bodyText).toContain('Introdução')
+    expect(bodyText).toContain('Conceitos Fundamentais')
+    expect(bodyText).toContain('Procedimentos')
+    expect(bodyText).toContain('Aplicação Prática')
+    expect(bodyText).toContain('Encerramento')
+
+    // Assert 0% progress visible
+    expect(bodyText).toContain('0%')
+
+    await page.close()
+  })
+
+  test('M8. Aluno2 after first required lesson: 25% progress', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -936,18 +987,11 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
-    // Get Alfa courses and lessons
-    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
-    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
-    const { body: lessons } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
-      aluno2Token,
-      'alfa',
-      ALFA_ORIGIN,
-    )
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
 
-    // Get first required lesson
-    const firstRequired = lessons.find(l => l.is_required && l.order === 1)
+    // Get first required lesson (Introdução, order=1)
+    const firstRequired = seg01Lessons.find(l => l.is_required && l.order === 1)
     expect(firstRequired).toBeTruthy()
 
     // Complete first lesson
@@ -961,18 +1005,42 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(updateStatus).toBe(200)
 
     // Check progress
-    const { body: progress } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
       aluno2Token,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(progressStatus).toBe(200)
     expect(progress.completed_required).toBe(1)
+    expect(progress.required_lessons).toBe(4)
+    expect(progress.completed_optional).toBe(0)
     expect(progress.percentage).toBe(25)
     expect(progress.certificate_eligible).toBe(false)
+
+    // Admin verifies enrollment still CONFIRMADA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(enrollStatus).toBe(200)
+    expect(enrollment.status).toBe('CONFIRMADA')
+
+    // Certificate count still 0
+    const { status: certStatus, body: certificates } = await apiGet(
+      '/api/v1/certificates/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certStatus).toBe(200)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(0)
   })
 
-  test('M8-M9. Aluno2 after all required lessons: 100% progress, CONCLUIDA, 1 certificate', async () => {
+  test('M9. Aluno2 all required complete: 100%, CONCLUIDA, 1 certificate, optional incomplete', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -984,18 +1052,8 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(alfaAdminToken).toBeTruthy()
 
-    // Get Alfa courses and lessons
-    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
-    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
-    const { body: lessons } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
-      aluno2Token,
-      'alfa',
-      ALFA_ORIGIN,
-    )
-
-    // Complete all required lessons (skip optional)
-    const requiredLessons = lessons.filter(l => l.is_required)
+    // Complete remaining required lessons (2, 3, 4) - skip optional (5)
+    const requiredLessons = seg01Lessons.filter(l => l.is_required)
     for (const lesson of requiredLessons) {
       await apiPost(
         `/api/v1/lessons/${lesson.id}/progress`,
@@ -1007,50 +1065,41 @@ test.describe('Integration — White Label Two-Tenant', () => {
     }
 
     // Check progress
-    const { body: progress } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
       aluno2Token,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(progressStatus).toBe(200)
     expect(progress.completed_required).toBe(4)
+    expect(progress.required_lessons).toBe(4)
     expect(progress.completed_optional).toBe(0)
+    expect(progress.optional_lessons).toBe(1)
     expect(progress.percentage).toBe(100)
     expect(progress.certificate_eligible).toBe(true)
 
-    // Resolve aluno2 student ID deterministically (admin endpoint)
-    const { status: studentsStatus, body: students } = await apiGet(
-      '/api/v1/students/',
-      alfaAdminToken,
-      'alfa',
-      ALFA_ORIGIN,
-    )
-    expect(studentsStatus).toBe(200)
-    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
-    expect(aluno2Student).toBeTruthy()
-    const aluno2Id = aluno2Student.id
-
-    // Check enrollment status changed to CONCLUIDA (admin endpoint)
-    const { status: enrollStatus, body: enrollments } = await apiGet(
-      '/api/v1/enrollments/',
+    // Admin verifies enrollment is CONCLUIDA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
-    expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
-    // Check certificate count is exactly 1 (admin endpoint)
+    // Certificate count is exactly 1
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
+      '/api/v1/certificates/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(certStatus).toBe(200)
-    expect(certificates.length).toBe(1)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(1)
+    aluno2CertId = aluno2Certs[0].id
   })
 
   test('M10. Aluno2 certificate idempotency: repeat completion does not create duplicate', async () => {
@@ -1065,60 +1114,140 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(alfaAdminToken).toBeTruthy()
 
-    // Get Alfa courses and lessons
-    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
-    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
-    const { body: lessons } = await apiGet(
-      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
-      aluno2Token,
-      'alfa',
-      ALFA_ORIGIN,
-    )
-
     // Get last required lesson
-    const lastRequired = lessons.filter(l => l.is_required).pop()
+    const lastRequired = seg01Lessons.filter(l => l.is_required).pop()
+    expect(lastRequired).toBeTruthy()
 
     // Complete it again
-    await apiPost(
+    const { status: updateStatus } = await apiPost(
       `/api/v1/lessons/${lastRequired.id}/progress`,
       { completed: true, watched_seconds: 60 },
       aluno2Token,
       'alfa',
       ALFA_ORIGIN,
     )
+    expect(updateStatus).toBe(200)
 
-    // Resolve aluno2 student ID deterministically (admin endpoint)
-    const { status: studentsStatus, body: students } = await apiGet(
-      '/api/v1/students/',
-      alfaAdminToken,
+    // Progress remains 4/4 100%
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
+      aluno2Token,
       'alfa',
       ALFA_ORIGIN,
     )
-    expect(studentsStatus).toBe(200)
-    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
-    expect(aluno2Student).toBeTruthy()
-    const aluno2Id = aluno2Student.id
+    expect(progressStatus).toBe(200)
+    expect(progress.completed_required).toBe(4)
+    expect(progress.percentage).toBe(100)
 
-    // Check enrollment still CONCLUIDA (admin endpoint)
-    const { status: enrollStatus, body: enrollments } = await apiGet(
-      '/api/v1/enrollments/',
+    // Enrollment remains CONCLUIDA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
-    expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
-    // Check certificate count still exactly 1 (admin endpoint)
+    // Certificate count still exactly 1, same ID
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
+      '/api/v1/certificates/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(certStatus).toBe(200)
-    expect(certificates.length).toBe(1)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(1)
+    expect(aluno2Certs[0].id).toBe(aluno2CertId)
+  })
+
+  test('M11. Aluno2 browser final state: 100% visible, optional incomplete', async ({ browser }) => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    // Login through the real UI
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Navigate to CourseLearn
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // Assert 100% progress visible
+    const bodyText = await page.textContent('body')
+    expect(bodyText).toContain('100%')
+
+    // Assert course name and lessons visible
+    expect(bodyText).toContain('Integração de Segurança')
+    expect(bodyText).toContain('Introdução')
+    expect(bodyText).toContain('Conceitos Fundamentais')
+    expect(bodyText).toContain('Procedimentos')
+    expect(bodyText).toContain('Aplicação Prática')
+    expect(bodyText).toContain('Encerramento')
+
+    // Assert optional lesson is marked as Opcional
+    expect(bodyText).toContain('Opcional')
+
+    await page.close()
+  })
+
+  test('M12. Generated aluno2 certificate isolation: Alfa 200, WR 404', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    const { access_token: wrAdminToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrAdminToken).toBeTruthy()
+
+    // Verify certificate belongs to exact aluno2 enrollment
+    expect(aluno2CertId).toBeTruthy()
+    expect(aluno2EnrollmentId).toBeTruthy()
+
+    // Alfa authorized context: GET certificate = 200
+    const { status: alfaGetStatus, body: alfaCert } = await apiGet(
+      `/api/v1/certificates/${aluno2CertId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaGetStatus).toBe(200)
+    expect(alfaCert.enrollment_id).toBe(aluno2EnrollmentId)
+
+    // Alfa authorized context: DOWNLOAD certificate = 200
+    const downloadHeaders = { 'Authorization': `Bearer ${alfaAdminToken}`, 'x-tenant-slug': 'alfa', 'origin': ALFA_ORIGIN }
+    const downloadResp = await fetch(`${API_BASE}/api/v1/certificates/${aluno2CertId}/download`, { headers: downloadHeaders })
+    expect(downloadResp.status).toBe(200)
+    expect(downloadResp.headers.get('content-type')).toContain('application/pdf')
+    const pdfBuffer = await downloadResp.arrayBuffer()
+    expect(pdfBuffer.byteLength).toBeGreaterThan(0)
+    const pdfHeader = Buffer.from(pdfBuffer.slice(0, 4)).toString()
+    expect(pdfHeader).toBe('%PDF')
+
+    // WR admin context: GET same certificate = 404
+    const { status: wrGetStatus } = await apiGet(
+      `/api/v1/certificates/${aluno2CertId}`,
+      wrAdminToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrGetStatus).toBe(404)
+
+    // WR admin context: DOWNLOAD same certificate = 404
+    const wrDownloadHeaders = { 'Authorization': `Bearer ${wrAdminToken}`, 'x-tenant-slug': 'wr', 'origin': WR_ORIGIN }
+    const wrDownloadResp = await fetch(`${API_BASE}/api/v1/certificates/${aluno2CertId}/download`, { headers: wrDownloadHeaders })
+    expect(wrDownloadResp.status).toBe(404)
   })
 })

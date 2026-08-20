@@ -432,7 +432,7 @@ jobs:
         run: cd api && python -m app.scripts.seed_white_label_demo
 
       # ─── Verify counts match ───
-      - name: Verify idempotency (counts unchanged)
+      - name: Verify idempotency (counts unchanged + deterministic curriculum)
         run: |
           cd api && python -c "
           import asyncio
@@ -465,8 +465,21 @@ jobs:
               'subscriptions': ${{ steps.counts1.outputs.subscriptions }},
           }
 
+          # Deterministic curriculum invariants
+          DETERMINISTIC_LESSONS = 10
+          DETERMINISTIC_PROGRESS = 8
+          EXPECTED_TITLES = [
+              'Introdução',
+              'Conceitos Fundamentais',
+              'Procedimentos',
+              'Aplicação Prática',
+              'Encerramento',
+          ]
+          EXPECTED_ORDERS = [1, 2, 3, 4, 5]
+
           async def main():
               async with AsyncSessionLocal() as db:
+                  # Verify idempotency (second run counts match first run)
                   for label, model in [
                       ('tenants', Tenant), ('users', User), ('students', Student),
                       ('courses', Course), ('classes', Class), ('enrollments', Enrollment),
@@ -481,9 +494,74 @@ jobs:
                           raise SystemExit(1)
                       print(f'OK: {label}={count}')
 
+                  # Assert exact deterministic lesson count
+                  lesson_count = (await db.execute(select(func.count()).select_from(Lesson))).scalar()
+                  assert lesson_count == DETERMINISTIC_LESSONS, f'lessons={lesson_count} expected {DETERMINISTIC_LESSONS}'
+                  print(f'OK: deterministic lessons={lesson_count}')
+
+                  # Assert exact deterministic progress count
+                  progress_count = (await db.execute(select(func.count()).select_from(LessonProgress))).scalar()
+                  assert progress_count == DETERMINISTIC_PROGRESS, f'lesson_progress={progress_count} expected {DETERMINISTIC_PROGRESS}'
+                  print(f'OK: deterministic lesson_progress={progress_count}')
+
+                  # Resolve tenants by slug
+                  wr_tenant = (await db.execute(select(Tenant).where(Tenant.slug == 'wr'))).scalar_one()
+                  alfa_tenant = (await db.execute(select(Tenant).where(Tenant.slug == 'alfa'))).scalar_one()
+
+                  # Resolve courses by code
+                  wr_course = (await db.execute(select(Course).where(Course.code == 'NR-10', Course.tenant_id == wr_tenant.id))).scalar_one()
+                  alfa_course = (await db.execute(select(Course).where(Course.code == 'SEG-01', Course.tenant_id == alfa_tenant.id))).scalar_one()
+
+                  # Verify WR NR-10 curriculum: 5 lessons, orders [1,2,3,4,5], titles, 4 required, 1 optional
+                  wr_lessons = (await db.execute(
+                      select(Lesson).where(Lesson.course_id == wr_course.id).order_by(Lesson.order)
+                  )).scalars().all()
+                  assert len(wr_lessons) == 5, f'WR lessons={len(wr_lessons)} expected 5'
+                  wr_orders = [l.order for l in wr_lessons]
+                  assert wr_orders == EXPECTED_ORDERS, f'WR orders={wr_orders} expected {EXPECTED_ORDERS}'
+                  wr_titles = [l.title for l in wr_lessons]
+                  assert wr_titles == EXPECTED_TITLES, f'WR titles={wr_titles} expected {EXPECTED_TITLES}'
+                  wr_required = sum(1 for l in wr_lessons if l.is_required)
+                  wr_optional = sum(1 for l in wr_lessons if not l.is_required)
+                  assert wr_required == 4, f'WR required={wr_required} expected 4'
+                  assert wr_optional == 1, f'WR optional={wr_optional} expected 1'
+                  print(f'OK: WR NR-10 curriculum verified (5 lessons, orders={wr_orders}, 4 required, 1 optional)')
+
+                  # Verify Alfa SEG-01 curriculum: 5 lessons, orders [1,2,3,4,5], titles, 4 required, 1 optional
+                  alfa_lessons = (await db.execute(
+                      select(Lesson).where(Lesson.course_id == alfa_course.id).order_by(Lesson.order)
+                  )).scalars().all()
+                  assert len(alfa_lessons) == 5, f'Alfa lessons={len(alfa_lessons)} expected 5'
+                  alfa_orders = [l.order for l in alfa_lessons]
+                  assert alfa_orders == EXPECTED_ORDERS, f'Alfa orders={alfa_orders} expected {EXPECTED_ORDERS}'
+                  alfa_titles = [l.title for l in alfa_lessons]
+                  assert alfa_titles == EXPECTED_TITLES, f'Alfa titles={alfa_titles} expected {EXPECTED_TITLES}'
+                  alfa_required = sum(1 for l in alfa_lessons if l.is_required)
+                  alfa_optional = sum(1 for l in alfa_lessons if not l.is_required)
+                  assert alfa_required == 4, f'Alfa required={alfa_required} expected 4'
+                  assert alfa_optional == 1, f'Alfa optional={alfa_optional} expected 1'
+                  print(f'OK: Alfa SEG-01 curriculum verified (5 lessons, orders={alfa_orders}, 4 required, 1 optional)')
+
+                  # Verify no duplicate lesson rows (tenant_id, course_id, order)
+                  all_lessons = (await db.execute(select(Lesson))).scalars().all()
+                  seen = set()
+                  for l in all_lessons:
+                      key = (str(l.tenant_id), str(l.course_id), l.order)
+                      assert key not in seen, f'Duplicate lesson: {key}'
+                      seen.add(key)
+                  print(f'OK: no duplicate lesson rows ({len(all_lessons)} lessons)')
+
+                  # Verify no duplicate LessonProgress rows
+                  all_progress = (await db.execute(select(LessonProgress))).scalars().all()
+                  prog_seen = set()
+                  for p in all_progress:
+                      key = (str(p.tenant_id), str(p.lesson_id), str(p.student_id))
+                      assert key not in prog_seen, f'Duplicate progress: {key}'
+                      prog_seen.add(key)
+                  print(f'OK: no duplicate lesson_progress rows ({len(all_progress)} progress)')
+
           asyncio.run(main())
-          print('Idempotency verified: all counts stable across two seed runs.')
-          print(f'Deterministic curriculum: lessons=10, lesson_progress=8')
+          print('Idempotency + deterministic curriculum verified.')
           "
 
       # ─── Verify SUPER_ADMIN exists and is unique ───
