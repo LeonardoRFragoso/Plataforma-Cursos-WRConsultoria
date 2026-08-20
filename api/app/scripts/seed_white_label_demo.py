@@ -85,10 +85,23 @@ async def _get_or_create_tenant(db, slug, defaults):
 
 
 async def _get_or_create_user(db, email, tenant_id, full_name, role, password):
+    """Get or create a demo user, syncing the password hash for existing users.
+
+    The demo seed is intentionally deterministic: when the DEMO_*_PASSWORD
+    environment variables change, re-running the seed synchronizes the
+    stored password_hash so the demo credentials always match the env.
+
+    This behavior is DEMO-SEED ONLY. Ordinary registration and production
+    user management must never silently overwrite passwords.
+    """
     stmt = select(User).where(User.email == email, User.tenant_id == tenant_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user:
+        # Sync password hash with the current env password so the demo
+        # seed remains deterministic across password rotations.
+        user.password_hash = hash_password(password)
+        await db.flush()
         return user, False
     user = User(
         email=email,

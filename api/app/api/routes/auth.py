@@ -1,12 +1,13 @@
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.constants import WR_TENANT_ID
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
@@ -44,6 +45,22 @@ class ActivateRequest(BaseModel):
 
 router = APIRouter()
 
+# Environments where raw one-time tokens may be returned in responses.
+# Only local development and automated test environments.
+_LOCAL_TOKEN_RETURN_ENVS = frozenset({"development", "dev", "test", "testing"})
+
+_GENERIC_RESET_RESPONSE = {"detail": "If the email exists, a reset link was sent"}
+
+
+def _current_env() -> str:
+    return getattr(settings, "ENVIRONMENT", "").lower()
+
+
+def _can_return_token() -> bool:
+    """Only local dev/test environments may return raw one-time tokens."""
+    return _current_env() in _LOCAL_TOKEN_RETURN_ENVS
+
+
 def is_cpf(identifier: str) -> bool:
     """Verifica se o identificador é um CPF (apenas números, 11 dígitos)"""
     cpf_pattern = r'^\d{11}$'
@@ -53,6 +70,28 @@ def is_email(identifier: str) -> bool:
     """Verifica se o identificador é um e-mail"""
     email_pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
     return bool(re.match(email_pattern, identifier))
+
+
+def _resolve_request_tenant_id(request: Request) -> UUID:
+    """Resolve the tenant_id from the request context set by TenantResolver middleware.
+
+    Returns the resolved tenant UUID. Falls back to WR_TENANT_ID if unset
+    (e.g. in test environments where the middleware may not have run).
+    """
+    # ASGI scope (most reliable propagation)
+    scope_tenant = request.scope.get("resolved_tenant_id")
+    if scope_tenant:
+        try:
+            return UUID(scope_tenant)
+        except (ValueError, TypeError):
+            pass
+    # request.state
+    state_tenant = getattr(request.state, "tenant_id", None)
+    if state_tenant:
+        return state_tenant
+    # Fallback for test environments
+    return WR_TENANT_ID
+
 
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -106,13 +145,26 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     return user
 
 @router.post("/login", response_model=TokenResponse)
-async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(
+    credentials: UserLogin,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Login com CPF ou e-mail.
     Aceita identifier como CPF (11 dígitos) ou e-mail.
+
+    Tenant boundary: the resolved request tenant is authoritative for
+    normal ADMIN/STUDENT logins. A user belonging to a different tenant
+    is rejected with a generic 401 to avoid account/tenant enumeration.
+
+    SUPER_ADMIN is bound to the WR/master tenant and may only login
+    through the WR tenant context.
     """
+    resolved_tenant_id = _resolve_request_tenant_id(request)
+
     user = None
-    
+
     if is_cpf(credentials.identifier):
         stmt = select(User).where(User.cpf == credentials.identifier)
         result = await db.execute(stmt)
@@ -126,19 +178,35 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Identifier must be a valid CPF (11 digits) or email",
         )
-    
+
     if not user or not user.password_hash or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is inactive",
         )
-    
+
+    # Tenant boundary enforcement at the application layer.
+    # SUPER_ADMIN is bound to WR/master tenant and may only login via WR context.
+    # Normal ADMIN/STUDENT must match the resolved request tenant exactly.
+    if user.role == UserRole.SUPER_ADMIN:
+        if user.tenant_id != WR_TENANT_ID or resolved_tenant_id != WR_TENANT_ID:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+    else:
+        if user.tenant_id != resolved_tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role,
@@ -149,7 +217,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         "role": user.role,
         "tenant_id": str(user.tenant_id),
     })
-    
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -163,23 +231,54 @@ async def refresh_token(
 ):
     payload = decode_token(request.refresh_token)
     user_id = payload.get("sub")
-    
+
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
-    
+
+    # Tenant boundary: refresh token tenant must match the resolved request tenant.
+    # The refresh endpoint receives a body, not a Request, so we resolve
+    # the tenant from the ContextVar set by the TenantResolver middleware.
+    from app.core.context import current_tenant_id
+    resolved_tenant = current_tenant_id.get() or WR_TENANT_ID
+
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id:
+        try:
+            token_tenant_uuid = UUID(token_tenant_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+    else:
+        token_tenant_uuid = None
+
+    if token_tenant_uuid is not None and token_tenant_uuid != resolved_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
     stmt = select(User).where(User.id == UUID(user_id))
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="Invalid refresh token",
         )
-    
+
+    # Verify user tenant matches both token and request tenant.
+    if user.tenant_id != resolved_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
     access_token = create_access_token({
         "sub": user_id,
         "role": user.role,
@@ -190,7 +289,7 @@ async def refresh_token(
         "role": user.role,
         "tenant_id": str(user.tenant_id),
     })
-    
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -218,33 +317,65 @@ async def get_current_user_info(
 @router.post("/forgot-password")
 async def forgot_password(
     payload: ForgotPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(User).where(User.email == payload.email)
+    """Request a password reset link.
+
+    Tenant boundary: only users belonging to the resolved request tenant
+    receive a reset token. The response is identical regardless of whether
+    the email exists, to prevent account enumeration.
+
+    Raw reset tokens are returned ONLY in local development/test
+    environments. In staging and production, the token is never exposed
+    even when SMTP is not configured.
+    """
+    resolved_tenant_id = _resolve_request_tenant_id(request)
+
+    stmt = select(User).where(
+        User.email == payload.email,
+        User.tenant_id == resolved_tenant_id,
+    )
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
     if not user:
-        return {"detail": "If the email exists, a reset link was sent"}
+        # Generic non-enumerating response — identical to the success case.
+        return dict(_GENERIC_RESET_RESPONSE)
+
+    # SUPER_ADMIN reset only allowed through WR/master context.
+    if user.role == UserRole.SUPER_ADMIN and resolved_tenant_id != WR_TENANT_ID:
+        return dict(_GENERIC_RESET_RESPONSE)
 
     raw, _token = await OneTimeTokenService.create(
         db, str(user.id), "reset", ttl_hours=1
     )
     await db.commit()
 
-    # Em produção enviar e-mail via SMTP; em dev retornar o token
-    if all([settings.SMTP_SERVER, settings.SMTP_USER, settings.SMTP_PASSWORD]):
-        # Envio de e-mail omitido para simplicidade
-        return {"detail": "If the email exists, a reset link was sent"}
+    # In local dev/test, return the raw token so automated tests can use it.
+    # In staging/production, NEVER expose the token — even without SMTP.
+    if _can_return_token():
+        return {"reset_token": raw}
 
-    return {"reset_token": raw}
+    # Staging/production: generic response, no token leakage.
+    # If SMTP is configured, an email would be sent here.
+    # If SMTP is not configured, no email is sent but the token is NOT exposed.
+    return dict(_GENERIC_RESET_RESPONSE)
 
 
 @router.post("/reset-password")
 async def reset_password(
     payload: ResetPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    """Reset password using a one-time token.
+
+    Tenant boundary: the token's owning user must belong to the resolved
+    request tenant. Cross-tenant reset is rejected with a generic 400.
+    """
+    resolved_tenant_id = _resolve_request_tenant_id(request)
+
     token = await OneTimeTokenService.consume(db, payload.token, "reset")
     if not token:
         raise HTTPException(
@@ -258,8 +389,15 @@ async def reset_password(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token",
+        )
+
+    # Tenant boundary: user must belong to the resolved request tenant.
+    if user.tenant_id != resolved_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token",
         )
 
     user.password_hash = hash_password(payload.new_password)
@@ -270,8 +408,16 @@ async def reset_password(
 @router.post("/activate")
 async def activate(
     payload: ActivateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    """Activate an account using a one-time activation token.
+
+    Tenant boundary: the token's owning user must belong to the resolved
+    request tenant. Cross-tenant activation is rejected with a generic 400.
+    """
+    resolved_tenant_id = _resolve_request_tenant_id(request)
+
     token = await OneTimeTokenService.consume(db, payload.token, "activation")
     if not token:
         raise HTTPException(
@@ -285,8 +431,15 @@ async def activate(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired activation token",
+        )
+
+    # Tenant boundary: user must belong to the resolved request tenant.
+    if user.tenant_id != resolved_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired activation token",
         )
 
     user.password_hash = hash_password(payload.new_password)
