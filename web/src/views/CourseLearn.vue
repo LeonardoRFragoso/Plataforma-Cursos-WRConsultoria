@@ -13,7 +13,14 @@
     <div v-else class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div class="mb-4">
         <h1 class="text-2xl font-bold text-secondary-900">{{ course.name }}</h1>
-        <p class="text-sm text-gray-600">Progresso do curso: {{ progress.percentage || 0 }}%</p>
+        <p class="text-sm text-gray-600">
+          Progresso do curso:
+          <span data-testid="course-progress-percent">{{ progress.percentage || 0 }}%</span>
+        </p>
+        <p class="text-sm text-gray-600">
+          Aulas obrigatórias concluídas:
+          <span data-testid="course-progress-required">{{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }}</span>
+        </p>
         <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
           <div
             class="bg-primary-600 h-2.5 rounded-full transition-all"
@@ -33,6 +40,11 @@
               <button
                 v-for="lesson in lessons"
                 :key="lesson.id"
+                data-testid="lesson-row"
+                :data-lesson-id="lesson.id"
+                :data-lesson-order="lesson.order"
+                :data-lesson-required="lesson.is_required ? 'true' : 'false'"
+                :data-lesson-completed="lesson.completed ? 'true' : 'false'"
                 @click="selectLesson(lesson)"
                 :class="[
                   'w-full text-left p-3 rounded-md text-sm flex items-center justify-between',
@@ -41,12 +53,13 @@
                     : 'hover:bg-gray-100 text-gray-700'
                 ]"
               >
-                <span class="truncate flex-1 mr-2">
+                <span class="truncate flex-1 mr-2" data-testid="lesson-title">
                   {{ lesson.order + 1 }}. {{ lesson.title }}
                 </span>
-                <span v-if="lesson.completed" class="text-green-600">✓</span>
+                <span v-if="lesson.completed" data-testid="lesson-completed" class="text-green-600">✓</span>
                 <span v-else-if="lesson.is_free_preview" class="text-xs text-primary-600">Preview</span>
-                <span v-else-if="!lesson.is_required" class="text-xs text-gray-400">Opcional</span>
+                <span v-else-if="!lesson.is_required" data-testid="lesson-optional" class="text-xs text-gray-400">Opcional</span>
+                <span v-else data-testid="lesson-required" class="text-xs text-gray-400">Obrigatória</span>
               </button>
               <p v-if="lessons.length === 0" class="text-gray-500 text-sm">Nenhuma aula disponível.</p>
             </div>

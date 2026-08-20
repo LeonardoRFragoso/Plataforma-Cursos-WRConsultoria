@@ -965,20 +965,89 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const bodyText = await page.textContent('body')
     expect(bodyText).toContain('Integração de Segurança')
 
-    // Assert lesson titles visible in order
-    expect(bodyText).toContain('Introdução')
-    expect(bodyText).toContain('Conceitos Fundamentais')
-    expect(bodyText).toContain('Procedimentos')
-    expect(bodyText).toContain('Aplicação Prática')
-    expect(bodyText).toContain('Encerramento')
+    // ─── EXACT DOM ORDER via data-testid selectors ───
+    // Read the lesson rows in document order and assert the exact title
+    // sequence. This proves order structurally — not via five loose
+    // bodyText.toContain() calls. Order is verified via the
+    // data-lesson-order attribute (the authoritative lesson order from
+    // the API), and each row's title must contain the expected name.
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
 
-    // Assert 0% progress visible
-    expect(bodyText).toContain('0%')
+    const rowDescriptors = await rows.evaluateAll((els) =>
+      els.map((el) => ({
+        order: parseInt(el.getAttribute('data-lesson-order') || '0', 10),
+        title: el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || '',
+      }))
+    )
+
+    // Exact DOM order proven by the order attribute sequence.
+    expect(rowDescriptors.map((r) => r.order)).toEqual([1, 2, 3, 4, 5])
+
+    // Each row, in DOM order, must contain the expected lesson name.
+    const expectedNames = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    rowDescriptors.forEach((r, idx) => {
+      expect(r.title).toContain(expectedNames[idx])
+    })
+
+    // ─── 0% progress ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('0%')
+
+    // ─── 0/4 required completed ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('0/4')
+
+    // ─── Four required lessons visually incomplete ───
+    // Each required lesson row must report data-lesson-completed="false"
+    // and NOT contain a [data-testid="lesson-completed"] indicator.
+    const requiredRows = rows.filter({
+      has: page.locator('[data-lesson-required="true"]'),
+    })
+    await expect(requiredRows).toHaveCount(4)
+
+    const requiredCompletedFlags = await requiredRows.evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-lesson-completed'))
+    )
+    expect(requiredCompletedFlags).toEqual(['false', 'false', 'false', 'false'])
+
+    // No required row should render the completed indicator span.
+    const requiredCompletedSpans = await requiredRows.evaluateAll((els) =>
+      els.map((el) => !!el.querySelector('[data-testid="lesson-completed"]'))
+    )
+    expect(requiredCompletedSpans).toEqual([false, false, false, false])
+
+    // ─── Encerramento: optional + incomplete ───
+    const encerramentoRow = rows.filter({
+      hasText: 'Encerramento',
+    })
+    await expect(encerramentoRow).toHaveCount(1)
+    const encState = await encerramentoRow.evaluateAll((els) =>
+      els.map((el) => ({
+        required: el.getAttribute('data-lesson-required'),
+        completed: el.getAttribute('data-lesson-completed'),
+        hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+      }))
+    )
+    expect(encState).toHaveLength(1)
+    expect(encState[0].required).toBe('false')
+    expect(encState[0].completed).toBe('false')
+    expect(encState[0].hasOptional).toBe(true)
+    expect(encState[0].hasCompleted).toBe(false)
 
     await page.close()
   })
 
-  test('M8. Aluno2 after first required lesson: 25% progress', async () => {
+  test('M8. Aluno2 after first required lesson: 25% progress', async ({ browser }) => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -1004,7 +1073,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(updateStatus).toBe(200)
 
-    // Check progress
+    // Check progress via API
     const { status: progressStatus, body: progress } = await apiGet(
       `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
       aluno2Token,
@@ -1038,6 +1107,86 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(certStatus).toBe(200)
     const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
     expect(aluno2Certs.length).toBe(0)
+
+    // ─── REAL BROWSER ASSERTION ───
+    // Open a real logged-in aluno2 Alfa browser and load CourseLearn so
+    // the 25% / 1/4 state and per-lesson completion indicators are
+    // asserted against the rendered DOM — not just the API.
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Reload CourseLearn so it fetches fresh progress after the API completion.
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // ─── 25% ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('25%')
+
+    // ─── 1/4 ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('1/4')
+
+    // ─── Per-lesson completion state in DOM order ───
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
+
+    const lessonStates = await rows.evaluateAll((els) =>
+      els.map((el) => {
+        const title = el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || ''
+        return {
+          title,
+          required: el.getAttribute('data-lesson-required'),
+          completed: el.getAttribute('data-lesson-completed'),
+          hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+          hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        }
+      })
+    )
+
+    // Introdução: completed
+    const intro = lessonStates.find((l) => l.title.includes('Introdução'))
+    expect(intro).toBeTruthy()
+    expect(intro.required).toBe('true')
+    expect(intro.completed).toBe('true')
+    expect(intro.hasCompleted).toBe(true)
+
+    // Remaining required lessons: incomplete
+    const conc = lessonStates.find((l) => l.title.includes('Conceitos Fundamentais'))
+    expect(conc).toBeTruthy()
+    expect(conc.required).toBe('true')
+    expect(conc.completed).toBe('false')
+    expect(conc.hasCompleted).toBe(false)
+
+    const proc = lessonStates.find((l) => l.title.includes('Procedimentos'))
+    expect(proc).toBeTruthy()
+    expect(proc.required).toBe('true')
+    expect(proc.completed).toBe('false')
+    expect(proc.hasCompleted).toBe(false)
+
+    const apl = lessonStates.find((l) => l.title.includes('Aplicação Prática'))
+    expect(apl).toBeTruthy()
+    expect(apl.required).toBe('true')
+    expect(apl.completed).toBe('false')
+    expect(apl.hasCompleted).toBe(false)
+
+    // Encerramento: optional + incomplete
+    const enc = lessonStates.find((l) => l.title.includes('Encerramento'))
+    expect(enc).toBeTruthy()
+    expect(enc.required).toBe('false')
+    expect(enc.completed).toBe('false')
+    expect(enc.hasOptional).toBe(true)
+    expect(enc.hasCompleted).toBe(false)
+
+    await page.close()
   })
 
   test('M9. Aluno2 all required complete: 100%, CONCLUIDA, 1 certificate, optional incomplete', async () => {
@@ -1182,20 +1331,65 @@ test.describe('Integration — White Label Two-Tenant', () => {
     await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
     await page.waitForTimeout(3000)
 
-    // Assert 100% progress visible
-    const bodyText = await page.textContent('body')
-    expect(bodyText).toContain('100%')
+    // ─── 100% ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('100%')
 
-    // Assert course name and lessons visible
-    expect(bodyText).toContain('Integração de Segurança')
-    expect(bodyText).toContain('Introdução')
-    expect(bodyText).toContain('Conceitos Fundamentais')
-    expect(bodyText).toContain('Procedimentos')
-    expect(bodyText).toContain('Aplicação Prática')
-    expect(bodyText).toContain('Encerramento')
+    // ─── 4/4 ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('4/4')
 
-    // Assert optional lesson is marked as Opcional
-    expect(bodyText).toContain('Opcional')
+    // ─── Per-lesson completion state in DOM order ───
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
+
+    const lessonStates = await rows.evaluateAll((els) =>
+      els.map((el) => {
+        const title = el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || ''
+        return {
+          title,
+          required: el.getAttribute('data-lesson-required'),
+          completed: el.getAttribute('data-lesson-completed'),
+          hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+          hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        }
+      })
+    )
+
+    // ─── Four required lessons completed ───
+    const intro = lessonStates.find((l) => l.title.includes('Introdução'))
+    expect(intro).toBeTruthy()
+    expect(intro.required).toBe('true')
+    expect(intro.completed).toBe('true')
+    expect(intro.hasCompleted).toBe(true)
+
+    const conc = lessonStates.find((l) => l.title.includes('Conceitos Fundamentais'))
+    expect(conc).toBeTruthy()
+    expect(conc.required).toBe('true')
+    expect(conc.completed).toBe('true')
+    expect(conc.hasCompleted).toBe(true)
+
+    const proc = lessonStates.find((l) => l.title.includes('Procedimentos'))
+    expect(proc).toBeTruthy()
+    expect(proc.required).toBe('true')
+    expect(proc.completed).toBe('true')
+    expect(proc.hasCompleted).toBe(true)
+
+    const apl = lessonStates.find((l) => l.title.includes('Aplicação Prática'))
+    expect(apl).toBeTruthy()
+    expect(apl.required).toBe('true')
+    expect(apl.completed).toBe('true')
+    expect(apl.hasCompleted).toBe(true)
+
+    // ─── Encerramento: optional + NOT completed ───
+    const enc = lessonStates.find((l) => l.title.includes('Encerramento'))
+    expect(enc).toBeTruthy()
+    expect(enc.required).toBe('false')
+    expect(enc.completed).toBe('false')
+    expect(enc.hasOptional).toBe(true)
+    expect(enc.hasCompleted).toBe(false)
 
     await page.close()
   })

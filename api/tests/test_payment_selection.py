@@ -1,24 +1,41 @@
 """Focused regression tests for deterministic payment selection logic.
 
-Tests the actual selection behavior used by the demo seed's _get_or_create_payment():
+These tests execute the ACTUAL production selector
+(`app.services.payment_selection.select_payment_for_enrollment`) and the
+production get-or-create path
+(`app.services.payment_selection.get_or_create_payment`) — the same code
+used by the demo seed's `_get_or_create_payment()`.
+
+There is NO test-only duplicated selector in this file. If the production
+selection logic changes, these tests exercise the change directly.
 
 CASE A: approved beats pending (regardless of timestamp)
 CASE B: two approved → oldest approved wins
-CASE C: same priority + same timestamp → stable UUID tie-break
+CASE C: same priority + same timestamp → stable UUID/id tie-break
+CASE D: opposite insertion order → same contractual result
 
-These tests use the API client and proper ORM fixtures.
-No RLS bypass. No destructive SQL.
+For every case where an existing payment is selected, the tests also
+assert:
+  - `created == False` (no new payment row inserted)
+  - the total payment count for the enrollment is unchanged
+
+No RLS bypass. No destructive SQL. No unique enrollment constraint.
+No payment history deletion.
 """
 
 import uuid
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import case, select
+from sqlalchemy import func, select
 
 from app.core.database import AsyncSessionLocal
 from app.core.utils import utc_now
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.services.payment_selection import (
+    get_or_create_payment,
+    select_payment_for_enrollment,
+)
 
 
 async def _create_test_enrollment(client, admin_headers):
@@ -119,24 +136,22 @@ async def _create_payment_direct(db, tenant_id, enrollment_id, status, created_a
     return payment
 
 
-async def _select_payment(db, enrollment_id):
-    """Replicate the deterministic selection logic from seed_white_label_demo.py."""
-    stmt = select(Payment).where(Payment.enrollment_id == enrollment_id).order_by(
-        case(
-            (Payment.status == PaymentStatus.APROVADO, 0),
-            else_=1
-        ),
-        Payment.created_at,
-        Payment.id,
+async def _count_payments(db, enrollment_id):
+    """Count payment rows for an enrollment (read-only)."""
+    stmt = select(func.count()).select_from(Payment).where(
+        Payment.enrollment_id == enrollment_id
     )
     result = await db.execute(stmt)
-    payments = result.scalars().all()
-    return payments[0] if payments else None
+    return int(result.scalar_one())
 
 
 @pytest.mark.asyncio
 async def test_payment_selection_approved_beats_pending(client, admin_headers):
-    """CASE A: APROVADO payment selected over PENDENTE even if PENDENTE is older."""
+    """CASE A: APROVADO payment selected over PENDENTE even if PENDENTE is older.
+
+    Uses the production selector `select_payment_for_enrollment` and the
+    production get-or-create path `get_or_create_payment`.
+    """
     from app.core.constants import WR_TENANT_ID
 
     enrollment_id = await _create_test_enrollment(client, admin_headers)
@@ -154,12 +169,29 @@ async def test_payment_selection_approved_beats_pending(client, admin_headers):
         )
         await db.commit()
 
+    # Snapshot the payment count BEFORE invoking the production get-or-create.
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
-        selected = await _select_payment(db, enrollment_id)
-        assert selected is not None
-        assert selected.id == approved.id, "APROVADO must be selected over PENDENTE even if newer"
-        assert selected.status == PaymentStatus.APROVADO
+        count_before = await _count_payments(db, enrollment_id)
+
+    # Invoke the PRODUCTION get-or-create path (same code the seed uses).
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        selected, created = await get_or_create_payment(
+            db, WR_TENANT_ID, enrollment_id, amount=299.90
+        )
+        await db.commit()
+
+    assert selected is not None
+    assert created is False, "An existing payment was selected — created MUST be False"
+    assert selected.id == approved.id, "APROVADO must be selected over PENDENTE even if newer"
+    assert selected.status == PaymentStatus.APROVADO
+
+    # Payment count MUST be unchanged — no new row inserted.
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        count_after = await _count_payments(db, enrollment_id)
+    assert count_after == count_before, "Payment count must be unchanged when selecting existing"
 
 
 @pytest.mark.asyncio
@@ -184,18 +216,32 @@ async def test_payment_selection_two_approved_oldest_wins(client, admin_headers)
 
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
-        selected = await _select_payment(db, enrollment_id)
-        assert selected is not None
-        assert selected.id == older.id, "Oldest APROVADO must be selected"
-        assert selected.status == PaymentStatus.APROVADO
+        count_before = await _count_payments(db, enrollment_id)
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        selected, created = await get_or_create_payment(
+            db, WR_TENANT_ID, enrollment_id, amount=299.90
+        )
+        await db.commit()
+
+    assert selected is not None
+    assert created is False, "An existing payment was selected — created MUST be False"
+    assert selected.id == older.id, "Oldest APROVADO must be selected"
+    assert selected.status == PaymentStatus.APROVADO
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        count_after = await _count_payments(db, enrollment_id)
+    assert count_after == count_before, "Payment count must be unchanged when selecting existing"
 
 
 @pytest.mark.asyncio
 async def test_payment_selection_stable_tie_break(client, admin_headers):
-    """CASE C: Same priority + same created_at → stable UUID tie-break.
+    """CASE C: Same priority + same created_at → stable UUID/id tie-break.
 
-    The selection orders by Payment.id (UUID) as final tie-breaker.
-    This is deterministic regardless of insertion order.
+    The production selector orders by Payment.id (UUID) as the final
+    tie-breaker. This is deterministic regardless of insertion order.
     """
     from app.core.constants import WR_TENANT_ID
 
@@ -212,23 +258,51 @@ async def test_payment_selection_stable_tie_break(client, admin_headers):
         )
         await db.commit()
 
-    # Run selection multiple times - must always return the same payment
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        count_before = await _count_payments(db, enrollment_id)
+
+    # Run the PRODUCTION selector multiple times — must always return the same row.
     selected_ids = set()
     for _ in range(5):
         async with AsyncSessionLocal() as db:
             db.info["tenant_id"] = WR_TENANT_ID
-            selected = await _select_payment(db, enrollment_id)
+            selected = await select_payment_for_enrollment(db, enrollment_id)
+            assert selected is not None
             selected_ids.add(str(selected.id))
 
     assert len(selected_ids) == 1, f"Selection must be stable, got {selected_ids}"
-    # The selected payment must be the one with the smaller UUID (deterministic order by id)
+    # The selected payment must be the one with the smaller UUID (deterministic order by id).
     expected_id = min(str(p1.id), str(p2.id))
-    assert str(selected.id) == expected_id, f"Expected {expected_id}, got {selected.id}"
+    assert next(iter(selected_ids)) == expected_id, (
+        f"Expected {expected_id}, got {selected_ids}"
+    )
+
+    # Now exercise the production get-or-create path: it must select (not create).
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        selected, created = await get_or_create_payment(
+            db, WR_TENANT_ID, enrollment_id, amount=299.90
+        )
+        await db.commit()
+
+    assert created is False, "An existing payment was selected — created MUST be False"
+    assert str(selected.id) == expected_id
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        count_after = await _count_payments(db, enrollment_id)
+    assert count_after == count_before, "Payment count must be unchanged when selecting existing"
 
 
 @pytest.mark.asyncio
 async def test_payment_selection_insertion_order_independence(client, admin_headers):
-    """Verify selection does not depend on database insertion order."""
+    """CASE D: Selection does not depend on database insertion order.
+
+    Two enrollments receive the same two APROVADO payments in opposite
+    insertion orders. The production selector must pick the older
+    payment in both cases.
+    """
     from app.core.constants import WR_TENANT_ID
 
     enrollment_id_1 = await _create_test_enrollment(client, admin_headers)
@@ -237,7 +311,7 @@ async def test_payment_selection_insertion_order_independence(client, admin_head
     older_time = utc_now() - timedelta(hours=2)
     newer_time = utc_now() - timedelta(hours=1)
 
-    # Forward order
+    # Forward order: older first, then newer
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
         forward_older = await _create_payment_direct(
@@ -248,7 +322,7 @@ async def test_payment_selection_insertion_order_independence(client, admin_head
         )
         await db.commit()
 
-    # Reversed order
+    # Reversed order: newer first, then older
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
         await _create_payment_direct(
@@ -259,11 +333,31 @@ async def test_payment_selection_insertion_order_independence(client, admin_head
         )
         await db.commit()
 
-    # Both must select the older payment
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
-        forward_selected = await _select_payment(db, enrollment_id_1)
-        reversed_selected = await _select_payment(db, enrollment_id_2)
+        count_before_1 = await _count_payments(db, enrollment_id_1)
+        count_before_2 = await _count_payments(db, enrollment_id_2)
 
+    # Both must select the older payment via the PRODUCTION get-or-create path.
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        forward_selected, forward_created = await get_or_create_payment(
+            db, WR_TENANT_ID, enrollment_id_1, amount=299.90
+        )
+        reversed_selected, reversed_created = await get_or_create_payment(
+            db, WR_TENANT_ID, enrollment_id_2, amount=299.90
+        )
+        await db.commit()
+
+    assert forward_created is False, "Forward: existing payment selected — created MUST be False"
+    assert reversed_created is False, "Reversed: existing payment selected — created MUST be False"
     assert forward_selected.id == forward_older.id, "Forward order must select older"
     assert reversed_selected.id == reversed_older.id, "Reversed order must also select older"
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        count_after_1 = await _count_payments(db, enrollment_id_1)
+        count_after_2 = await _count_payments(db, enrollment_id_2)
+
+    assert count_after_1 == count_before_1, "Forward payment count must be unchanged"
+    assert count_after_2 == count_before_2, "Reversed payment count must be unchanged"

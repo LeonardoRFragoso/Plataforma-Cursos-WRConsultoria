@@ -41,7 +41,6 @@ from app.models.class_model import Class, ClassStatus
 from app.models.course import Course, CourseModality, CourseType
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonProgress
-from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
 from app.models.tenant import Tenant, TenantStatus
@@ -205,44 +204,21 @@ async def _get_or_create_enrollment(db, tenant_id, student_id, class_id, price):
 
 async def _get_or_create_payment(db, tenant_id, enrollment_id, amount):
     """Get or create a demo payment, handling multiple pre-existing payments idempotently.
-    
-    If multiple payments exist for the same enrollment (e.g., from previous failed attempts),
-    select a deterministic existing payment rather than creating another.
-    
-    Preference order:
+
+    Delegates to the production payment selector
+    (`app.services.payment_selection.get_or_create_payment`) so the
+    deterministic selection logic lives in exactly one place and is
+    exercised by the regression tests in
+    `api/tests/test_payment_selection.py`.
+
+    Preference order (defined in the production helper):
     1. Approved payment (most likely to be legitimate)
     2. Oldest payment (most deterministic)
     3. Stable UUID/id tie-breaker
     """
-    from sqlalchemy import case
-    
-    stmt = select(Payment).where(Payment.enrollment_id == enrollment_id).order_by(
-        case(
-            (Payment.status == PaymentStatus.APROVADO, 0),
-            else_=1
-        ),
-        Payment.created_at,
-        Payment.id,
-    )
-    result = await db.execute(stmt)
-    payments = result.scalars().all()
-    
-    if payments:
-        # Return the first (most preferred) existing payment
-        return payments[0], False
-    
-    # No payment exists; create a new one
-    payment = Payment(
-        tenant_id=tenant_id,
-        enrollment_id=enrollment_id,
-        amount=amount,
-        status=PaymentStatus.APROVADO,
-        method=PaymentMethod.PIX,
-        paid_at=utc_now(),
-    )
-    db.add(payment)
-    await db.flush()
-    return payment, True
+    from app.services.payment_selection import get_or_create_payment
+
+    return await get_or_create_payment(db, tenant_id, enrollment_id, amount)
 
 
 async def _get_or_create_certificate(db, tenant_id, enrollment_id):
