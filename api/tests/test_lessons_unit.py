@@ -9,6 +9,7 @@ from datetime import timedelta
 import pytest
 
 from app.api.routes.lessons import (
+    complete_lesson_upload,
     create_lesson,
     create_lesson_material,
     delete_lesson,
@@ -18,8 +19,6 @@ from app.api.routes.lessons import (
     list_lesson_materials,
     list_lessons,
     presign_lesson_upload,
-    complete_lesson_upload,
-    remove_lesson_video,
     update_lesson,
     update_lesson_progress,
 )
