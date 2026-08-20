@@ -1009,10 +1009,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
     // ─── Four required lessons visually incomplete ───
     // Each required lesson row must report data-lesson-completed="false"
     // and NOT contain a [data-testid="lesson-completed"] indicator.
-    const requiredRows = rows.filter({
-      has: page.locator('[data-lesson-required="true"]'),
-    })
-    await expect(requiredRows).toHaveCount(4)
+    // Use a combined CSS attribute selector because Playwright's
+    // filter({ has }) matches DESCENDANTS, while data-lesson-required
+    // lives on the row element itself.
+    const requiredRows = page.locator(
+      '[data-testid="lesson-row"][data-lesson-required="true"]'
+    )
+    await expect(requiredRows).toHaveCount(4, { timeout: 10000 })
 
     const requiredCompletedFlags = await requiredRows.evaluateAll((els) =>
       els.map((el) => el.getAttribute('data-lesson-completed'))
