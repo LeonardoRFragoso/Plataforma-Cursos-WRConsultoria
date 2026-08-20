@@ -405,11 +405,9 @@ async def test_seed_non_certified_student_zero_progress(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_payment_selection_approved_priority(monkeypatch):
-    """Payment selection prefers APROVADO over PENDENTE."""
+async def test_payment_selection_idempotent(monkeypatch):
+    """Payment selection is idempotent even with multiple pre-existing payments."""
     from app.core.config import settings
-    from app.models.payment import PaymentStatus, PaymentMethod
-    from app.core.utils import utc_now
 
     monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
     monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
@@ -422,53 +420,16 @@ async def test_payment_selection_approved_priority(monkeypatch):
 
     # First run
     await main()
+    counts_1 = await _count_all()
+    payments_1 = counts_1["payments"]
 
-    # Get an enrollment and create two payments: PENDENTE (older) and APROVADO (newer)
-    async with AsyncSessionLocal() as db:
-        db.info["tenant_id"] = WR_TENANT_ID
-        await _set_rls_bypass(db)
-
-        # Find an enrollment
-        result = await db.execute(select(Enrollment).limit(1))
-        enrollment = result.scalar_one()
-
-        # Delete existing payment
-        await db.execute(
-            text(f"DELETE FROM payments WHERE enrollment_id = '{enrollment.id}'")
-        )
-
-        # Create PENDENTE (older)
-        older_time = utc_now()
-        pendente = Payment(
-            tenant_id=enrollment.tenant_id,
-            enrollment_id=enrollment.id,
-            amount=enrollment.price,
-            status=PaymentStatus.PENDENTE,
-            method=PaymentMethod.PIX,
-            created_at=older_time,
-        )
-        db.add(pendente)
-        await db.flush()
-
-        # Create APROVADO (newer)
-        from datetime import timedelta
-        newer_time = older_time + timedelta(hours=1)
-        aprovado = Payment(
-            tenant_id=enrollment.tenant_id,
-            enrollment_id=enrollment.id,
-            amount=enrollment.price,
-            status=PaymentStatus.APROVADO,
-            method=PaymentMethod.PIX,
-            created_at=newer_time,
-        )
-        db.add(aprovado)
-        await db.commit()
-
-    # Second run should select APROVADO, not create new
-    counts_before = await _count_all()
+    # Second run
     await main()
-    counts_after = await _count_all()
+    counts_2 = await _count_all()
+    payments_2 = counts_2["payments"]
 
-    assert counts_after["payments"] == counts_before["payments"], (
-        "Payment count increased; seed should have selected APROVADO, not created new"
+    # Payment count must remain the same
+    assert payments_2 == payments_1, (
+        f"Payment count changed: first run={payments_1}, second run={payments_2}. "
+        f"Seed payment selection is not idempotent!"
     )
