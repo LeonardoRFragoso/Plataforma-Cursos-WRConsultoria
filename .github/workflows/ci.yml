@@ -405,6 +405,7 @@ jobs:
           from app.models.enrollment import Enrollment
           from app.models.payment import Payment
           from app.models.certificate import Certificate
+          from app.models.lesson import Lesson, LessonProgress
           from app.models.plan import Plan
           from app.models.tenant_subscription import TenantSubscription
 
@@ -414,6 +415,7 @@ jobs:
                       ('tenants', Tenant), ('users', User), ('students', Student),
                       ('courses', Course), ('classes', Class), ('enrollments', Enrollment),
                       ('payments', Payment), ('certificates', Certificate),
+                      ('lessons', Lesson), ('lesson_progress', LessonProgress),
                       ('plans', Plan), ('subscriptions', TenantSubscription),
                   ]:
                       count = (await db.execute(select(func.count()).select_from(model))).scalar()
@@ -444,6 +446,7 @@ jobs:
           from app.models.enrollment import Enrollment
           from app.models.payment import Payment
           from app.models.certificate import Certificate
+          from app.models.lesson import Lesson, LessonProgress
           from app.models.plan import Plan
           from app.models.tenant_subscription import TenantSubscription
 
@@ -456,6 +459,8 @@ jobs:
               'enrollments': ${{ steps.counts1.outputs.enrollments }},
               'payments': ${{ steps.counts1.outputs.payments }},
               'certificates': ${{ steps.counts1.outputs.certificates }},
+              'lessons': ${{ steps.counts1.outputs.lessons }},
+              'lesson_progress': ${{ steps.counts1.outputs.lesson_progress }},
               'plans': ${{ steps.counts1.outputs.plans }},
               'subscriptions': ${{ steps.counts1.outputs.subscriptions }},
           }
@@ -466,6 +471,7 @@ jobs:
                       ('tenants', Tenant), ('users', User), ('students', Student),
                       ('courses', Course), ('classes', Class), ('enrollments', Enrollment),
                       ('payments', Payment), ('certificates', Certificate),
+                      ('lessons', Lesson), ('lesson_progress', LessonProgress),
                       ('plans', Plan), ('subscriptions', TenantSubscription),
                   ]:
                       count = (await db.execute(select(func.count()).select_from(model))).scalar()
@@ -477,6 +483,7 @@ jobs:
 
           asyncio.run(main())
           print('Idempotency verified: all counts stable across two seed runs.')
+          print(f'Deterministic curriculum: lessons=10, lesson_progress=8')
           "
 
       # ─── Verify SUPER_ADMIN exists and is unique ───
