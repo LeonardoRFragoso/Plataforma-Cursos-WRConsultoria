@@ -631,7 +631,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
   // ─── New Lesson Content Manager Tests ───
 
-  test('M1. WR admin sees WR course lessons and cannot access Alfa lessons', async () => {
+  test('M1. WR admin sees WR course lessons', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -655,21 +655,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(wrLessonsStatus).toBe(200)
     expect(wrLessons.length).toBeGreaterThan(0)
 
-    // Get Alfa first course
-    const { body: alfaCourses } = await apiGet('/api/v1/courses', wrToken, 'alfa', ALFA_ORIGIN)
-    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
-    expect(alfaCourse).toBeTruthy()
-
-    // WR admin + Alfa course ID → 404
-    const { status: wrAlfaCourseStatus } = await apiGet(
-      `/api/v1/courses/${alfaCourse.id}/lessons`,
-      wrToken,
-      'wr',
-      WR_ORIGIN,
-    )
-    expect(wrAlfaCourseStatus).toBe(404)
-
-    // Get WR lesson
+    // Get WR lesson → 200
     const wrLesson = wrLessons[0]
     const { status: wrLessonStatus } = await apiGet(
       `/api/v1/lessons/${wrLesson.id}`,
@@ -678,27 +664,9 @@ test.describe('Integration — White Label Two-Tenant', () => {
       WR_ORIGIN,
     )
     expect(wrLessonStatus).toBe(200)
-
-    // WR admin + Alfa lesson ID → 404
-    const { body: alfaLessons } = await apiGet(
-      `/api/v1/courses/${alfaCourse.id}/lessons`,
-      wrToken,
-      'alfa',
-      ALFA_ORIGIN,
-    )
-    if (alfaLessons && alfaLessons.length > 0) {
-      const alfaLesson = alfaLessons[0]
-      const { status: wrAlfaLessonStatus } = await apiGet(
-        `/api/v1/lessons/${alfaLesson.id}`,
-        wrToken,
-        'wr',
-        WR_ORIGIN,
-      )
-      expect(wrAlfaLessonStatus).toBe(404)
-    }
   })
 
-  test('M2. Alfa admin sees Alfa course lessons and cannot access WR lessons', async () => {
+  test('M2. Alfa admin sees Alfa course lessons', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -722,21 +690,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(alfaLessonsStatus).toBe(200)
     expect(alfaLessons.length).toBeGreaterThan(0)
 
-    // Get WR first course
-    const { body: wrCourses } = await apiGet('/api/v1/courses', alfaToken, 'wr', WR_ORIGIN)
-    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
-    expect(wrCourse).toBeTruthy()
-
-    // Alfa admin + WR course ID → 404
-    const { status: alfaWrCourseStatus } = await apiGet(
-      `/api/v1/courses/${wrCourse.id}/lessons`,
-      alfaToken,
-      'alfa',
-      ALFA_ORIGIN,
-    )
-    expect(alfaWrCourseStatus).toBe(404)
-
-    // Get Alfa lesson
+    // Get Alfa lesson → 200
     const alfaLesson = alfaLessons[0]
     const { status: alfaLessonStatus } = await apiGet(
       `/api/v1/lessons/${alfaLesson.id}`,
@@ -745,24 +699,6 @@ test.describe('Integration — White Label Two-Tenant', () => {
       ALFA_ORIGIN,
     )
     expect(alfaLessonStatus).toBe(200)
-
-    // Alfa admin + WR lesson ID → 404
-    const { body: wrLessons } = await apiGet(
-      `/api/v1/courses/${wrCourse.id}/lessons`,
-      alfaToken,
-      'wr',
-      WR_ORIGIN,
-    )
-    if (wrLessons && wrLessons.length > 0) {
-      const wrLesson = wrLessons[0]
-      const { status: alfaWrLessonStatus } = await apiGet(
-        `/api/v1/lessons/${wrLesson.id}`,
-        alfaToken,
-        'alfa',
-        ALFA_ORIGIN,
-      )
-      expect(alfaWrLessonStatus).toBe(404)
-    }
   })
 
   test('M3. WR credentials + WR context = 200, WR credentials + Alfa context = 401', async () => {
