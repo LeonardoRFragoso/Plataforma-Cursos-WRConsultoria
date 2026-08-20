@@ -340,13 +340,17 @@ async def _seed_tenant(
         # Lessons (deterministic — seed lessons for the first course only)
         first_code = next(iter(course_objs.keys()))
         first_course = course_objs[first_code]
+        
+        # Optional demo video URL from environment; if not set, lessons have no external video
+        demo_video_url = os.getenv("DEMO_LESSON_YOUTUBE_URL")
+        
         demo_lessons = [
             {
                 "order": 1,
                 "title": "Introdução",
                 "description": "Apresentação do curso e objetivos",
-                "content_type": LessonContentType.YOUTUBE,
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "content_type": LessonContentType.YOUTUBE if demo_video_url else LessonContentType.UPLOAD,
+                "video_url": demo_video_url,
                 "duration_seconds": 300,
                 "is_free_preview": True,
                 "is_required": True,
@@ -355,8 +359,8 @@ async def _seed_tenant(
                 "order": 2,
                 "title": "Conceitos Fundamentais",
                 "description": "Conceitos teóricos essenciais",
-                "content_type": LessonContentType.YOUTUBE,
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "content_type": LessonContentType.YOUTUBE if demo_video_url else LessonContentType.UPLOAD,
+                "video_url": demo_video_url,
                 "duration_seconds": 600,
                 "is_free_preview": False,
                 "is_required": True,
@@ -365,8 +369,8 @@ async def _seed_tenant(
                 "order": 3,
                 "title": "Procedimentos",
                 "description": "Procedimentos práticos",
-                "content_type": LessonContentType.YOUTUBE,
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "content_type": LessonContentType.YOUTUBE if demo_video_url else LessonContentType.UPLOAD,
+                "video_url": demo_video_url,
                 "duration_seconds": 900,
                 "is_free_preview": False,
                 "is_required": True,
@@ -375,8 +379,8 @@ async def _seed_tenant(
                 "order": 4,
                 "title": "Aplicação Prática",
                 "description": "Aplicação prática dos conceitos",
-                "content_type": LessonContentType.YOUTUBE,
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "content_type": LessonContentType.YOUTUBE if demo_video_url else LessonContentType.UPLOAD,
+                "video_url": demo_video_url,
                 "duration_seconds": 1200,
                 "is_free_preview": False,
                 "is_required": True,
@@ -385,8 +389,8 @@ async def _seed_tenant(
                 "order": 5,
                 "title": "Encerramento",
                 "description": "Resumo e próximos passos",
-                "content_type": LessonContentType.YOUTUBE,
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "content_type": LessonContentType.YOUTUBE if demo_video_url else LessonContentType.UPLOAD,
+                "video_url": demo_video_url,
                 "duration_seconds": 300,
                 "is_free_preview": False,
                 "is_required": False,
