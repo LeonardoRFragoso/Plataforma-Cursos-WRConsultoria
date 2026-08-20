@@ -257,3 +257,218 @@ async def test_seed_handles_multiple_preexisting_payments(monkeypatch):
         f"Payment count increased: before={payments_before}, after={payments_after}. "
         f"Seed did not handle multiple pre-existing payments correctly!"
     )
+
+
+@pytest.mark.asyncio
+async def test_seed_lesson_fixtures_deterministic(monkeypatch):
+    """Seed creates exactly 10 deterministic lessons (5 per tenant)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    # First run
+    await main()
+
+    # Count lessons
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+        result = await db.execute(select(func.count()).select_from(Lesson))
+        lessons_count_1 = result.scalar()
+
+    assert lessons_count_1 == 10, f"Expected 10 lessons, got {lessons_count_1}"
+
+    # Second run
+    await main()
+
+    # Count lessons again
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+        result = await db.execute(select(func.count()).select_from(Lesson))
+        lessons_count_2 = result.scalar()
+
+    assert lessons_count_2 == 10, f"Expected 10 lessons after second run, got {lessons_count_2}"
+
+
+@pytest.mark.asyncio
+async def test_seed_certified_student_coherent_state(monkeypatch):
+    """Certified students have 100% progress, CONCLUIDA, and 1 certificate."""
+    from app.core.config import settings
+    from app.models.lesson import LessonProgress
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    await main()
+
+    # Verify WR aluno1 (certified student)
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+
+        # Find aluno1
+        result = await db.execute(
+            select(Student).join(User).where(User.email == "aluno1@wr.demo")
+        )
+        student = result.scalar_one()
+
+        # Check enrollment status
+        result = await db.execute(
+            select(Enrollment).where(Enrollment.student_id == student.id)
+        )
+        enrollment = result.scalar_one()
+        assert enrollment.status.value == "CONCLUIDA", f"Expected CONCLUIDA, got {enrollment.status}"
+
+        # Check certificate count
+        result = await db.execute(
+            select(func.count()).select_from(Certificate).where(
+                Certificate.enrollment_id == enrollment.id
+            )
+        )
+        cert_count = result.scalar()
+        assert cert_count == 1, f"Expected 1 certificate, got {cert_count}"
+
+        # Check lesson progress (all required lessons complete)
+        result = await db.execute(
+            select(LessonProgress).where(LessonProgress.student_id == student.id)
+        )
+        progress_records = result.scalars().all()
+        completed = sum(1 for p in progress_records if p.completed)
+        assert completed == 4, f"Expected 4 completed lessons, got {completed}"
+
+
+@pytest.mark.asyncio
+async def test_seed_non_certified_student_zero_progress(monkeypatch):
+    """Non-certified students have 0% progress, CONFIRMADA, and 0 certificates."""
+    from app.core.config import settings
+    from app.models.lesson import LessonProgress
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    await main()
+
+    # Verify WR aluno2 (non-certified student)
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+
+        # Find aluno2
+        result = await db.execute(
+            select(Student).join(User).where(User.email == "aluno2@wr.demo")
+        )
+        student = result.scalar_one()
+
+        # Check enrollment status
+        result = await db.execute(
+            select(Enrollment).where(Enrollment.student_id == student.id)
+        )
+        enrollment = result.scalar_one()
+        assert enrollment.status.value == "CONFIRMADA", f"Expected CONFIRMADA, got {enrollment.status}"
+
+        # Check certificate count
+        result = await db.execute(
+            select(func.count()).select_from(Certificate).where(
+                Certificate.enrollment_id == enrollment.id
+            )
+        )
+        cert_count = result.scalar()
+        assert cert_count == 0, f"Expected 0 certificates, got {cert_count}"
+
+        # Check lesson progress (no lessons complete)
+        result = await db.execute(
+            select(LessonProgress).where(LessonProgress.student_id == student.id)
+        )
+        progress_records = result.scalars().all()
+        completed = sum(1 for p in progress_records if p.completed)
+        assert completed == 0, f"Expected 0 completed lessons, got {completed}"
+
+
+@pytest.mark.asyncio
+async def test_payment_selection_approved_priority(monkeypatch):
+    """Payment selection prefers APROVADO over PENDENTE."""
+    from app.core.config import settings
+    from app.models.payment import PaymentStatus, PaymentMethod
+    from app.core.utils import utc_now
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    # First run
+    await main()
+
+    # Get an enrollment and create two payments: PENDENTE (older) and APROVADO (newer)
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await _set_rls_bypass(db)
+
+        # Find an enrollment
+        result = await db.execute(select(Enrollment).limit(1))
+        enrollment = result.scalar_one()
+
+        # Delete existing payment
+        await db.execute(
+            text(f"DELETE FROM payments WHERE enrollment_id = '{enrollment.id}'")
+        )
+
+        # Create PENDENTE (older)
+        older_time = utc_now()
+        pendente = Payment(
+            tenant_id=enrollment.tenant_id,
+            enrollment_id=enrollment.id,
+            amount=enrollment.price,
+            status=PaymentStatus.PENDENTE,
+            method=PaymentMethod.PIX,
+            created_at=older_time,
+        )
+        db.add(pendente)
+        await db.flush()
+
+        # Create APROVADO (newer)
+        from datetime import timedelta
+        newer_time = older_time + timedelta(hours=1)
+        aprovado = Payment(
+            tenant_id=enrollment.tenant_id,
+            enrollment_id=enrollment.id,
+            amount=enrollment.price,
+            status=PaymentStatus.APROVADO,
+            method=PaymentMethod.PIX,
+            created_at=newer_time,
+        )
+        db.add(aprovado)
+        await db.commit()
+
+    # Second run should select APROVADO, not create new
+    counts_before = await _count_all()
+    await main()
+    counts_after = await _count_all()
+
+    assert counts_after["payments"] == counts_before["payments"], (
+        "Payment count increased; seed should have selected APROVADO, not created new"
+    )
