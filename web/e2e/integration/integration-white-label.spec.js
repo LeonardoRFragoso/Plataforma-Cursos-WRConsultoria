@@ -659,16 +659,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(wrCourses).toBeTruthy()
     expect(Array.isArray(wrCourses)).toBe(true)
 
-    // NR-10 MUST exist (skip if fixture not seeded)
+    // NR-10 MUST exist (required fixture)
     const wrCourse = wrCourses.find(c => c && c.code === 'NR-10')
-    if (!wrCourse) {
-      test.skip()
-      return
-    }
+    expect(wrCourse).toBeTruthy()
 
-    // Get WR course lessons → 200
+    // Get WR course lessons using correct route → 200
     const { status: wrLessonsStatus, body: wrLessons } = await apiGet(
-      `/api/v1/courses/${wrCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
       wrToken,
       'wr',
       WR_ORIGIN,
@@ -704,7 +701,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // WR context → Alfa course lessons = 404
     const { status: wrAlfaCourseStatus } = await apiGet(
-      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
       wrToken,
       'wr',
       WR_ORIGIN,
@@ -713,7 +710,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // Get Alfa lessons with Alfa token
     const { body: alfaLessons } = await apiGet(
-      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
       alfaToken,
       'alfa',
       ALFA_ORIGIN,
@@ -722,7 +719,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     
     // WR context → Alfa lesson = 404
     const { status: wrAlfaLessonStatus } = await apiGet(
-      `/api/v1/lessons/${alfaLesson.id}`,
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons/${alfaLesson.id}`,
       wrToken,
       'wr',
       WR_ORIGIN,
@@ -745,16 +742,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(alfaCourses).toBeTruthy()
     expect(Array.isArray(alfaCourses)).toBe(true)
 
-    // SEG-01 MUST exist (skip if fixture not seeded)
+    // SEG-01 MUST exist (required fixture)
     const alfaCourse = alfaCourses.find(c => c && c.code === 'SEG-01')
-    if (!alfaCourse) {
-      test.skip()
-      return
-    }
+    expect(alfaCourse).toBeTruthy()
 
-    // Get Alfa course lessons → 200
+    // Get Alfa course lessons using correct route → 200
     const { status: alfaLessonsStatus, body: alfaLessons } = await apiGet(
-      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
       alfaToken,
       'alfa',
       ALFA_ORIGIN,
@@ -790,7 +784,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // Alfa context → WR course lessons = 404
     const { status: alfaWrCourseStatus } = await apiGet(
-      `/api/v1/courses/${wrCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
       alfaToken,
       'alfa',
       ALFA_ORIGIN,
@@ -799,7 +793,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // Get WR lessons with WR token
     const { body: wrLessons } = await apiGet(
-      `/api/v1/courses/${wrCourse.id}/lessons`,
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
       wrToken,
       'wr',
       WR_ORIGIN,
@@ -808,7 +802,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     
     // Alfa context → WR lesson = 404
     const { status: alfaWrLessonStatus } = await apiGet(
-      `/api/v1/lessons/${wrLesson.id}`,
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons/${wrLesson.id}`,
       alfaToken,
       'alfa',
       ALFA_ORIGIN,
