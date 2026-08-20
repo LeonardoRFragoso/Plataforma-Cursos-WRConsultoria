@@ -692,8 +692,9 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(requiredCount).toBe(4)
     expect(optionalCount).toBe(1)
 
-    // Get Alfa course ID for cross-tenant test
-    const { body: alfaCourses } = await apiGet('/api/v1/courses/', wrToken, 'alfa', ALFA_ORIGIN)
+    // Get Alfa admin token to get Alfa course ID
+    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', alfaToken, 'alfa', ALFA_ORIGIN)
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
     expect(alfaCourse).toBeTruthy()
 
@@ -706,14 +707,16 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(wrAlfaCourseStatus).toBe(404)
 
-    // WR context → Alfa lesson = 404
+    // Get Alfa lessons with Alfa token
     const { body: alfaLessons } = await apiGet(
       `/api/v1/courses/${alfaCourse.id}/lessons`,
-      wrToken,
+      alfaToken,
       'alfa',
       ALFA_ORIGIN,
     )
     const alfaLesson = alfaLessons[0]
+    
+    // WR context → Alfa lesson = 404
     const { status: wrAlfaLessonStatus } = await apiGet(
       `/api/v1/lessons/${alfaLesson.id}`,
       wrToken,
@@ -771,8 +774,9 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(requiredCount).toBe(4)
     expect(optionalCount).toBe(1)
 
-    // Get WR course ID for cross-tenant test
-    const { body: wrCourses } = await apiGet('/api/v1/courses/', alfaToken, 'wr', WR_ORIGIN)
+    // Get WR admin token to get WR course ID
+    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    const { body: wrCourses } = await apiGet('/api/v1/courses/', wrToken, 'wr', WR_ORIGIN)
     const wrCourse = wrCourses.find(c => c.code === 'NR-10')
     expect(wrCourse).toBeTruthy()
 
@@ -785,14 +789,16 @@ test.describe('Integration — White Label Two-Tenant', () => {
     )
     expect(alfaWrCourseStatus).toBe(404)
 
-    // Alfa context → WR lesson = 404
+    // Get WR lessons with WR token
     const { body: wrLessons } = await apiGet(
       `/api/v1/courses/${wrCourse.id}/lessons`,
-      alfaToken,
+      wrToken,
       'wr',
       WR_ORIGIN,
     )
     const wrLesson = wrLessons[0]
+    
+    // Alfa context → WR lesson = 404
     const { status: alfaWrLessonStatus } = await apiGet(
       `/api/v1/lessons/${wrLesson.id}`,
       alfaToken,
