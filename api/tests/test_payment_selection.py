@@ -146,7 +146,7 @@ async def test_payment_selection_approved_beats_pending(client, admin_headers):
 
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
-        pending = await _create_payment_direct(
+        await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id, PaymentStatus.PENDENTE, old_time
         )
         approved = await _create_payment_direct(
@@ -177,7 +177,7 @@ async def test_payment_selection_two_approved_oldest_wins(client, admin_headers)
         older = await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id, PaymentStatus.APROVADO, older_time
         )
-        newer = await _create_payment_direct(
+        await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id, PaymentStatus.APROVADO, newer_time
         )
         await db.commit()
@@ -243,7 +243,7 @@ async def test_payment_selection_insertion_order_independence(client, admin_head
         forward_older = await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id_1, PaymentStatus.APROVADO, older_time
         )
-        forward_newer = await _create_payment_direct(
+        await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id_1, PaymentStatus.APROVADO, newer_time
         )
         await db.commit()
@@ -251,7 +251,7 @@ async def test_payment_selection_insertion_order_independence(client, admin_head
     # Reversed order
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
-        reversed_newer = await _create_payment_direct(
+        await _create_payment_direct(
             db, WR_TENANT_ID, enrollment_id_2, PaymentStatus.APROVADO, newer_time
         )
         reversed_older = await _create_payment_direct(
