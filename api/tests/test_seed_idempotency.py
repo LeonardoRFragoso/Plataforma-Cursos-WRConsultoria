@@ -34,6 +34,8 @@ async def _set_rls_bypass(db):
 
 async def _count_all():
     """Count all rows in tenant-aware tables."""
+    from app.models.lesson import LessonProgress
+    
     counts = {}
     async with AsyncSessionLocal() as db:
         db.info["tenant_id"] = WR_TENANT_ID
@@ -48,6 +50,7 @@ async def _count_all():
             (Payment, "payments"),
             (Certificate, "certificates"),
             (Lesson, "lessons"),
+            (LessonProgress, "lesson_progress"),
             (Plan, "plans"),
             (TenantSubscription, "tenant_subscriptions"),
         ]:
@@ -432,4 +435,53 @@ async def test_payment_selection_idempotent(monkeypatch):
     assert payments_2 == payments_1, (
         f"Payment count changed: first run={payments_1}, second run={payments_2}. "
         f"Seed payment selection is not idempotent!"
+    )
+
+
+@pytest.mark.asyncio
+async def test_seed_deterministic_lesson_curriculum(monkeypatch):
+    """Seed creates exactly 10 deterministic lessons with 8 progress records.
+    
+    This test verifies:
+    - Total: 10 lessons (5 per tenant)
+    - Total: 8 LessonProgress records (4 per tenant for certified students)
+    - Idempotency: second run produces same counts
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+
+    env = _seed_env()
+    for k, v in env.items():
+        os.environ[k] = v
+
+    from app.scripts.seed_white_label_demo import main
+
+    # First run
+    await main()
+
+    # Verify lesson and progress counts
+    counts_1 = await _count_all()
+    lessons_1 = counts_1["lessons"]
+    progress_1 = counts_1["lesson_progress"]
+
+    assert lessons_1 == 10, f"Expected 10 lessons, got {lessons_1}"
+    assert progress_1 == 8, f"Expected 8 lesson progress records, got {progress_1}"
+
+    # Second run
+    await main()
+
+    # Verify idempotency
+    counts_2 = await _count_all()
+    lessons_2 = counts_2["lessons"]
+    progress_2 = counts_2["lesson_progress"]
+
+    assert lessons_2 == lessons_1, (
+        f"Lesson count changed: first run={lessons_1}, second run={lessons_2}. "
+        f"Seed is NOT idempotent!"
+    )
+    assert progress_2 == progress_1, (
+        f"Progress count changed: first run={progress_1}, second run={progress_2}. "
+        f"Seed is NOT idempotent!"
     )
