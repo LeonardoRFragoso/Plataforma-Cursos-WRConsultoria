@@ -204,7 +204,6 @@ async def test_seed_handles_multiple_preexisting_payments(monkeypatch):
     - Expected: seed succeeds, payment count does not increase
     """
     from app.core.config import settings
-    from app.core.context import current_tenant_id
 
     monkeypatch.setattr(settings, "DEMO_SEED_MODE", True)
     monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
@@ -228,8 +227,8 @@ async def test_seed_handles_multiple_preexisting_payments(monkeypatch):
         enrollment = result.scalar_one()
 
         # Create a second payment for the same enrollment
-        from app.models.payment import PaymentStatus, PaymentMethod
         from app.core.utils import utc_now
+        from app.models.payment import PaymentMethod, PaymentStatus
 
         second_payment = Payment(
             tenant_id=enrollment.tenant_id,

@@ -5,10 +5,11 @@ Uso: python seed_db.py
 """
 
 import asyncio
+
 from app.core.database import get_db
-from app.seeds.users_seed import seed_users
-from app.seeds.courses_seed import COURSES_DATA
 from app.models.course import Course, CourseModality, CourseType
+from app.seeds.courses_seed import COURSES_DATA
+from app.seeds.users_seed import seed_users
 
 
 async def main():
