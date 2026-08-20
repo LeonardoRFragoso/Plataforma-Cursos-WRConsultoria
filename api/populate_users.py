@@ -5,11 +5,12 @@ Uso: python3 populate_users.py
 """
 
 import asyncio
-import sys
+
 from sqlalchemy import select
+
 from app.core.database import AsyncSession, engine
-from app.models.user import User, UserRole
 from app.core.security import hash_password
+from app.models.user import User, UserRole
 
 TEST_USERS = [
     {

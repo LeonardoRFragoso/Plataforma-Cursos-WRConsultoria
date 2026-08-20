@@ -79,6 +79,19 @@ async function loginViaAPI(email, password, slug, origin) {
   return resp.json()
 }
 
+async function loginResponseViaAPI(email, password, slug, origin) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (slug) headers['x-tenant-slug'] = slug
+  if (origin) headers['origin'] = origin
+  const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ identifier: email, password }),
+  })
+  const body = await resp.json().catch(() => null)
+  return { status: resp.status, body, headers: resp.headers }
+}
+
 async function apiGet(path, token, slug, origin) {
   const headers = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -128,6 +141,8 @@ async function apiGetBinary(path, token, slug, origin) {
 let wrToken, alfaToken, superToken
 let alfaCourseId, alfaClassId, alfaPaymentId, alfaCertId
 let alfaSubId
+// Aluno2 progression state
+let aluno2EnrollmentId, aluno2CertId, seg01CourseId, seg01Lessons
 
 test.describe('Integration — White Label Two-Tenant', () => {
   test.describe.configure({ mode: 'serial' })
@@ -627,5 +642,809 @@ test.describe('Integration — White Label Two-Tenant', () => {
       })
       expect(delResp.status).toBe(404)
     }
+  })
+
+  // ─── New Lesson Content Manager Tests ───
+
+  test('M1. WR admin sees deterministic 5-lesson curriculum with tenant isolation', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrToken).toBeTruthy()
+
+    // Get WR courses with trailing slash
+    const { status: coursesStatus, body: wrCourses } = await apiGet('/api/v1/courses/', wrToken, 'wr', WR_ORIGIN)
+    expect(coursesStatus).toBe(200)
+    expect(wrCourses).toBeTruthy()
+    expect(Array.isArray(wrCourses)).toBe(true)
+
+    // NR-10 MUST exist (required fixture)
+    const wrCourse = wrCourses.find(c => c && c.code === 'NR-10')
+    expect(wrCourse).toBeTruthy()
+
+    // Get WR course lessons using correct route → 200
+    const { status: wrLessonsStatus, body: wrLessons } = await apiGet(
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrLessonsStatus).toBe(200)
+    expect(wrLessons).toBeTruthy()
+    expect(wrLessons.length).toBe(5)
+
+    // Verify exact lesson titles and order
+    const expectedTitles = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    wrLessons.forEach((lesson, idx) => {
+      expect(lesson.order).toBe(idx + 1)
+      expect(lesson.title).toBe(expectedTitles[idx])
+    })
+
+    // Count required/optional
+    const requiredCount = wrLessons.filter(l => l.is_required).length
+    const optionalCount = wrLessons.filter(l => !l.is_required).length
+    expect(requiredCount).toBe(4)
+    expect(optionalCount).toBe(1)
+
+    // Get Alfa admin token to get Alfa course ID
+    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', alfaToken, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // WR context → Alfa course lessons = 404
+    const { status: wrAlfaCourseStatus } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrAlfaCourseStatus).toBe(404)
+
+    // Get Alfa lessons with Alfa token
+    const { body: alfaLessons } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    const alfaLesson = alfaLessons[0]
+    
+    // WR context → Alfa lesson = 404
+    const { status: wrAlfaLessonStatus } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons/${alfaLesson.id}`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrAlfaLessonStatus).toBe(404)
+  })
+
+  test('M2. Alfa admin sees deterministic 5-lesson curriculum with tenant isolation', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaToken).toBeTruthy()
+
+    // Get Alfa courses with trailing slash
+    const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', alfaToken, 'alfa', ALFA_ORIGIN)
+    expect(coursesStatus).toBe(200)
+    expect(alfaCourses).toBeTruthy()
+    expect(Array.isArray(alfaCourses)).toBe(true)
+
+    // SEG-01 MUST exist (required fixture)
+    const alfaCourse = alfaCourses.find(c => c && c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // Get Alfa course lessons using correct route → 200
+    const { status: alfaLessonsStatus, body: alfaLessons } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaLessonsStatus).toBe(200)
+    expect(alfaLessons).toBeTruthy()
+    expect(alfaLessons.length).toBe(5)
+
+    // Verify exact lesson titles and order
+    const expectedTitles = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    alfaLessons.forEach((lesson, idx) => {
+      expect(lesson.order).toBe(idx + 1)
+      expect(lesson.title).toBe(expectedTitles[idx])
+    })
+
+    // Count required/optional
+    const requiredCount = alfaLessons.filter(l => l.is_required).length
+    const optionalCount = alfaLessons.filter(l => !l.is_required).length
+    expect(requiredCount).toBe(4)
+    expect(optionalCount).toBe(1)
+
+    // Get WR admin token to get WR course ID
+    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    const { body: wrCourses } = await apiGet('/api/v1/courses/', wrToken, 'wr', WR_ORIGIN)
+    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
+    expect(wrCourse).toBeTruthy()
+
+    // Alfa context → WR course lessons = 404
+    const { status: alfaWrCourseStatus } = await apiGet(
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaWrCourseStatus).toBe(404)
+
+    // Get WR lessons with WR token
+    const { body: wrLessons } = await apiGet(
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    const wrLesson = wrLessons[0]
+    
+    // Alfa context → WR lesson = 404
+    const { status: alfaWrLessonStatus } = await apiGet(
+      `/api/v1/lessons/courses/${wrCourse.id}/lessons/${wrLesson.id}`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaWrLessonStatus).toBe(404)
+  })
+
+  test('M3. WR credentials + WR context = 200, WR credentials + Alfa context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    // WR credentials + WR context → 200
+    const { status: wrWrStatus, body: wrWrBody } = await loginResponseViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrWrStatus).toBe(200)
+    expect(wrWrBody.access_token).toBeTruthy()
+
+    // WR credentials + Alfa context → 401
+    const { status: wrAlfaStatus } = await loginResponseViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(wrAlfaStatus).toBe(401)
+  })
+
+  test('M4. Alfa credentials + Alfa context = 200, Alfa credentials + WR context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    // Alfa credentials + Alfa context → 200
+    const { status: alfaAlfaStatus, body: alfaAlfaBody } = await loginResponseViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAlfaStatus).toBe(200)
+    expect(alfaAlfaBody.access_token).toBeTruthy()
+
+    // Alfa credentials + WR context → 401
+    const { status: alfaWrStatus } = await loginResponseViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(alfaWrStatus).toBe(401)
+  })
+
+  test('M5. SUPER_ADMIN + WR context = 200, SUPER_ADMIN + Alfa context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    // SUPER_ADMIN + WR context → 200
+    const { status: superWrStatus, body: superWrBody } = await loginResponseViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(superWrStatus).toBe(200)
+    expect(superWrBody.access_token).toBeTruthy()
+
+    // SUPER_ADMIN + Alfa context → 401
+    const { status: superAlfaStatus } = await loginResponseViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(superAlfaStatus).toBe(401)
+  })
+
+  test('M6. Aluno2 initial API state: 0% progress, CONFIRMADA, 0 certificates', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    // Resolve SEG-01
+    const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    expect(coursesStatus).toBe(200)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+    seg01CourseId = alfaCourse.id
+
+    // Get lessons for SEG-01
+    const { status: lessonsStatus, body: lessons } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/lessons`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(lessonsStatus).toBe(200)
+    expect(lessons.length).toBe(5)
+    seg01Lessons = lessons
+
+    // Get my-progress (student endpoint)
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progressStatus).toBe(200)
+    expect(progress.total_lessons).toBe(5)
+    expect(progress.required_lessons).toBe(4)
+    expect(progress.optional_lessons).toBe(1)
+    expect(progress.completed_required).toBe(0)
+    expect(progress.completed_optional).toBe(0)
+    expect(progress.percentage).toBe(0)
+    expect(progress.certificate_eligible).toBe(false)
+
+    // Resolve exact enrollment via student /me endpoint (includes course_id)
+    const { status: myEnrollStatus, body: myEnrollments } = await apiGet(
+      '/api/v1/enrollments/me',
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(myEnrollStatus).toBe(200)
+    const myEnrollment = myEnrollments.find(e => e.course_id === seg01CourseId)
+    expect(myEnrollment).toBeTruthy()
+    expect(myEnrollment.status).toBe('CONFIRMADA')
+    aluno2EnrollmentId = myEnrollment.id
+
+    // Admin verifies enrollment status independently
+    const { status: adminEnrollStatus, body: adminEnrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(adminEnrollStatus).toBe(200)
+    expect(adminEnrollment.status).toBe('CONFIRMADA')
+
+    // Check certificate count for THAT exact enrollment (admin endpoint)
+    const { status: certStatus, body: certificates } = await apiGet(
+      '/api/v1/certificates/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certStatus).toBe(200)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(0)
+  })
+
+  test('M7. Aluno2 browser initial state: 0% visible progress', async ({ browser }) => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    // Login through the real UI
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Navigate to CourseLearn
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // Assert course name visible
+    const bodyText = await page.textContent('body')
+    expect(bodyText).toContain('Integração de Segurança')
+
+    // ─── EXACT DOM ORDER via data-testid selectors ───
+    // Read the lesson rows in document order and assert the exact title
+    // sequence. This proves order structurally — not via five loose
+    // bodyText.toContain() calls. Order is verified via the
+    // data-lesson-order attribute (the authoritative lesson order from
+    // the API), and each row's title must contain the expected name.
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
+
+    const rowDescriptors = await rows.evaluateAll((els) =>
+      els.map((el) => ({
+        order: parseInt(el.getAttribute('data-lesson-order') || '0', 10),
+        title: el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || '',
+      }))
+    )
+
+    // Exact DOM order proven by the order attribute sequence.
+    expect(rowDescriptors.map((r) => r.order)).toEqual([1, 2, 3, 4, 5])
+
+    // Each row, in DOM order, must contain the expected lesson name.
+    const expectedNames = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    rowDescriptors.forEach((r, idx) => {
+      expect(r.title).toContain(expectedNames[idx])
+    })
+
+    // ─── 0% progress ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('0%')
+
+    // ─── 0/4 required completed ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('0/4')
+
+    // ─── Four required lessons visually incomplete ───
+    // Each required lesson row must report data-lesson-completed="false"
+    // and NOT contain a [data-testid="lesson-completed"] indicator.
+    // Use a combined CSS attribute selector because Playwright's
+    // filter({ has }) matches DESCENDANTS, while data-lesson-required
+    // lives on the row element itself.
+    const requiredRows = page.locator(
+      '[data-testid="lesson-row"][data-lesson-required="true"]'
+    )
+    await expect(requiredRows).toHaveCount(4, { timeout: 10000 })
+
+    const requiredCompletedFlags = await requiredRows.evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-lesson-completed'))
+    )
+    expect(requiredCompletedFlags).toEqual(['false', 'false', 'false', 'false'])
+
+    // No required row should render the completed indicator span.
+    const requiredCompletedSpans = await requiredRows.evaluateAll((els) =>
+      els.map((el) => !!el.querySelector('[data-testid="lesson-completed"]'))
+    )
+    expect(requiredCompletedSpans).toEqual([false, false, false, false])
+
+    // ─── Encerramento: optional + incomplete ───
+    const encerramentoRow = rows.filter({
+      hasText: 'Encerramento',
+    })
+    await expect(encerramentoRow).toHaveCount(1)
+    const encState = await encerramentoRow.evaluateAll((els) =>
+      els.map((el) => ({
+        required: el.getAttribute('data-lesson-required'),
+        completed: el.getAttribute('data-lesson-completed'),
+        hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+      }))
+    )
+    expect(encState).toHaveLength(1)
+    expect(encState[0].required).toBe('false')
+    expect(encState[0].completed).toBe('false')
+    expect(encState[0].hasOptional).toBe(true)
+    expect(encState[0].hasCompleted).toBe(false)
+
+    await page.close()
+  })
+
+  test('M8. Aluno2 after first required lesson: 25% progress', async ({ browser }) => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    // Get first required lesson (Introdução, order=1)
+    const firstRequired = seg01Lessons.find(l => l.is_required && l.order === 1)
+    expect(firstRequired).toBeTruthy()
+
+    // Complete first lesson
+    const { status: updateStatus } = await apiPost(
+      `/api/v1/lessons/${firstRequired.id}/progress`,
+      { completed: true, watched_seconds: 60 },
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(updateStatus).toBe(200)
+
+    // Check progress via API
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progressStatus).toBe(200)
+    expect(progress.completed_required).toBe(1)
+    expect(progress.required_lessons).toBe(4)
+    expect(progress.completed_optional).toBe(0)
+    expect(progress.percentage).toBe(25)
+    expect(progress.certificate_eligible).toBe(false)
+
+    // Admin verifies enrollment still CONFIRMADA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(enrollStatus).toBe(200)
+    expect(enrollment.status).toBe('CONFIRMADA')
+
+    // Certificate count still 0
+    const { status: certStatus, body: certificates } = await apiGet(
+      '/api/v1/certificates/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certStatus).toBe(200)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(0)
+
+    // ─── REAL BROWSER ASSERTION ───
+    // Open a real logged-in aluno2 Alfa browser and load CourseLearn so
+    // the 25% / 1/4 state and per-lesson completion indicators are
+    // asserted against the rendered DOM — not just the API.
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Reload CourseLearn so it fetches fresh progress after the API completion.
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // ─── 25% ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('25%')
+
+    // ─── 1/4 ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('1/4')
+
+    // ─── Per-lesson completion state in DOM order ───
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
+
+    const lessonStates = await rows.evaluateAll((els) =>
+      els.map((el) => {
+        const title = el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || ''
+        return {
+          title,
+          required: el.getAttribute('data-lesson-required'),
+          completed: el.getAttribute('data-lesson-completed'),
+          hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+          hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        }
+      })
+    )
+
+    // Introdução: completed
+    const intro = lessonStates.find((l) => l.title.includes('Introdução'))
+    expect(intro).toBeTruthy()
+    expect(intro.required).toBe('true')
+    expect(intro.completed).toBe('true')
+    expect(intro.hasCompleted).toBe(true)
+
+    // Remaining required lessons: incomplete
+    const conc = lessonStates.find((l) => l.title.includes('Conceitos Fundamentais'))
+    expect(conc).toBeTruthy()
+    expect(conc.required).toBe('true')
+    expect(conc.completed).toBe('false')
+    expect(conc.hasCompleted).toBe(false)
+
+    const proc = lessonStates.find((l) => l.title.includes('Procedimentos'))
+    expect(proc).toBeTruthy()
+    expect(proc.required).toBe('true')
+    expect(proc.completed).toBe('false')
+    expect(proc.hasCompleted).toBe(false)
+
+    const apl = lessonStates.find((l) => l.title.includes('Aplicação Prática'))
+    expect(apl).toBeTruthy()
+    expect(apl.required).toBe('true')
+    expect(apl.completed).toBe('false')
+    expect(apl.hasCompleted).toBe(false)
+
+    // Encerramento: optional + incomplete
+    const enc = lessonStates.find((l) => l.title.includes('Encerramento'))
+    expect(enc).toBeTruthy()
+    expect(enc.required).toBe('false')
+    expect(enc.completed).toBe('false')
+    expect(enc.hasOptional).toBe(true)
+    expect(enc.hasCompleted).toBe(false)
+
+    await page.close()
+  })
+
+  test('M9. Aluno2 all required complete: 100%, CONCLUIDA, 1 certificate, optional incomplete', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    // Complete remaining required lessons (2, 3, 4) - skip optional (5)
+    const requiredLessons = seg01Lessons.filter(l => l.is_required)
+    for (const lesson of requiredLessons) {
+      await apiPost(
+        `/api/v1/lessons/${lesson.id}/progress`,
+        { completed: true, watched_seconds: 60 },
+        aluno2Token,
+        'alfa',
+        ALFA_ORIGIN,
+      )
+    }
+
+    // Check progress
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progressStatus).toBe(200)
+    expect(progress.completed_required).toBe(4)
+    expect(progress.required_lessons).toBe(4)
+    expect(progress.completed_optional).toBe(0)
+    expect(progress.optional_lessons).toBe(1)
+    expect(progress.percentage).toBe(100)
+    expect(progress.certificate_eligible).toBe(true)
+
+    // Admin verifies enrollment is CONCLUIDA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(enrollStatus).toBe(200)
+    expect(enrollment.status).toBe('CONCLUIDA')
+
+    // Certificate count is exactly 1
+    const { status: certStatus, body: certificates } = await apiGet(
+      '/api/v1/certificates/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certStatus).toBe(200)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(1)
+    aluno2CertId = aluno2Certs[0].id
+  })
+
+  test('M10. Aluno2 certificate idempotency: repeat completion does not create duplicate', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    // Get last required lesson
+    const lastRequired = seg01Lessons.filter(l => l.is_required).pop()
+    expect(lastRequired).toBeTruthy()
+
+    // Complete it again
+    const { status: updateStatus } = await apiPost(
+      `/api/v1/lessons/${lastRequired.id}/progress`,
+      { completed: true, watched_seconds: 60 },
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(updateStatus).toBe(200)
+
+    // Progress remains 4/4 100%
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${seg01CourseId}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progressStatus).toBe(200)
+    expect(progress.completed_required).toBe(4)
+    expect(progress.percentage).toBe(100)
+
+    // Enrollment remains CONCLUIDA
+    const { status: enrollStatus, body: enrollment } = await apiGet(
+      `/api/v1/enrollments/${aluno2EnrollmentId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(enrollStatus).toBe(200)
+    expect(enrollment.status).toBe('CONCLUIDA')
+
+    // Certificate count still exactly 1, same ID
+    const { status: certStatus, body: certificates } = await apiGet(
+      '/api/v1/certificates/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certStatus).toBe(200)
+    const aluno2Certs = certificates.filter(c => c.enrollment_id === aluno2EnrollmentId)
+    expect(aluno2Certs.length).toBe(1)
+    expect(aluno2Certs[0].id).toBe(aluno2CertId)
+  })
+
+  test('M11. Aluno2 browser final state: 100% visible, optional incomplete', async ({ browser }) => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const page = await browser.newPage()
+    await page.goto(`${ALFA_URL}/login`)
+    await page.waitForTimeout(2000)
+
+    // Login through the real UI
+    await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
+    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('button[type="submit"]').click()
+    await page.waitForTimeout(3000)
+
+    // Navigate to CourseLearn
+    await page.goto(`${ALFA_URL}/courses/${seg01CourseId}/learn`)
+    await page.waitForTimeout(3000)
+
+    // ─── 100% ───
+    const percentEl = page.locator('[data-testid="course-progress-percent"]')
+    await expect(percentEl).toBeVisible({ timeout: 10000 })
+    await expect(percentEl).toHaveText('100%')
+
+    // ─── 4/4 ───
+    const requiredEl = page.locator('[data-testid="course-progress-required"]')
+    await expect(requiredEl).toBeVisible({ timeout: 10000 })
+    await expect(requiredEl).toHaveText('4/4')
+
+    // ─── Per-lesson completion state in DOM order ───
+    const rows = page.locator('[data-testid="lesson-row"]')
+    await expect(rows).toHaveCount(5, { timeout: 10000 })
+
+    const lessonStates = await rows.evaluateAll((els) =>
+      els.map((el) => {
+        const title = el.querySelector('[data-testid="lesson-title"]')?.textContent?.trim() || ''
+        return {
+          title,
+          required: el.getAttribute('data-lesson-required'),
+          completed: el.getAttribute('data-lesson-completed'),
+          hasCompleted: !!el.querySelector('[data-testid="lesson-completed"]'),
+          hasOptional: !!el.querySelector('[data-testid="lesson-optional"]'),
+        }
+      })
+    )
+
+    // ─── Four required lessons completed ───
+    const intro = lessonStates.find((l) => l.title.includes('Introdução'))
+    expect(intro).toBeTruthy()
+    expect(intro.required).toBe('true')
+    expect(intro.completed).toBe('true')
+    expect(intro.hasCompleted).toBe(true)
+
+    const conc = lessonStates.find((l) => l.title.includes('Conceitos Fundamentais'))
+    expect(conc).toBeTruthy()
+    expect(conc.required).toBe('true')
+    expect(conc.completed).toBe('true')
+    expect(conc.hasCompleted).toBe(true)
+
+    const proc = lessonStates.find((l) => l.title.includes('Procedimentos'))
+    expect(proc).toBeTruthy()
+    expect(proc.required).toBe('true')
+    expect(proc.completed).toBe('true')
+    expect(proc.hasCompleted).toBe(true)
+
+    const apl = lessonStates.find((l) => l.title.includes('Aplicação Prática'))
+    expect(apl).toBeTruthy()
+    expect(apl.required).toBe('true')
+    expect(apl.completed).toBe('true')
+    expect(apl.hasCompleted).toBe(true)
+
+    // ─── Encerramento: optional + NOT completed ───
+    const enc = lessonStates.find((l) => l.title.includes('Encerramento'))
+    expect(enc).toBeTruthy()
+    expect(enc.required).toBe('false')
+    expect(enc.completed).toBe('false')
+    expect(enc.hasOptional).toBe(true)
+    expect(enc.hasCompleted).toBe(false)
+
+    await page.close()
+  })
+
+  test('M12. Generated aluno2 certificate isolation: Alfa 200, WR 404', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaAdminToken).toBeTruthy()
+
+    const { access_token: wrAdminToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrAdminToken).toBeTruthy()
+
+    // Verify certificate belongs to exact aluno2 enrollment
+    expect(aluno2CertId).toBeTruthy()
+    expect(aluno2EnrollmentId).toBeTruthy()
+
+    // Alfa authorized context: GET certificate = 200
+    const { status: alfaGetStatus, body: alfaCert } = await apiGet(
+      `/api/v1/certificates/${aluno2CertId}`,
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaGetStatus).toBe(200)
+    expect(alfaCert.enrollment_id).toBe(aluno2EnrollmentId)
+
+    // Alfa authorized context: DOWNLOAD certificate = 200
+    const downloadHeaders = { 'Authorization': `Bearer ${alfaAdminToken}`, 'x-tenant-slug': 'alfa', 'origin': ALFA_ORIGIN }
+    const downloadResp = await fetch(`${API_BASE}/api/v1/certificates/${aluno2CertId}/download`, { headers: downloadHeaders })
+    expect(downloadResp.status).toBe(200)
+    expect(downloadResp.headers.get('content-type')).toContain('application/pdf')
+    const pdfBuffer = await downloadResp.arrayBuffer()
+    expect(pdfBuffer.byteLength).toBeGreaterThan(0)
+    const pdfHeader = Buffer.from(pdfBuffer.slice(0, 4)).toString()
+    expect(pdfHeader).toBe('%PDF')
+
+    // WR admin context: GET same certificate = 404
+    const { status: wrGetStatus } = await apiGet(
+      `/api/v1/certificates/${aluno2CertId}`,
+      wrAdminToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrGetStatus).toBe(404)
+
+    // WR admin context: DOWNLOAD same certificate = 404
+    const wrDownloadHeaders = { 'Authorization': `Bearer ${wrAdminToken}`, 'x-tenant-slug': 'wr', 'origin': WR_ORIGIN }
+    const wrDownloadResp = await fetch(`${API_BASE}/api/v1/certificates/${aluno2CertId}/download`, { headers: wrDownloadHeaders })
+    expect(wrDownloadResp.status).toBe(404)
   })
 })

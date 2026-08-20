@@ -17,15 +17,20 @@ async def create_course(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Course).where(Course.code == course_data.code)
+    tenant_id = get_current_tenant_id()
+    # Check code uniqueness within this tenant only
+    stmt = select(Course).where(
+        Course.code == course_data.code,
+        Course.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Course code already exists",
         )
-    
-    course = Course(**course_data.model_dump())
+
+    course = Course(**course_data.model_dump(), tenant_id=tenant_id)
     db.add(course)
     await db.commit()
     await db.refresh(course)
@@ -49,13 +54,13 @@ async def get_course(course_id: UUID, db: AsyncSession = Depends(get_db)):
     stmt = select(Course).where(Course.id == course_id, Course.tenant_id == tenant_id)
     result = await db.execute(stmt)
     course = result.scalar_one_or_none()
-    
+
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found",
         )
-    
+
     return course
 
 @router.put("/{course_id}", response_model=CourseResponse)
@@ -65,20 +70,21 @@ async def update_course(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Course).where(Course.id == course_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Course).where(Course.id == course_id, Course.tenant_id == tenant_id)
     result = await db.execute(stmt)
     course = result.scalar_one_or_none()
-    
+
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found",
         )
-    
+
     update_data = course_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(course, field, value)
-    
+
     await db.commit()
     await db.refresh(course)
     return course
@@ -89,15 +95,16 @@ async def delete_course(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Course).where(Course.id == course_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Course).where(Course.id == course_id, Course.tenant_id == tenant_id)
     result = await db.execute(stmt)
     course = result.scalar_one_or_none()
-    
+
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found",
         )
-    
+
     await db.delete(course)
     await db.commit()

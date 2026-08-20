@@ -132,7 +132,7 @@ const userRoleDisplay = computed(() => {
 })
 
 const isAdmin = computed(() => {
-  return authStore.userRole?.toLowerCase() === 'admin'
+  return authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin'
 })
 
 const isStudent = computed(() => {

@@ -61,7 +61,6 @@ async def _create_class(client, admin_headers, course_id, responsible_admin_id, 
 
 async def _create_lesson(client, admin_headers, course_id, extra=None):
     payload = {
-        "course_id": str(course_id),
         "title": f"Aula {uuid.uuid4().hex[:6]}",
         "description": "Descrição da aula",
         "order": 1,

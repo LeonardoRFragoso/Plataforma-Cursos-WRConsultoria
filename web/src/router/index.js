@@ -62,6 +62,12 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
+    path: '/courses/:id/progress',
+    name: 'CourseProgress',
+    component: () => import('../views/CourseProgress.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
     path: '/classes',
     name: 'Classes',
     component: () => import('../views/Classes.vue'),

@@ -54,6 +54,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Vercel
+.vercel/
+
 # Docker
 .dockerignore
 
