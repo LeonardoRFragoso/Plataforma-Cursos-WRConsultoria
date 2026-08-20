@@ -871,7 +871,8 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(alfaAdminToken).toBeTruthy()
 
     // Get Alfa courses
-    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    expect(coursesStatus).toBe(200)
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
     expect(alfaCourse).toBeTruthy()
 
@@ -891,21 +892,33 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(progress.percentage).toBe(0)
     expect(progress.certificate_eligible).toBe(false)
 
-    // Check enrollment status (admin endpoint)
+    // Resolve aluno2 student ID deterministically (admin endpoint)
+    const { status: studentsStatus, body: students } = await apiGet(
+      '/api/v1/students/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(studentsStatus).toBe(200)
+    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
+    expect(aluno2Student).toBeTruthy()
+    const aluno2Id = aluno2Student.id
+
+    // Check enrollment status (admin endpoint) - find exact aluno2+SEG01 enrollment
     const { status: enrollStatus, body: enrollments } = await apiGet(
-      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      '/api/v1/enrollments/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id) // Find any enrollment for this course
+    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
     expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONFIRMADA')
 
-    // Check certificate count (admin endpoint)
+    // Check certificate count for THAT exact enrollment (admin endpoint)
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
@@ -1005,21 +1018,33 @@ test.describe('Integration — White Label Two-Tenant', () => {
     expect(progress.percentage).toBe(100)
     expect(progress.certificate_eligible).toBe(true)
 
+    // Resolve aluno2 student ID deterministically (admin endpoint)
+    const { status: studentsStatus, body: students } = await apiGet(
+      '/api/v1/students/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(studentsStatus).toBe(200)
+    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
+    expect(aluno2Student).toBeTruthy()
+    const aluno2Id = aluno2Student.id
+
     // Check enrollment status changed to CONCLUIDA (admin endpoint)
     const { status: enrollStatus, body: enrollments } = await apiGet(
-      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      '/api/v1/enrollments/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id)
+    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
     expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
     // Check certificate count is exactly 1 (admin endpoint)
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
@@ -1062,21 +1087,33 @@ test.describe('Integration — White Label Two-Tenant', () => {
       ALFA_ORIGIN,
     )
 
+    // Resolve aluno2 student ID deterministically (admin endpoint)
+    const { status: studentsStatus, body: students } = await apiGet(
+      '/api/v1/students/',
+      alfaAdminToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(studentsStatus).toBe(200)
+    const aluno2Student = students.find(s => s.email === 'aluno2@alfa.demo')
+    expect(aluno2Student).toBeTruthy()
+    const aluno2Id = aluno2Student.id
+
     // Check enrollment still CONCLUIDA (admin endpoint)
     const { status: enrollStatus, body: enrollments } = await apiGet(
-      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      '/api/v1/enrollments/',
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
     )
     expect(enrollStatus).toBe(200)
-    const enrollment = enrollments.find(e => e.student_id)
+    const enrollment = enrollments.find(e => e.student_id === aluno2Id && e.course_id === alfaCourse.id)
     expect(enrollment).toBeTruthy()
     expect(enrollment.status).toBe('CONCLUIDA')
 
     // Check certificate count still exactly 1 (admin endpoint)
     const { status: certStatus, body: certificates } = await apiGet(
-      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      `/api/v1/certificates/?enrollment_id=${enrollment.id}`,
       alfaAdminToken,
       'alfa',
       ALFA_ORIGIN,
