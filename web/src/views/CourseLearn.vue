@@ -46,6 +46,7 @@
                 </span>
                 <span v-if="lesson.completed" class="text-green-600">✓</span>
                 <span v-else-if="lesson.is_free_preview" class="text-xs text-primary-600">Preview</span>
+                <span v-else-if="!lesson.is_required" class="text-xs text-gray-400">Opcional</span>
               </button>
               <p v-if="lessons.length === 0" class="text-gray-500 text-sm">Nenhuma aula disponível.</p>
             </div>

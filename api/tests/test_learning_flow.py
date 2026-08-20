@@ -85,12 +85,10 @@ async def _full_flow(client, admin_headers, student_user, monkeypatch):
     lesson1 = await client.post(
         f"/api/v1/lessons/courses/{course_id}/lessons",
         json={
-            "course_id": str(course_id),
             "title": "Aula 1",
             "description": "Primeira aula",
             "order": 0,
             "content_type": "UPLOAD",
-            "storage_key": "lessons/test/video1.mp4",
             "duration_seconds": 120,
             "is_free_preview": False,
         },
@@ -102,12 +100,10 @@ async def _full_flow(client, admin_headers, student_user, monkeypatch):
     lesson2 = await client.post(
         f"/api/v1/lessons/courses/{course_id}/lessons",
         json={
-            "course_id": str(course_id),
             "title": "Aula 2",
             "description": "Segunda aula",
             "order": 1,
             "content_type": "UPLOAD",
-            "storage_key": "lessons/test/video2.mp4",
             "duration_seconds": 100,
             "is_free_preview": False,
         },
@@ -115,6 +111,20 @@ async def _full_flow(client, admin_headers, student_user, monkeypatch):
     )
     assert lesson2.status_code == 201
     lesson2_id = lesson2.json()["id"]
+
+    # 7a. Set storage_key via upload-complete (mocked verify)
+    async def _mock_verify(*a, **k):
+        return True
+    monkeypatch.setattr("app.api.routes.lessons.verify_object_exists", _mock_verify)
+
+    for lid in [lesson1_id, lesson2_id]:
+        storage_key = f"tenants/{lesson1.json()['tenant_id']}/courses/{course_id}/lessons/{lid}/video/v.mp4"
+        resp = await client.post(
+            f"/api/v1/lessons/{lid}/upload-complete",
+            params={"storage_key": storage_key},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
 
     # 8. aluno autentica (já autenticado em student_user)
     student_headers = student_user["headers"]

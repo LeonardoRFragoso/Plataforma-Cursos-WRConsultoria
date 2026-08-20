@@ -48,7 +48,6 @@ async def _create_enrollment(client, admin_headers, student_id, class_id):
 
 async def _create_lesson(client, admin_headers, course_id, **extra):
     payload = {
-        "course_id": str(course_id),
         "title": "Aula de teste",
         "description": "Descrição",
         "order": 1,
@@ -65,28 +64,57 @@ async def _create_lesson(client, admin_headers, course_id, **extra):
     return response.json()["id"]
 
 
+async def _set_storage_key(client, admin_headers, lesson_id, storage_key, monkeypatch=None):
+    """Set storage_key via upload-complete endpoint (mocked verify)."""
+    if monkeypatch:
+        async def _mock_verify(*a, **k):
+            return True
+        monkeypatch.setattr("app.api.routes.lessons.verify_object_exists", _mock_verify)
+    response = await client.post(
+        f"/api/v1/lessons/{lesson_id}/upload-complete",
+        params={"storage_key": storage_key},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+
+
 class TestLessonExtra:
     async def test_upload_and_watch_url(self, client, admin_headers, test_course_data, monkeypatch):
         async def _mock_upload(*a, **k):
-            return "http://upload", "lessons/uuid/aula.mp4"
+            return "http://upload", "tenants/x/courses/y/lessons/z/video/aula.mp4"
 
         async def _mock_watch(*a, **k):
             return "http://watch"
 
+        async def _mock_verify(*a, **k):
+            return True
+
         monkeypatch.setattr("app.api.routes.lessons.generate_upload_url", _mock_upload)
         monkeypatch.setattr("app.api.routes.lessons.generate_watch_url", _mock_watch)
+        monkeypatch.setattr("app.api.routes.lessons.verify_object_exists", _mock_verify)
 
         course_id = await _create_course(client, admin_headers, test_course_data)
         lesson_id = await _create_lesson(client, admin_headers, course_id)
 
+        # Step 1: presign
         response = await client.post(
-            f"/api/v1/lessons/{lesson_id}/upload-url",
-            params={"filename": "aula.mp4", "content_type": "video/mp4", "content_length": 1024},
+            f"/api/v1/lessons/{lesson_id}/upload-presign",
+            json={"filename": "aula.mp4", "mime_type": "video/mp4", "size_bytes": 1024},
             headers=admin_headers,
         )
         assert response.status_code == 200
         assert "upload_url" in response.json()
+        storage_key = response.json()["storage_key"]
 
+        # Step 2: complete upload (mocked verify)
+        response = await client.post(
+            f"/api/v1/lessons/{lesson_id}/upload-complete",
+            params={"storage_key": storage_key},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+
+        # Step 3: watch url
         response = await client.get(
             f"/api/v1/lessons/{lesson_id}/watch-url",
             headers=admin_headers,
@@ -183,7 +211,7 @@ class TestLessonExtra:
 
         response = await client.post(
             f"/api/v1/lessons/{lesson_id}/materials",
-            json={"lesson_id": str(lesson_id), "title": "Apostila", "file_url": "http://file.pdf"},
+            json={"title": "Apostila", "file_url": "http://file.pdf"},
             headers=admin_headers,
         )
         assert response.status_code == 201
@@ -195,7 +223,7 @@ class TestLessonExtra:
         assert response.status_code == 200
         assert len(response.json()) == 1
 
-    async def test_lessons_student_journey(self, client, admin_headers, student_user, test_course_data):
+    async def test_lessons_student_journey(self, client, admin_headers, student_user, test_course_data, monkeypatch):
         admin_id = await _admin_id(client, admin_headers)
         course_id = await _create_course(client, admin_headers, test_course_data)
         class_id = await _create_class(client, admin_headers, course_id, admin_id)
@@ -206,15 +234,19 @@ class TestLessonExtra:
             headers=admin_headers,
         )
 
-        # aula paga
+        # aula paga — storage_key is set via upload-complete
         lesson_id = await _create_lesson(
             client,
             admin_headers,
             course_id,
             content_type="UPLOAD",
-            storage_key="lessons/uuid/video.mp4",
             duration_seconds=100,
             is_free_preview=False,
+        )
+        await _set_storage_key(
+            client, admin_headers, lesson_id,
+            f"tenants/x/courses/{course_id}/lessons/{lesson_id}/video/v.mp4",
+            monkeypatch,
         )
 
         response = await client.get(
@@ -236,15 +268,19 @@ class TestLessonExtra:
         )
         assert response.status_code == 200
 
-    async def test_lessons_forbidden_without_enrollment(self, client, admin_headers, student_user, test_course_data):
+    async def test_lessons_forbidden_without_enrollment(self, client, admin_headers, student_user, test_course_data, monkeypatch):
         course_id = await _create_course(client, admin_headers, test_course_data)
         lesson_id = await _create_lesson(
             client,
             admin_headers,
             course_id,
             content_type="UPLOAD",
-            storage_key="lessons/uuid/video.mp4",
             is_free_preview=False,
+        )
+        await _set_storage_key(
+            client, admin_headers, lesson_id,
+            f"tenants/x/courses/{course_id}/lessons/{lesson_id}/video/v.mp4",
+            monkeypatch,
         )
 
         # listar sem matrícula ainda retorna 200, mas esconde URLs

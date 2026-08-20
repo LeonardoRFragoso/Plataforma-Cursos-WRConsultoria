@@ -18,6 +18,7 @@ from app.models.certificate import Certificate
 from app.models.class_model import Class
 from app.models.course import Course
 from app.models.enrollment import Enrollment
+from app.models.lesson import Lesson
 from app.models.payment import Payment
 from app.models.plan import Plan
 from app.models.student import Student
@@ -46,6 +47,7 @@ async def _count_all():
             (Enrollment, "enrollments"),
             (Payment, "payments"),
             (Certificate, "certificates"),
+            (Lesson, "lessons"),
             (Plan, "plans"),
             (TenantSubscription, "tenant_subscriptions"),
         ]:

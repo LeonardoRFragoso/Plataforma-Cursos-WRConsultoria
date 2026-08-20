@@ -40,6 +40,7 @@ from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course, CourseModality, CourseType
 from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.lesson import Lesson, LessonContentType
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
@@ -225,6 +226,39 @@ async def _get_or_create_certificate(db, tenant_id, enrollment_id):
     return cert, True
 
 
+async def _get_or_create_lesson(
+    db, tenant_id, course_id, order, title, description,
+    content_type=LessonContentType.YOUTUBE,
+    video_url=None, duration_seconds=None,
+    is_free_preview=False, is_required=True,
+):
+    """Idempotent lesson creation keyed on (tenant_id, course_id, order)."""
+    stmt = select(Lesson).where(
+        Lesson.tenant_id == tenant_id,
+        Lesson.course_id == course_id,
+        Lesson.order == order,
+    )
+    result = await db.execute(stmt)
+    lesson = result.scalar_one_or_none()
+    if lesson:
+        return lesson, False
+    lesson = Lesson(
+        tenant_id=tenant_id,
+        course_id=course_id,
+        order=order,
+        title=title,
+        description=description,
+        content_type=content_type,
+        video_url=video_url,
+        duration_seconds=duration_seconds,
+        is_free_preview=is_free_preview,
+        is_required=is_required,
+    )
+    db.add(lesson)
+    await db.flush()
+    return lesson, True
+
+
 async def _seed_tenant(
     db,
     tenant_id,
@@ -267,8 +301,57 @@ async def _seed_tenant(
             cls = await _get_or_create_demo_class(db, tenant_id, course.id, admin.id)
             class_objs[code] = cls
 
-        # Students + enrollments + payments + certificate
+        # Lessons (deterministic — seed lessons for the first course only)
         first_code = next(iter(course_objs.keys()))
+        first_course = course_objs[first_code]
+        demo_lessons = [
+            {
+                "order": 1,
+                "title": "Introdução",
+                "description": "Apresentação do curso e objetivos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 300,
+                "is_free_preview": True,
+                "is_required": False,
+            },
+            {
+                "order": 2,
+                "title": "Módulo 1 — Conceitos Fundamentais",
+                "description": "Conceitos teóricos essenciais",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 600,
+                "is_free_preview": False,
+                "is_required": True,
+            },
+            {
+                "order": 3,
+                "title": "Módulo 2 — Prática e Aplicação",
+                "description": "Aplicação prática dos conceitos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 900,
+                "is_free_preview": False,
+                "is_required": True,
+            },
+        ]
+        for les_spec in demo_lessons:
+            les, les_created = await _get_or_create_lesson(
+                db, tenant_id, first_course.id,
+                order=les_spec["order"],
+                title=les_spec["title"],
+                description=les_spec["description"],
+                content_type=les_spec["content_type"],
+                video_url=les_spec["video_url"],
+                duration_seconds=les_spec["duration_seconds"],
+                is_free_preview=les_spec["is_free_preview"],
+                is_required=les_spec["is_required"],
+            )
+            if les_created:
+                print(f"  [{slug}] Lesson {les_spec['order']}: {les_spec['title']}")
+
+        # Students + enrollments + payments + certificate
         for spec in student_specs:
             stu_user, stu_created = await _get_or_create_user(
                 db,

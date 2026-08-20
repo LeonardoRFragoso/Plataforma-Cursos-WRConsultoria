@@ -12,15 +12,19 @@ from app.api.routes.lessons import (
     create_lesson,
     create_lesson_material,
     delete_lesson,
-    generate_lesson_upload_url,
     get_course_progress,
     get_lesson,
     get_lesson_watch_url,
     list_lesson_materials,
     list_lessons,
+    presign_lesson_upload,
+    complete_lesson_upload,
+    remove_lesson_video,
     update_lesson,
     update_lesson_progress,
 )
+from app.core.constants import WR_TENANT_ID
+from app.core.context import current_tenant_id
 from app.core.database import AsyncSessionLocal
 from app.core.utils import utc_now
 from app.models.enrollment import Enrollment, EnrollmentStatus
@@ -31,6 +35,7 @@ from app.schemas.lesson import (
     LessonMaterialCreate,
     LessonProgressCreate,
     LessonUpdate,
+    UploadPresignRequest,
 )
 
 
@@ -98,101 +103,118 @@ async def test_lesson_routes_direct(client, admin_headers, student_user, test_co
     student_user_id = await _student_user_id(student_user["student_id"])
 
     async def _mock_upload(*a, **k):
-        return "http://upload", "lessons/uuid/video.mp4"
+        return "http://upload", "tenants/x/courses/y/lessons/z/video/v.mp4"
 
     async def _mock_watch(*a, **k):
         return "http://watch"
 
+    async def _mock_verify(*a, **k):
+        return True
+
     monkeypatch.setattr("app.api.routes.lessons.generate_upload_url", _mock_upload)
     monkeypatch.setattr("app.api.routes.lessons.generate_watch_url", _mock_watch)
+    monkeypatch.setattr("app.api.routes.lessons.verify_object_exists", _mock_verify)
 
-    async with AsyncSessionLocal() as db:
-        admin_user = {"user_id": str(admin_id), "role": "admin"}
-        student_user_dict = {"user_id": str(student_user_id), "role": "student"}
+    # Set tenant context for direct function calls
+    token = current_tenant_id.set(WR_TENANT_ID)
+    try:
+        async with AsyncSessionLocal() as db:
+            db.info["tenant_id"] = WR_TENANT_ID
+            admin_user = {"user_id": str(admin_id), "role": "admin", "tenant_id": str(WR_TENANT_ID)}
+            student_user_dict = {"user_id": str(student_user_id), "role": "student", "tenant_id": str(WR_TENANT_ID)}
 
-        # create + list
-        lesson = await create_lesson(
-            course_id,
-            LessonCreate(
-                course_id=course_id,
-                title="Aula 1",
-                description="Desc",
-                order=1,
-                content_type=LessonContentType.UPLOAD,
-                duration_seconds=100,
-                is_free_preview=False,
-            ),
-            db,
-            admin_user,
-        )
-        lesson_id = lesson.id
+            # create + list
+            lesson = await create_lesson(
+                course_id,
+                LessonCreate(
+                    title="Aula 1",
+                    description="Desc",
+                    order=1,
+                    content_type=LessonContentType.UPLOAD,
+                    duration_seconds=100,
+                    is_free_preview=False,
+                ),
+                db,
+                admin_user,
+            )
+            lesson_id = lesson.id
 
-        lessons = await list_lessons(course_id, db, admin_user, 0, 100)
-        assert len(lessons) > 0
+            lessons = await list_lessons(course_id, db, admin_user, 0, 100)
+            assert len(lessons) > 0
 
-        # student list
-        lessons = await list_lessons(course_id, db, student_user_dict, 0, 100)
-        assert len(lessons) > 0
+            # student list
+            lessons = await list_lessons(course_id, db, student_user_dict, 0, 100)
+            assert len(lessons) > 0
 
-        # get
-        got = await get_lesson(course_id, lesson_id, db, admin_user)
-        assert got.id == lesson_id
+            # get
+            got = await get_lesson(course_id, lesson_id, db, admin_user)
+            assert got.id == lesson_id
 
-        # update
-        updated = await update_lesson(course_id, lesson_id, LessonUpdate(title="Aula 1 atualizada"), db, admin_user)
-        assert updated.title == "Aula 1 atualizada"
+            # update
+            updated = await update_lesson(course_id, lesson_id, LessonUpdate(title="Aula 1 atualizada"), db, admin_user)
+            assert updated.title == "Aula 1 atualizada"
 
-        # upload url
-        upload = await generate_lesson_upload_url(lesson_id, "video.mp4", "video/mp4", 1024, db, admin_user)
-        assert "upload_url" in upload
+            # upload presign
+            presign = await presign_lesson_upload(
+                lesson_id,
+                UploadPresignRequest(filename="video.mp4", mime_type="video/mp4", size_bytes=1024),
+                db,
+                admin_user,
+            )
+            assert hasattr(presign, "upload_url")
 
-        # watch url
-        watch = await get_lesson_watch_url(lesson_id, db, admin_user)
-        assert watch["watch_url"] == "http://watch"
+            # upload complete
+            completed = await complete_lesson_upload(lesson_id, db=db, current_user=admin_user, storage_key=presign.storage_key)
+            assert completed.storage_key == presign.storage_key
 
-        # progress
-        progress = await update_lesson_progress(
-            lesson_id,
-            LessonProgressCreate(watched_seconds=100, completed=True),
-            db,
-            student_user_dict,
-        )
-        assert progress.completed is True
+            # watch url
+            watch = await get_lesson_watch_url(lesson_id, db, admin_user)
+            assert watch["watch_url"] == "http://watch"
 
-        # my progress
-        course_progress = await get_course_progress(course_id, db, student_user_dict)
-        assert course_progress.percentage == 100.0
+            # progress
+            progress = await update_lesson_progress(
+                lesson_id,
+                LessonProgressCreate(watched_seconds=100, completed=True),
+                db,
+                student_user_dict,
+            )
+            assert progress.completed is True
 
-        # material
-        material = await create_lesson_material(
-            lesson_id,
-            LessonMaterialCreate(lesson_id=lesson_id, title="Apostila", file_url="http://file"),
-            db,
-            admin_user,
-        )
-        assert material.title == "Apostila"
+            # my progress
+            course_progress = await get_course_progress(course_id, db, student_user_dict)
+            assert course_progress.percentage == 100.0
 
-        materials = await list_lesson_materials(lesson_id, db, student_user_dict)
-        assert len(materials) == 1
+            # material
+            material = await create_lesson_material(
+                lesson_id,
+                LessonMaterialCreate(title="Apostila", file_url="http://file"),
+                db,
+                admin_user,
+            )
+            assert material.title == "Apostila"
 
-        # youtube watch
-        yt_lesson = await create_lesson(
-            course_id,
-            LessonCreate(
-                course_id=course_id,
-                title="Aula YT",
-                order=2,
-                content_type=LessonContentType.YOUTUBE,
-                video_url="https://youtube.com/watch?v=123",
-            ),
-            db,
-            admin_user,
-        )
-        watch_yt = await get_lesson_watch_url(yt_lesson.id, db, admin_user)
-        assert watch_yt["watch_url"] == "https://youtube.com/watch?v=123"
+            materials = await list_lesson_materials(lesson_id, db, student_user_dict)
+            assert len(materials) == 1
 
-        # delete
-        await delete_lesson(course_id, lesson_id, db, admin_user)
+            # youtube watch
+            yt_lesson = await create_lesson(
+                course_id,
+                LessonCreate(
+                    title="Aula YT",
+                    order=2,
+                    content_type=LessonContentType.YOUTUBE,
+                    video_url="https://youtube.com/watch?v=123",
+                ),
+                db,
+                admin_user,
+            )
+            watch_yt = await get_lesson_watch_url(yt_lesson.id, db, admin_user)
+            assert watch_yt["watch_url"] == "https://youtube.com/watch?v=123"
+
+            # delete (no progress on yt_lesson, should succeed)
+            await delete_lesson(course_id, yt_lesson.id, db, admin_user)
+    finally:
+        current_tenant_id.reset(token)
 
 
 @pytest.mark.asyncio
@@ -200,39 +222,49 @@ async def test_lesson_routes_errors_direct(client, admin_headers, test_course_da
     admin_id = await _admin_id(client, admin_headers)
     course_id = await _create_course(client, admin_headers, test_course_data)
 
-    async with AsyncSessionLocal() as db:
-        admin_user = {"user_id": str(admin_id), "role": "admin"}
+    token = current_tenant_id.set(WR_TENANT_ID)
+    try:
+        async with AsyncSessionLocal() as db:
+            db.info["tenant_id"] = WR_TENANT_ID
+            admin_user = {"user_id": str(admin_id), "role": "admin", "tenant_id": str(WR_TENANT_ID)}
 
-        from fastapi import HTTPException
+            from fastapi import HTTPException
 
-        fake_course = str(uuid.uuid4())
-        with pytest.raises(HTTPException) as exc:
-            await create_lesson(
-                uuid.UUID(fake_course),
-                LessonCreate(course_id=uuid.UUID(fake_course), title="Aula"),
-                db,
-                admin_user,
-            )
-        assert exc.value.status_code == 404
+            fake_course = str(uuid.uuid4())
+            with pytest.raises(HTTPException) as exc:
+                await create_lesson(
+                    uuid.UUID(fake_course),
+                    LessonCreate(title="Aula"),
+                    db,
+                    admin_user,
+                )
+            assert exc.value.status_code == 404
 
-        fake_lesson = str(uuid.uuid4())
-        with pytest.raises(HTTPException) as exc:
-            await get_lesson(course_id, uuid.UUID(fake_lesson), db, admin_user)
-        assert exc.value.status_code == 404
+            fake_lesson = str(uuid.uuid4())
+            with pytest.raises(HTTPException) as exc:
+                await get_lesson(course_id, uuid.UUID(fake_lesson), db, admin_user)
+            assert exc.value.status_code == 404
 
-        with pytest.raises(HTTPException) as exc:
-            await generate_lesson_upload_url(uuid.UUID(fake_lesson), "x.mp4", db=db, current_user=admin_user)
-        assert exc.value.status_code == 404
+            with pytest.raises(HTTPException) as exc:
+                await presign_lesson_upload(
+                    uuid.UUID(fake_lesson),
+                    UploadPresignRequest(filename="x.mp4", mime_type="video/mp4", size_bytes=1024),
+                    db,
+                    admin_user,
+                )
+            assert exc.value.status_code == 404
 
-        with pytest.raises(HTTPException) as exc:
-            await get_lesson_watch_url(uuid.UUID(fake_lesson), db, admin_user)
-        assert exc.value.status_code == 404
+            with pytest.raises(HTTPException) as exc:
+                await get_lesson_watch_url(uuid.UUID(fake_lesson), db, admin_user)
+            assert exc.value.status_code == 404
 
-        with pytest.raises(HTTPException) as exc:
-            await create_lesson_material(
-                uuid.UUID(fake_lesson),
-                LessonMaterialCreate(lesson_id=uuid.UUID(fake_lesson), title="x", file_url="http://"),
-                db,
-                admin_user,
-            )
-        assert exc.value.status_code == 404
+            with pytest.raises(HTTPException) as exc:
+                await create_lesson_material(
+                    uuid.UUID(fake_lesson),
+                    LessonMaterialCreate(title="x", file_url="http://"),
+                    db,
+                    admin_user,
+                )
+            assert exc.value.status_code == 404
+    finally:
+        current_tenant_id.reset(token)

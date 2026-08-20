@@ -113,7 +113,13 @@
             <p><strong>Preço:</strong> R$ {{ formatPrice(course.price) }}</p>
             <p v-if="course.description" class="text-gray-600 mt-3">{{ course.description }}</p>
           </div>
-          <div v-if="isAdmin" class="mt-4 flex gap-2">
+          <div v-if="isAdmin" class="mt-4 flex gap-2 flex-wrap">
+            <AppButton
+              @click="manageLessons(course)"
+              class="bg-teal-600 text-white text-sm flex-1"
+            >
+              Gerenciar Aulas
+            </AppButton>
             <AppButton
               @click="editCourse(course)"
               class="bg-blue-600 text-white text-sm flex-1"
@@ -135,6 +141,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
@@ -143,6 +150,7 @@ import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const courses = ref([])
 const loading = ref(false)
@@ -158,7 +166,10 @@ const form = ref({
   description: '',
 })
 
-const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
+const isAdmin = computed(() => {
+  const role = authStore.userRole?.toLowerCase()
+  return role === 'admin' || role === 'super_admin'
+})
 
 const formatModality = (modality) => {
   const map = {
@@ -204,6 +215,10 @@ const editCourse = (course) => {
   editingId.value = course.id
   form.value = { ...course }
   showForm.value = true
+}
+
+const manageLessons = (course) => {
+  router.push(`/courses/${course.id}/lessons`)
 }
 
 const deleteCourse = async (id) => {

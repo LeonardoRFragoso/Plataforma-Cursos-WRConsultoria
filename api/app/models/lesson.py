@@ -44,6 +44,7 @@ class Lesson(Base):
     storage_key = Column(String, nullable=True)
     duration_seconds = Column(Integer, nullable=True)
     is_free_preview = Column(Boolean, default=False, nullable=False)
+    is_required = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -65,7 +66,10 @@ class LessonMaterial(Base):
     )
     lesson_id = Column(UUID(as_uuid=True), ForeignKey("lessons.id"), nullable=False)
     title = Column(String, nullable=False)
-    file_url = Column(String, nullable=False)
+    file_url = Column(String, nullable=True)
+    storage_key = Column(String, nullable=True)
+    mime_type = Column(String, nullable=True)
+    size_bytes = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
 

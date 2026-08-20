@@ -121,7 +121,7 @@ const form = ref({
 const validationCode = ref('')
 const validationResult = ref(null)
 
-const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
+const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
 
 const completedEnrollments = computed(() => {
   return enrollments.value.filter(e => e.status === 'CONCLUIDA')

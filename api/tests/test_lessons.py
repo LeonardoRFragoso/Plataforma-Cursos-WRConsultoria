@@ -99,7 +99,6 @@ async def _create_enrollment(client, admin_headers, student_id, class_id, status
 
 async def _create_lesson(client, admin_headers, course_id, extra=None):
     payload = {
-        "course_id": str(course_id),
         "title": f"Aula {uuid.uuid4().hex[:6]}",
         "description": "Descrição da aula",
         "order": 1,
@@ -133,7 +132,6 @@ async def test_create_lesson_as_student_forbidden(client, admin_headers, student
     response = await client.post(
         f"/api/v1/lessons/courses/{course_id}/lessons",
         json={
-            "course_id": str(course_id),
             "title": "Aula",
             "order": 1,
             "content_type": "UPLOAD",
@@ -150,7 +148,6 @@ async def test_create_lesson_course_not_found(client, admin_headers):
     response = await client.post(
         f"/api/v1/lessons/courses/{fake_id}/lessons",
         json={
-            "course_id": fake_id,
             "title": "Aula",
             "order": 1,
             "content_type": "UPLOAD",
@@ -167,7 +164,6 @@ async def test_create_lesson_invalid_payload(client, admin_headers):
     response = await client.post(
         f"/api/v1/lessons/courses/{course_id}/lessons",
         json={
-            "course_id": str(course_id),
             "title": "",
             "order": -1,
             "content_type": "INVALID",
@@ -232,7 +228,6 @@ async def test_create_lesson_anonymous_forbidden(client, admin_headers):
     response = await client.post(
         f"/api/v1/lessons/courses/{course_id}/lessons",
         json={
-            "course_id": str(course_id),
             "title": "Aula",
             "order": 1,
             "content_type": "UPLOAD",
@@ -249,12 +244,13 @@ async def test_generate_upload_url_mocked(client, admin_headers, monkeypatch):
     lesson = await _create_lesson(client, admin_headers, course_id)
     lesson_id = lesson["id"]
 
-    expected_key = f"lessons/{lesson_id}/video.mp4"
+    expected_key = f"tenants/{lesson['tenant_id']}/courses/{course_id}/lessons/{lesson_id}/video/video.mp4"
     mock_upload = AsyncMock(return_value=("https://mock-s3.example/upload", expected_key))
     monkeypatch.setattr("app.api.routes.lessons.generate_upload_url", mock_upload)
 
     response = await client.post(
-        f"/api/v1/lessons/{lesson_id}/upload-url?filename=video.mp4&content_type=video/mp4&content_length=1048576",
+        f"/api/v1/lessons/{lesson_id}/upload-presign",
+        json={"filename": "video.mp4", "mime_type": "video/mp4", "size_bytes": 1048576},
         headers=admin_headers,
     )
     assert response.status_code == 200
@@ -271,7 +267,8 @@ async def test_generate_upload_url_no_storage(client, admin_headers, monkeypatch
 
     monkeypatch.undo()
     response = await client.post(
-        f"/api/v1/lessons/{lesson_id}/upload-url?filename=video.mp4&content_type=video/mp4",
+        f"/api/v1/lessons/{lesson_id}/upload-presign",
+        json={"filename": "video.mp4", "mime_type": "video/mp4", "size_bytes": 1048576},
         headers=admin_headers,
     )
     assert response.status_code == 503
@@ -288,7 +285,8 @@ async def test_generate_upload_url_invalid_mime(client, admin_headers, monkeypat
     monkeypatch.setattr(storage_settings, "STORAGE_BUCKET", "wr-videos")
 
     response = await client.post(
-        f"/api/v1/lessons/{lesson_id}/upload-url?filename=image.png&content_type=image/png",
+        f"/api/v1/lessons/{lesson_id}/upload-presign",
+        json={"filename": "image.png", "mime_type": "image/png", "size_bytes": 1048576},
         headers=admin_headers,
     )
     assert response.status_code == 415
@@ -306,7 +304,8 @@ async def test_generate_upload_url_max_size(client, admin_headers, monkeypatch):
 
     from app.core.storage import MAX_UPLOAD_SIZE
     response = await client.post(
-        f"/api/v1/lessons/{lesson_id}/upload-url?filename=video.mp4&content_type=video/mp4&content_length={MAX_UPLOAD_SIZE + 1}",
+        f"/api/v1/lessons/{lesson_id}/upload-presign",
+        json={"filename": "video.mp4", "mime_type": "video/mp4", "size_bytes": MAX_UPLOAD_SIZE + 1},
         headers=admin_headers,
     )
     assert response.status_code == 413
@@ -318,8 +317,22 @@ async def test_generate_watch_url_mocked(client, admin_headers, student_user, mo
     class_id = await _create_class(client, admin_headers, course_id, admin_id)
     student_id = student_user["student_id"]
     await _create_enrollment(client, admin_headers, student_id, class_id)
-    lesson = await _create_lesson(client, admin_headers, course_id, {"content_type": "UPLOAD", "storage_key": "lessons/x/video.mp4"})
+    # storage_key is backend-owned; we need to set it via DB or mock the upload-complete
+    lesson = await _create_lesson(client, admin_headers, course_id, {"content_type": "UPLOAD"})
     lesson_id = lesson["id"]
+
+    # Mock verify_object_exists so upload-complete succeeds
+    mock_verify = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.api.routes.lessons.verify_object_exists", mock_verify)
+
+    # Use upload-complete to set storage_key
+    storage_key = f"tenants/{lesson['tenant_id']}/courses/{course_id}/lessons/{lesson_id}/video/video.mp4"
+    response = await client.post(
+        f"/api/v1/lessons/{lesson_id}/upload-complete",
+        params={"storage_key": storage_key},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
 
     mock_watch = AsyncMock(return_value="https://mock-s3.example/watch")
     monkeypatch.setattr("app.api.routes.lessons.generate_watch_url", mock_watch)

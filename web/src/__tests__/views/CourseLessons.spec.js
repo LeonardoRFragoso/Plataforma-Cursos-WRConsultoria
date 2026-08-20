@@ -35,15 +35,38 @@ describe('CourseLessons View', () => {
           name: 'CourseLessons',
           component: CourseLessons,
         },
+        {
+          path: '/courses/:id/progress',
+          name: 'CourseProgress',
+          component: { template: '<div></div>' },
+        },
       ],
     })
 
     api.get.mockImplementation((url) => {
-      if (url.includes('/lessons/courses/')) {
+      if (url.includes('/lessons/courses/') && url.includes('/lessons')) {
         return Promise.resolve({
           data: [
-            { id: 'lesson-1', title: 'Aula 1', order: 0 },
-            { id: 'lesson-2', title: 'Aula 2', order: 1 },
+            {
+              id: 'lesson-1',
+              title: 'Aula 1',
+              order: 0,
+              content_type: 'UPLOAD',
+              is_free_preview: true,
+              is_required: false,
+              storage_key: null,
+              duration_seconds: 300,
+            },
+            {
+              id: 'lesson-2',
+              title: 'Aula 2',
+              order: 1,
+              content_type: 'UPLOAD',
+              is_free_preview: false,
+              is_required: true,
+              storage_key: 'tenants/x/courses/y/lessons/z/video/v.mp4',
+              duration_seconds: 600,
+            },
           ],
         })
       }
@@ -54,6 +77,10 @@ describe('CourseLessons View', () => {
       }
       return Promise.resolve({ data: {} })
     })
+
+    api.post.mockResolvedValue({ data: {} })
+    api.put.mockResolvedValue({ data: [] })
+    api.delete.mockResolvedValue({ data: {} })
   })
 
   it('renderiza lista de aulas para admin', async () => {
@@ -61,9 +88,7 @@ describe('CourseLessons View', () => {
     await router.isReady()
 
     const wrapper = mount(CourseLessons, {
-      global: {
-        plugins: [router],
-      },
+      global: { plugins: [router] },
     })
     await flushPromises()
 
@@ -76,12 +101,93 @@ describe('CourseLessons View', () => {
     await router.isReady()
 
     mount(CourseLessons, {
-      global: {
-        plugins: [router],
-      },
+      global: { plugins: [router] },
     })
     await flushPromises()
 
     expect(api.get).toHaveBeenCalled()
+  })
+
+  it('exibe badges de grátis e obrigatória', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Grátis')
+    expect(wrapper.text()).toContain('Obrigatória')
+    expect(wrapper.text()).toContain('Opcional')
+  })
+
+  it('exibe botão de enviar vídeo quando storage_key vazio', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Enviar Vídeo')
+    expect(wrapper.text()).toContain('Trocar Vídeo')
+  })
+
+  it('exibe botão de remover vídeo quando storage_key preenchido', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Remover Vídeo')
+  })
+
+  it('exibe botão de materiais e progresso', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Materiais')
+    expect(wrapper.text()).toContain('Progresso dos Alunos')
+  })
+
+  it('exibe controles de reordenação', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    const upDownButtons = buttons.filter(b => b.text() === '▲' || b.text() === '▼')
+    expect(upDownButtons.length).toBeGreaterThan(0)
+  })
+
+  it('abre formulário com campo is_required ao clicar em Nova Aula', async () => {
+    await router.push('/courses/course-1/lessons')
+    await router.isReady()
+
+    const wrapper = mount(CourseLessons, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    const newBtn = wrapper.find('button')
+    const novaAulaBtn = wrapper.findAll('button').find(b => b.text().includes('Nova Aula'))
+    await novaAulaBtn.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Aula obrigatória')
   })
 })

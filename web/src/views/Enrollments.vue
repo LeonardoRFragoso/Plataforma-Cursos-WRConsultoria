@@ -143,7 +143,7 @@ const form = ref({
   status: 'PENDENTE',
 })
 
-const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin')
+const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
 
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('pt-BR')
