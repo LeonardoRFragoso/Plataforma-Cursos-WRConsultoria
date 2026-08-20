@@ -628,4 +628,194 @@ test.describe('Integration — White Label Two-Tenant', () => {
       expect(delResp.status).toBe(404)
     }
   })
+
+  // ─── New Lesson Content Manager Tests ───
+
+  test('M1. WR admin sees WR course lessons and cannot access Alfa lessons', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrToken).toBeTruthy()
+
+    // Get WR first course
+    const { body: wrCourses } = await apiGet('/api/v1/courses', wrToken, 'wr', WR_ORIGIN)
+    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
+    expect(wrCourse).toBeTruthy()
+
+    // Get WR course lessons → 200
+    const { status: wrLessonsStatus, body: wrLessons } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrLessonsStatus).toBe(200)
+    expect(wrLessons.length).toBeGreaterThan(0)
+
+    // Get Alfa first course
+    const { body: alfaCourses } = await apiGet('/api/v1/courses', wrToken, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // WR admin + Alfa course ID → 404
+    const { status: wrAlfaCourseStatus } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrAlfaCourseStatus).toBe(404)
+
+    // Get WR lesson
+    const wrLesson = wrLessons[0]
+    const { status: wrLessonStatus } = await apiGet(
+      `/api/v1/lessons/${wrLesson.id}`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrLessonStatus).toBe(200)
+
+    // WR admin + Alfa lesson ID → 404
+    const { body: alfaLessons } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      wrToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    if (alfaLessons && alfaLessons.length > 0) {
+      const alfaLesson = alfaLessons[0]
+      const { status: wrAlfaLessonStatus } = await apiGet(
+        `/api/v1/lessons/${alfaLesson.id}`,
+        wrToken,
+        'wr',
+        WR_ORIGIN,
+      )
+      expect(wrAlfaLessonStatus).toBe(404)
+    }
+  })
+
+  test('M2. Alfa admin sees Alfa course lessons and cannot access WR lessons', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaToken).toBeTruthy()
+
+    // Get Alfa first course
+    const { body: alfaCourses } = await apiGet('/api/v1/courses', alfaToken, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // Get Alfa course lessons → 200
+    const { status: alfaLessonsStatus, body: alfaLessons } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaLessonsStatus).toBe(200)
+    expect(alfaLessons.length).toBeGreaterThan(0)
+
+    // Get WR first course
+    const { body: wrCourses } = await apiGet('/api/v1/courses', alfaToken, 'wr', WR_ORIGIN)
+    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
+    expect(wrCourse).toBeTruthy()
+
+    // Alfa admin + WR course ID → 404
+    const { status: alfaWrCourseStatus } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaWrCourseStatus).toBe(404)
+
+    // Get Alfa lesson
+    const alfaLesson = alfaLessons[0]
+    const { status: alfaLessonStatus } = await apiGet(
+      `/api/v1/lessons/${alfaLesson.id}`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaLessonStatus).toBe(200)
+
+    // Alfa admin + WR lesson ID → 404
+    const { body: wrLessons } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      alfaToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    if (wrLessons && wrLessons.length > 0) {
+      const wrLesson = wrLessons[0]
+      const { status: alfaWrLessonStatus } = await apiGet(
+        `/api/v1/lessons/${wrLesson.id}`,
+        alfaToken,
+        'alfa',
+        ALFA_ORIGIN,
+      )
+      expect(alfaWrLessonStatus).toBe(404)
+    }
+  })
+
+  test('M3. WR credentials + WR context = 200, WR credentials + Alfa context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(wrToken).toBeTruthy()
+
+    // WR token + WR context → 200
+    const { status: wrWrStatus } = await apiGet('/api/v1/courses', wrToken, 'wr', WR_ORIGIN)
+    expect(wrWrStatus).toBe(200)
+
+    // WR token + Alfa context → 401
+    const { status: wrAlfaStatus } = await apiGet('/api/v1/courses', wrToken, 'alfa', ALFA_ORIGIN)
+    expect(wrAlfaStatus).toBe(401)
+  })
+
+  test('M4. Alfa credentials + Alfa context = 200, Alfa credentials + WR context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
+    expect(alfaToken).toBeTruthy()
+
+    // Alfa token + Alfa context → 200
+    const { status: alfaAlfaStatus } = await apiGet('/api/v1/courses', alfaToken, 'alfa', ALFA_ORIGIN)
+    expect(alfaAlfaStatus).toBe(200)
+
+    // Alfa token + WR context → 401
+    const { status: alfaWrStatus } = await apiGet('/api/v1/courses', alfaToken, 'wr', WR_ORIGIN)
+    expect(alfaWrStatus).toBe(401)
+  })
+
+  test('M5. SUPER_ADMIN + WR context = 200, SUPER_ADMIN + Alfa context = 401', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: superToken } = await loginViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
+    expect(superToken).toBeTruthy()
+
+    // SUPER_ADMIN + WR context → 200
+    const { status: superWrStatus } = await apiGet('/api/v1/courses', superToken, 'wr', WR_ORIGIN)
+    expect(superWrStatus).toBe(200)
+
+    // SUPER_ADMIN + Alfa context → 401
+    const { status: superAlfaStatus } = await apiGet('/api/v1/courses', superToken, 'alfa', ALFA_ORIGIN)
+    expect(superAlfaStatus).toBe(401)
+  })
 })
