@@ -857,4 +857,213 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { status: superAlfaStatus } = await loginResponseViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(superAlfaStatus).toBe(401)
   })
+
+  test('M6. Aluno2 initial state: 0% progress, CONFIRMADA, 0 certificates', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    // Get Alfa courses
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // Get my-progress
+    const { status: progressStatus, body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progressStatus).toBe(200)
+    expect(progress.total_lessons).toBe(5)
+    expect(progress.required_lessons).toBe(4)
+    expect(progress.optional_lessons).toBe(1)
+    expect(progress.completed_required).toBe(0)
+    expect(progress.completed_optional).toBe(0)
+    expect(progress.percentage).toBe(0)
+    expect(progress.certificate_eligible).toBe(false)
+
+    // Check enrollment status
+    const { body: enrollments } = await apiGet(
+      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    const enrollment = enrollments[0]
+    expect(enrollment.status).toBe('CONFIRMADA')
+
+    // Check certificate count
+    const { body: certificates } = await apiGet(
+      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certificates.length).toBe(0)
+  })
+
+  test('M7. Aluno2 after first required lesson: 25% progress', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    // Get Alfa courses and lessons
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    const { body: lessons } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+
+    // Get first required lesson
+    const firstRequired = lessons.find(l => l.is_required && l.order === 1)
+    expect(firstRequired).toBeTruthy()
+
+    // Complete first lesson
+    const { status: updateStatus } = await apiPost(
+      `/api/v1/lessons/${firstRequired.id}/progress`,
+      { completed: true, watched_seconds: 60 },
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(updateStatus).toBe(200)
+
+    // Check progress
+    const { body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progress.completed_required).toBe(1)
+    expect(progress.percentage).toBe(25)
+    expect(progress.certificate_eligible).toBe(false)
+  })
+
+  test('M8-M9. Aluno2 after all required lessons: 100% progress, CONCLUIDA, 1 certificate', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    // Get Alfa courses and lessons
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    const { body: lessons } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+
+    // Complete all required lessons (skip optional)
+    const requiredLessons = lessons.filter(l => l.is_required)
+    for (const lesson of requiredLessons) {
+      await apiPost(
+        `/api/v1/lessons/${lesson.id}/progress`,
+        { completed: true, watched_seconds: 60 },
+        aluno2Token,
+        'alfa',
+        ALFA_ORIGIN,
+      )
+    }
+
+    // Check progress
+    const { body: progress } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/my-progress`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(progress.completed_required).toBe(4)
+    expect(progress.completed_optional).toBe(0)
+    expect(progress.percentage).toBe(100)
+    expect(progress.certificate_eligible).toBe(true)
+
+    // Check enrollment status changed to CONCLUIDA
+    const { body: enrollments } = await apiGet(
+      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    const enrollment = enrollments[0]
+    expect(enrollment.status).toBe('CONCLUIDA')
+
+    // Check certificate count is exactly 1
+    const { body: certificates } = await apiGet(
+      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certificates.length).toBe(1)
+  })
+
+  test('M10. Aluno2 certificate idempotency: repeat completion does not create duplicate', async () => {
+    if (!stackAvailable) {
+      test.skip()
+      return
+    }
+
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    expect(aluno2Token).toBeTruthy()
+
+    // Get Alfa courses and lessons
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', aluno2Token, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    const { body: lessons } = await apiGet(
+      `/api/v1/lessons/courses/${alfaCourse.id}/lessons`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+
+    // Get last required lesson
+    const lastRequired = lessons.filter(l => l.is_required).pop()
+
+    // Complete it again
+    await apiPost(
+      `/api/v1/lessons/${lastRequired.id}/progress`,
+      { completed: true, watched_seconds: 60 },
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+
+    // Check enrollment still CONCLUIDA
+    const { body: enrollments } = await apiGet(
+      `/api/v1/enrollments?course_id=${alfaCourse.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    const enrollment = enrollments[0]
+    expect(enrollment.status).toBe('CONCLUIDA')
+
+    // Check certificate count still exactly 1
+    const { body: certificates } = await apiGet(
+      `/api/v1/certificates?enrollment_id=${enrollment.id}`,
+      aluno2Token,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(certificates.length).toBe(1)
+  })
 })
