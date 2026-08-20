@@ -657,9 +657,10 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { status: coursesStatus, body: wrCourses } = await apiGet('/api/v1/courses/', wrToken, 'wr', WR_ORIGIN)
     expect(coursesStatus).toBe(200)
     expect(wrCourses).toBeTruthy()
+    expect(Array.isArray(wrCourses)).toBe(true)
 
     // NR-10 MUST exist
-    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
+    const wrCourse = wrCourses.find(c => c && c.code === 'NR-10')
     expect(wrCourse).toBeTruthy()
 
     // Get WR course lessons → 200
@@ -739,9 +740,10 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', alfaToken, 'alfa', ALFA_ORIGIN)
     expect(coursesStatus).toBe(200)
     expect(alfaCourses).toBeTruthy()
+    expect(Array.isArray(alfaCourses)).toBe(true)
 
     // SEG-01 MUST exist
-    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    const alfaCourse = alfaCourses.find(c => c && c.code === 'SEG-01')
     expect(alfaCourse).toBeTruthy()
 
     // Get Alfa course lessons → 200
