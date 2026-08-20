@@ -644,7 +644,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
   // ─── New Lesson Content Manager Tests ───
 
-  test('M1. Lesson endpoints accessible for WR admin', async () => {
+  test('M1. WR admin sees deterministic 5-lesson curriculum with tenant isolation', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -653,22 +653,77 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
     expect(wrToken).toBeTruthy()
 
-    // Get WR first course
-    const { body: wrCourses } = await apiGet('/api/v1/courses', wrToken, 'wr', WR_ORIGIN)
+    // Get WR courses with trailing slash
+    const { status: coursesStatus, body: wrCourses } = await apiGet('/api/v1/courses/', wrToken, 'wr', WR_ORIGIN)
+    expect(coursesStatus).toBe(200)
+    expect(wrCourses).toBeTruthy()
+
+    // NR-10 MUST exist
     const wrCourse = wrCourses.find(c => c.code === 'NR-10')
-    if (wrCourse) {
-      // Get WR course lessons endpoint
-      const { status: wrLessonsStatus } = await apiGet(
-        `/api/v1/courses/${wrCourse.id}/lessons`,
-        wrToken,
-        'wr',
-        WR_ORIGIN,
-      )
-      expect([200, 404]).toContain(wrLessonsStatus) // 200 if lessons exist, 404 if course not found
-    }
+    expect(wrCourse).toBeTruthy()
+
+    // Get WR course lessons → 200
+    const { status: wrLessonsStatus, body: wrLessons } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrLessonsStatus).toBe(200)
+    expect(wrLessons).toBeTruthy()
+    expect(wrLessons.length).toBe(5)
+
+    // Verify exact lesson titles and order
+    const expectedTitles = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    wrLessons.forEach((lesson, idx) => {
+      expect(lesson.order).toBe(idx + 1)
+      expect(lesson.title).toBe(expectedTitles[idx])
+    })
+
+    // Count required/optional
+    const requiredCount = wrLessons.filter(l => l.is_required).length
+    const optionalCount = wrLessons.filter(l => !l.is_required).length
+    expect(requiredCount).toBe(4)
+    expect(optionalCount).toBe(1)
+
+    // Get Alfa course ID for cross-tenant test
+    const { body: alfaCourses } = await apiGet('/api/v1/courses/', wrToken, 'alfa', ALFA_ORIGIN)
+    const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
+    expect(alfaCourse).toBeTruthy()
+
+    // WR context → Alfa course lessons = 404
+    const { status: wrAlfaCourseStatus } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrAlfaCourseStatus).toBe(404)
+
+    // WR context → Alfa lesson = 404
+    const { body: alfaLessons } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      wrToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    const alfaLesson = alfaLessons[0]
+    const { status: wrAlfaLessonStatus } = await apiGet(
+      `/api/v1/lessons/${alfaLesson.id}`,
+      wrToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    expect(wrAlfaLessonStatus).toBe(404)
   })
 
-  test('M2. Lesson endpoints accessible for Alfa admin', async () => {
+  test('M2. Alfa admin sees deterministic 5-lesson curriculum with tenant isolation', async () => {
     if (!stackAvailable) {
       test.skip()
       return
@@ -677,19 +732,74 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(alfaToken).toBeTruthy()
 
-    // Get Alfa first course
-    const { body: alfaCourses } = await apiGet('/api/v1/courses', alfaToken, 'alfa', ALFA_ORIGIN)
+    // Get Alfa courses with trailing slash
+    const { status: coursesStatus, body: alfaCourses } = await apiGet('/api/v1/courses/', alfaToken, 'alfa', ALFA_ORIGIN)
+    expect(coursesStatus).toBe(200)
+    expect(alfaCourses).toBeTruthy()
+
+    // SEG-01 MUST exist
     const alfaCourse = alfaCourses.find(c => c.code === 'SEG-01')
-    if (alfaCourse) {
-      // Get Alfa course lessons endpoint
-      const { status: alfaLessonsStatus } = await apiGet(
-        `/api/v1/courses/${alfaCourse.id}/lessons`,
-        alfaToken,
-        'alfa',
-        ALFA_ORIGIN,
-      )
-      expect([200, 404]).toContain(alfaLessonsStatus) // 200 if lessons exist, 404 if course not found
-    }
+    expect(alfaCourse).toBeTruthy()
+
+    // Get Alfa course lessons → 200
+    const { status: alfaLessonsStatus, body: alfaLessons } = await apiGet(
+      `/api/v1/courses/${alfaCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaLessonsStatus).toBe(200)
+    expect(alfaLessons).toBeTruthy()
+    expect(alfaLessons.length).toBe(5)
+
+    // Verify exact lesson titles and order
+    const expectedTitles = [
+      'Introdução',
+      'Conceitos Fundamentais',
+      'Procedimentos',
+      'Aplicação Prática',
+      'Encerramento',
+    ]
+    alfaLessons.forEach((lesson, idx) => {
+      expect(lesson.order).toBe(idx + 1)
+      expect(lesson.title).toBe(expectedTitles[idx])
+    })
+
+    // Count required/optional
+    const requiredCount = alfaLessons.filter(l => l.is_required).length
+    const optionalCount = alfaLessons.filter(l => !l.is_required).length
+    expect(requiredCount).toBe(4)
+    expect(optionalCount).toBe(1)
+
+    // Get WR course ID for cross-tenant test
+    const { body: wrCourses } = await apiGet('/api/v1/courses/', alfaToken, 'wr', WR_ORIGIN)
+    const wrCourse = wrCourses.find(c => c.code === 'NR-10')
+    expect(wrCourse).toBeTruthy()
+
+    // Alfa context → WR course lessons = 404
+    const { status: alfaWrCourseStatus } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaWrCourseStatus).toBe(404)
+
+    // Alfa context → WR lesson = 404
+    const { body: wrLessons } = await apiGet(
+      `/api/v1/courses/${wrCourse.id}/lessons`,
+      alfaToken,
+      'wr',
+      WR_ORIGIN,
+    )
+    const wrLesson = wrLessons[0]
+    const { status: alfaWrLessonStatus } = await apiGet(
+      `/api/v1/lessons/${wrLesson.id}`,
+      alfaToken,
+      'alfa',
+      ALFA_ORIGIN,
+    )
+    expect(alfaWrLessonStatus).toBe(404)
   })
 
   test('M3. WR credentials + WR context = 200, WR credentials + Alfa context = 401', async () => {
