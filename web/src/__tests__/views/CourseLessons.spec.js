@@ -183,7 +183,6 @@ describe('CourseLessons View', () => {
     })
     await flushPromises()
 
-    const newBtn = wrapper.find('button')
     const novaAulaBtn = wrapper.findAll('button').find(b => b.text().includes('Nova Aula'))
     await novaAulaBtn.trigger('click')
     await flushPromises()

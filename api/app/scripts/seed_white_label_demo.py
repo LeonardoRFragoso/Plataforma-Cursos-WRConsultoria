@@ -337,7 +337,7 @@ async def _seed_tenant(
             },
         ]
         for les_spec in demo_lessons:
-            les, les_created = await _get_or_create_lesson(
+            _les, les_created = await _get_or_create_lesson(
                 db, tenant_id, first_course.id,
                 order=les_spec["order"],
                 title=les_spec["title"],

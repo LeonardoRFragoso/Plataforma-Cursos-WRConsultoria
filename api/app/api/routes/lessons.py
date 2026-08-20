@@ -32,7 +32,6 @@ from app.models.student import Student
 from app.models.user import User
 from app.schemas.lesson import (
     CourseProgressDetailResponse,
-    CourseProgressResponse,
     LessonCreate,
     LessonMaterialCreate,
     LessonMaterialResponse,
@@ -195,7 +194,7 @@ async def create_lesson(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    course = await _load_course_tenant_filtered(db, course_id, tenant_id)
+    await _load_course_tenant_filtered(db, course_id, tenant_id)
 
     # Validate video_url for external content types
     if lesson_data.content_type == LessonContentType.YOUTUBE and lesson_data.video_url:
@@ -350,7 +349,7 @@ async def update_lesson(
     ct = update_data.get("content_type", lesson.content_type)
     if isinstance(ct, str):
         ct = LessonContentType(ct)
-    if "video_url" in update_data and update_data["video_url"]:
+    if update_data.get("video_url"):
         if ct == LessonContentType.YOUTUBE:
             _validate_youtube_url(update_data["video_url"])
         elif ct == LessonContentType.VIMEO:
@@ -600,7 +599,6 @@ async def remove_lesson_video(
         )
 
     old_storage_key = lesson.storage_key
-    old_video_url = lesson.video_url
 
     lesson.storage_key = None
     lesson.video_url = None
