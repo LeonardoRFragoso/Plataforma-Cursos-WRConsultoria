@@ -79,6 +79,19 @@ async function loginViaAPI(email, password, slug, origin) {
   return resp.json()
 }
 
+async function loginResponseViaAPI(email, password, slug, origin) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (slug) headers['x-tenant-slug'] = slug
+  if (origin) headers['origin'] = origin
+  const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ identifier: email, password }),
+  })
+  const body = await resp.json().catch(() => null)
+  return { status: resp.status, body, headers: resp.headers }
+}
+
 async function apiGet(path, token, slug, origin) {
   const headers = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -685,15 +698,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: wrToken } = await loginViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
-    expect(wrToken).toBeTruthy()
-
-    // WR token + WR context → 200
-    const { status: wrWrStatus } = await apiGet('/api/v1/courses', wrToken, 'wr', WR_ORIGIN)
+    // WR credentials + WR context → 200
+    const { status: wrWrStatus, body: wrWrBody } = await loginResponseViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
     expect(wrWrStatus).toBe(200)
+    expect(wrWrBody.access_token).toBeTruthy()
 
-    // WR token + Alfa context → 401
-    const { status: wrAlfaStatus } = await apiGet('/api/v1/courses', wrToken, 'alfa', ALFA_ORIGIN)
+    // WR credentials + Alfa context → 401
+    const { status: wrAlfaStatus } = await loginResponseViaAPI(WR_ADMIN_EMAIL, WR_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(wrAlfaStatus).toBe(401)
   })
 
@@ -703,15 +714,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: alfaToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
-    expect(alfaToken).toBeTruthy()
-
-    // Alfa token + Alfa context → 200
-    const { status: alfaAlfaStatus } = await apiGet('/api/v1/courses', alfaToken, 'alfa', ALFA_ORIGIN)
+    // Alfa credentials + Alfa context → 200
+    const { status: alfaAlfaStatus, body: alfaAlfaBody } = await loginResponseViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(alfaAlfaStatus).toBe(200)
+    expect(alfaAlfaBody.access_token).toBeTruthy()
 
-    // Alfa token + WR context → 401
-    const { status: alfaWrStatus } = await apiGet('/api/v1/courses', alfaToken, 'wr', WR_ORIGIN)
+    // Alfa credentials + WR context → 401
+    const { status: alfaWrStatus } = await loginResponseViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
     expect(alfaWrStatus).toBe(401)
   })
 
@@ -721,15 +730,13 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: superToken } = await loginViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
-    expect(superToken).toBeTruthy()
-
     // SUPER_ADMIN + WR context → 200
-    const { status: superWrStatus } = await apiGet('/api/v1/courses', superToken, 'wr', WR_ORIGIN)
+    const { status: superWrStatus, body: superWrBody } = await loginResponseViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'wr', WR_ORIGIN)
     expect(superWrStatus).toBe(200)
+    expect(superWrBody.access_token).toBeTruthy()
 
     // SUPER_ADMIN + Alfa context → 401
-    const { status: superAlfaStatus } = await apiGet('/api/v1/courses', superToken, 'alfa', ALFA_ORIGIN)
+    const { status: superAlfaStatus } = await loginResponseViaAPI(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(superAlfaStatus).toBe(401)
   })
 })
