@@ -57,10 +57,30 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.alter_column('lesson_materials', 'file_url',
-               existing_type=sa.String(),
-               nullable=False)
-    op.drop_column('lesson_materials', 'size_bytes')
-    op.drop_column('lesson_materials', 'mime_type')
-    op.drop_column('lesson_materials', 'storage_key')
-    op.drop_column('lessons', 'is_required')
+    # Check if columns exist before dropping (idempotent downgrade)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    
+    materials_columns = [col['name'] for col in inspector.get_columns('lesson_materials')]
+    lessons_columns = [col['name'] for col in inspector.get_columns('lessons')]
+    
+    # Restore file_url to NOT NULL if it exists
+    if 'file_url' in materials_columns:
+        file_url_col = next((col for col in inspector.get_columns('lesson_materials') if col['name'] == 'file_url'), None)
+        if file_url_col and file_url_col['nullable']:
+            op.alter_column('lesson_materials', 'file_url',
+                       existing_type=sa.String(),
+                       nullable=False)
+    
+    # Drop new columns only if they exist
+    if 'size_bytes' in materials_columns:
+        op.drop_column('lesson_materials', 'size_bytes')
+    
+    if 'mime_type' in materials_columns:
+        op.drop_column('lesson_materials', 'mime_type')
+    
+    if 'storage_key' in materials_columns:
+        op.drop_column('lesson_materials', 'storage_key')
+    
+    if 'is_required' in lessons_columns:
+        op.drop_column('lessons', 'is_required')
