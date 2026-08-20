@@ -5,16 +5,19 @@ Revises: 72ddbcd675ca
 Create Date: 2026-08-13 17:33:27.595717
 
 """
-from collections.abc import Sequence
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
+
 from app.core.migration_reconcile import reconcile_enrollments
+
 
 # revision identifiers, used by Alembic.
 revision: str = '844b5516b310'
-down_revision: str | None = '72ddbcd675ca'
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = '72ddbcd675ca'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

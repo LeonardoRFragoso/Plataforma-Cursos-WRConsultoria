@@ -16,6 +16,20 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Importar todos os models para registrar suas tabelas no Base.metadata
+from app.models.attendance import Attendance  # noqa: F401
+from app.models.certificate import Certificate  # noqa: F401
+from app.models.class_model import Class  # noqa: F401
+from app.models.company import Company  # noqa: F401
+from app.models.course import Course  # noqa: F401
+from app.models.enrollment import Enrollment  # noqa: F401
+from app.models.lesson import Lesson, LessonMaterial, LessonProgress  # noqa: F401
+from app.models.payment import Payment  # noqa: F401
+from app.models.plan import Plan  # noqa: F401
+from app.models.student import Student  # noqa: F401
+from app.models.tenant import PartnerLead, Tenant  # noqa: F401
+from app.models.tenant_secret import TenantSecret  # noqa: F401
+from app.models.tenant_subscription import TenantSubscription  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -5,17 +5,17 @@ Revises: 844b5516b310
 Create Date: 2026-08-14 23:51:38.640059
 
 """
-from collections.abc import Sequence
-
-import sqlalchemy as sa
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
+
 
 # revision identifiers, used by Alembic.
 revision: str = 'd00868304926'
-down_revision: str | None = '844b5516b310'
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = '844b5516b310'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 WR_TENANT_ID = '11111111-1111-1111-1111-111111111111'

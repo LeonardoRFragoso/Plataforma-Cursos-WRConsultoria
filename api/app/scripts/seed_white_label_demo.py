@@ -40,6 +40,7 @@ from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course, CourseModality, CourseType
 from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.lesson import Lesson, LessonContentType, LessonProgress
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
@@ -211,10 +212,17 @@ async def _get_or_create_payment(db, tenant_id, enrollment_id, amount):
     Preference order:
     1. Approved payment (most likely to be legitimate)
     2. Oldest payment (most deterministic)
+    3. Stable UUID/id tie-breaker
     """
+    from sqlalchemy import case
+    
     stmt = select(Payment).where(Payment.enrollment_id == enrollment_id).order_by(
-        Payment.status == PaymentStatus.APROVADO,  # Approved first
-        Payment.created_at,  # Then oldest
+        case(
+            (Payment.status == PaymentStatus.APROVADO, 0),
+            else_=1
+        ),
+        Payment.created_at,
+        Payment.id,
     )
     result = await db.execute(stmt)
     payments = result.scalars().all()
@@ -252,6 +260,39 @@ async def _get_or_create_certificate(db, tenant_id, enrollment_id):
     db.add(cert)
     await db.flush()
     return cert, True
+
+
+async def _get_or_create_lesson(
+    db, tenant_id, course_id, order, title, description,
+    content_type=LessonContentType.YOUTUBE,
+    video_url=None, duration_seconds=None,
+    is_free_preview=False, is_required=True,
+):
+    """Idempotent lesson creation keyed on (tenant_id, course_id, order)."""
+    stmt = select(Lesson).where(
+        Lesson.tenant_id == tenant_id,
+        Lesson.course_id == course_id,
+        Lesson.order == order,
+    )
+    result = await db.execute(stmt)
+    lesson = result.scalar_one_or_none()
+    if lesson:
+        return lesson, False
+    lesson = Lesson(
+        tenant_id=tenant_id,
+        course_id=course_id,
+        order=order,
+        title=title,
+        description=description,
+        content_type=content_type,
+        video_url=video_url,
+        duration_seconds=duration_seconds,
+        is_free_preview=is_free_preview,
+        is_required=is_required,
+    )
+    db.add(lesson)
+    await db.flush()
+    return lesson, True
 
 
 async def _seed_tenant(
@@ -296,8 +337,77 @@ async def _seed_tenant(
             cls = await _get_or_create_demo_class(db, tenant_id, course.id, admin.id)
             class_objs[code] = cls
 
-        # Students + enrollments + payments + certificate
+        # Lessons (deterministic — seed lessons for the first course only)
         first_code = next(iter(course_objs.keys()))
+        first_course = course_objs[first_code]
+        demo_lessons = [
+            {
+                "order": 1,
+                "title": "Introdução",
+                "description": "Apresentação do curso e objetivos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 300,
+                "is_free_preview": True,
+                "is_required": True,
+            },
+            {
+                "order": 2,
+                "title": "Conceitos Fundamentais",
+                "description": "Conceitos teóricos essenciais",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 600,
+                "is_free_preview": False,
+                "is_required": True,
+            },
+            {
+                "order": 3,
+                "title": "Procedimentos",
+                "description": "Procedimentos práticos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 900,
+                "is_free_preview": False,
+                "is_required": True,
+            },
+            {
+                "order": 4,
+                "title": "Aplicação Prática",
+                "description": "Aplicação prática dos conceitos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 1200,
+                "is_free_preview": False,
+                "is_required": True,
+            },
+            {
+                "order": 5,
+                "title": "Encerramento",
+                "description": "Resumo e próximos passos",
+                "content_type": LessonContentType.YOUTUBE,
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "duration_seconds": 300,
+                "is_free_preview": False,
+                "is_required": False,
+            },
+        ]
+        for les_spec in demo_lessons:
+            _les, les_created = await _get_or_create_lesson(
+                db, tenant_id, first_course.id,
+                order=les_spec["order"],
+                title=les_spec["title"],
+                description=les_spec["description"],
+                content_type=les_spec["content_type"],
+                video_url=les_spec["video_url"],
+                duration_seconds=les_spec["duration_seconds"],
+                is_free_preview=les_spec["is_free_preview"],
+                is_required=les_spec["is_required"],
+            )
+            if les_created:
+                print(f"  [{slug}] Lesson {les_spec['order']}: {les_spec['title']}")
+
+        # Students + enrollments + payments + certificate
         for spec in student_specs:
             stu_user, stu_created = await _get_or_create_user(
                 db,
@@ -323,6 +433,38 @@ async def _seed_tenant(
             )
 
             if spec.get("certificate"):
+                # Create lesson progress for all required lessons
+                stmt = select(Lesson).where(
+                    Lesson.tenant_id == tenant_id,
+                    Lesson.course_id == course.id,
+                    Lesson.is_required == True,
+                ).order_by(Lesson.order)
+                result = await db.execute(stmt)
+                required_lessons = result.scalars().all()
+                
+                for lesson in required_lessons:
+                    # Check if progress already exists
+                    progress_stmt = select(LessonProgress).where(
+                        LessonProgress.lesson_id == lesson.id,
+                        LessonProgress.student_id == student.id,
+                    )
+                    progress_result = await db.execute(progress_stmt)
+                    existing_progress = progress_result.scalar_one_or_none()
+                    
+                    if not existing_progress:
+                        progress = LessonProgress(
+                            tenant_id=tenant_id,
+                            lesson_id=lesson.id,
+                            student_id=student.id,
+                            watched_seconds=lesson.duration_seconds or 0,
+                            completed=True,
+                            completed_at=utc_now(),
+                        )
+                        db.add(progress)
+                
+                # Update enrollment to CONCLUIDA
+                enrollment.status = EnrollmentStatus.CONCLUIDA
+                
                 _cert, cert_created = await _get_or_create_certificate(
                     db, tenant_id, enrollment.id
                 )

@@ -5,15 +5,17 @@ Revises: d288128bbb94
 Create Date: 2026-08-15 08:31:05.058911
 
 """
-from collections.abc import Sequence
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
+
 
 # revision identifiers, used by Alembic.
 revision: str = '697853c1effe'
-down_revision: str | None = 'd288128bbb94'
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = 'd288128bbb94'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 TENANT_TABLES = [
