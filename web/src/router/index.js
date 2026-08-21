@@ -29,6 +29,16 @@ export const routes = [
     component: () => import('../views/ValidateCertificate.vue'),
   },
   {
+    path: '/recuperar-senha',
+    name: 'ForgotPassword',
+    component: () => import('../views/ForgotPassword.vue'),
+  },
+  {
+    path: '/redefinir-senha',
+    name: 'ResetPassword',
+    component: () => import('../views/ResetPassword.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/Dashboard.vue'),

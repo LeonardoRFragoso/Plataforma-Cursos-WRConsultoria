@@ -16,6 +16,8 @@ describe('Login Component', () => {
         { path: '/login', component: Login },
         { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
         { path: '/register', component: { template: '<div>Register</div>' } },
+        { path: '/recuperar-senha', component: { template: '<div>Forgot</div>' } },
+        { path: '/redefinir-senha', component: { template: '<div>Reset</div>' } },
       ],
     })
   })

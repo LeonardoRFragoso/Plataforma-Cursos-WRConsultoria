@@ -53,20 +53,15 @@
               Cadastre-se
             </AppLink>
           </p>
-          
+
           <div class="border-t border-gray-200 pt-4">
-            <p class="text-sm text-gray-600 mb-3">Dúvidas de acesso?</p>
-            <a
-              href="https://wa.me/5521974623559?text=Olá,%20preciso%20de%20ajuda%20com%20meu%20acesso%20à%20plataforma%20de%20cursos%20WR"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-flex items-center justify-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors font-semibold text-sm"
+            <router-link
+              to="/recuperar-senha"
+              class="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              data-testid="forgot-password-link"
             >
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.272-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-4.255.949c-1.238.503-2.335 1.236-3.356 2.192C3.75 10.645 3.172 12.120 3.172 13.6c0 1.56.378 3.051 1.124 4.381l-.92 3.212a.987.987 0 001.302 1.23l3.22-.84c1.331.738 2.787 1.148 4.168 1.148h.006c5.540 0 10.032-4.61 10.032-10.25 0-2.676-.52-5.365-1.999-7.520-1.476-2.137-3.775-3.528-6.425-3.528z"/>
-              </svg>
-              <span>Suporte WhatsApp</span>
-            </a>
+              Esqueci minha senha
+            </router-link>
           </div>
         </div>
       </AppCard>
@@ -80,6 +75,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 import { getHomeRoute } from '../utils/homeRoute'
+import { resolveSafeRedirect } from '../utils/safeRedirect'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
@@ -103,11 +99,20 @@ const handleLogin = async () => {
 
   try {
     await authStore.login(identifier.value, password.value)
-    // Use explicit redirect if present, otherwise resolve by role
-    const redirect = route.query.redirect || getHomeRoute(authStore)
+    // Use safe redirect resolver — validates internal path + role authorization
+    const redirect = resolveSafeRedirect(route.query.redirect, authStore)
     router.push(redirect)
   } catch (err) {
-    error.value = 'CPF/E-mail ou senha inválidos'
+    // Distinguish 401 (invalid credentials) from network/server errors
+    if (err.response?.status === 401) {
+      error.value = 'CPF/E-mail ou senha inválidos'
+    } else if (err.code === 'ERR_NETWORK' || !err.response) {
+      error.value = 'Não foi possível conectar ao serviço. Tente novamente.'
+    } else if (err.response?.status >= 500) {
+      error.value = 'Não foi possível conectar ao serviço. Tente novamente.'
+    } else {
+      error.value = err.response?.data?.detail || 'CPF/E-mail ou senha inválidos'
+    }
   } finally {
     loading.value = false
   }

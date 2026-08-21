@@ -140,12 +140,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
+import { useToast } from '../composables/useToast'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppLink from '../components/AppLink.vue'
 
 const route = useRoute()
+const { error: toastError } = useToast()
 const courseId = route.params.id
 
 const course = ref({})
@@ -221,7 +223,7 @@ const selectLesson = async (lesson) => {
     watchUrl.value = response.data.watch_url
   } catch (error) {
     console.error('Erro ao carregar URL de reprodução:', error)
-    alert('Não foi possível carregar o vídeo: ' + (error.response?.data?.detail || error.message))
+    toastError('Não foi possível carregar o vídeo: ' + (error.response?.data?.detail || error.message))
   }
 
   if (lesson.content_type === 'UPLOAD') {
@@ -295,7 +297,7 @@ const markComplete = async (lessonId) => {
     loadLessons()
   } catch (error) {
     console.error('Erro ao marcar aula como concluída:', error)
-    alert('Erro ao marcar aula como concluída')
+    toastError('Erro ao marcar aula como concluída')
   }
 }
 

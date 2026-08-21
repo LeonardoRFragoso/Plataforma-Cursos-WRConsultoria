@@ -9,6 +9,7 @@
           v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
+          data-testid="new-student"
         >
           + Novo Aluno
         </AppButton>
@@ -97,20 +98,29 @@
             ></textarea>
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">Salvar</AppButton>
-            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700">Cancelar</AppButton>
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-student">Salvar</AppButton>
+            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700" data-testid="cancel-student">Cancelar</AppButton>
           </div>
         </form>
       </AppCard>
 
       <!-- Lista -->
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando alunos...</p>
-      </div>
+      <LoadingState v-if="loading" message="Carregando alunos..." />
 
-      <div v-else-if="students.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhum aluno cadastrado</p>
-      </div>
+      <AppAlert
+        v-else-if="loadError"
+        type="error"
+        closable
+        @close="loadError = ''"
+      >
+        {{ loadError }}
+      </AppAlert>
+
+      <EmptyState
+        v-else-if="students.length === 0"
+        title="Nenhum aluno cadastrado"
+        description="Clique em 'Novo Aluno' para cadastrar o primeiro aluno."
+      />
 
       <div v-else class="overflow-x-auto">
         <table class="w-full border-collapse">
@@ -132,14 +142,25 @@
               <td class="px-4 py-2">{{ student.phone || '-' }}</td>
               <td class="px-4 py-2">{{ student.company || '-' }}</td>
               <td class="px-4 py-2 space-x-2">
-                <AppButton @click="editStudent(student)" class="bg-blue-600 text-white text-xs px-2 py-1">Editar</AppButton>
-                <AppButton @click="deleteStudent(student.id)" class="bg-red-600 text-white text-xs px-2 py-1">Deletar</AppButton>
+                <AppButton @click="editStudent(student)" class="bg-blue-600 text-white text-xs px-2 py-1" data-testid="edit-student">Editar</AppButton>
+                <AppButton @click="deleteStudent(student)" class="bg-red-600 text-white text-xs px-2 py-1" data-testid="delete-student">Deletar</AppButton>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      title="Excluir aluno"
+      :message="deleteMessage"
+      confirmText="Excluir"
+      cancelText="Cancelar"
+      :danger="true"
+      :loading="deleting"
+      @confirm="doDelete"
+    />
   </div>
 </template>
 
@@ -151,6 +172,13 @@ import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
+
+const { success: toastSuccess, error: toastError } = useToast()
 
 const authStore = useAuthStore()
 
@@ -161,6 +189,12 @@ const enrollments = ref([])
 const loading = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const pendingDeleteId = ref(null)
+const pendingDeleteName = ref('')
+const saving = ref(false)
+const loadError = ref('')
 const form = ref({
   full_name: '',
   email: '',
@@ -201,13 +235,19 @@ const availableClasses = computed(() => {
   })
 })
 
+const deleteMessage = computed(() => {
+  return `Excluir o aluno "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
+})
+
 const loadStudents = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get('/api/v1/students/')
     students.value = response.data
   } catch (error) {
     console.error('Erro ao carregar alunos:', error)
+    loadError.value = 'Erro ao carregar alunos. Tente novamente.'
   } finally {
     loading.value = false
   }
@@ -241,6 +281,7 @@ const loadCourses = async () => {
 }
 
 const saveStudent = async () => {
+  saving.value = true
   try {
     if (editingId.value) {
       const updatePayload = {
@@ -254,13 +295,13 @@ const saveStudent = async () => {
       await api.put(`/api/v1/students/${editingId.value}`, updatePayload)
     } else {
       if (!form.value.class_id) {
-        alert('Selecione uma turma elegível para o aluno')
+        toastError('Selecione uma turma elegível para o aluno')
         return
       }
       const createPayload = { ...form.value }
       const response = await api.post('/api/v1/students/', createPayload)
       if (response.data.temp_password) {
-        alert(`Aluno cadastrado! Senha temporária: ${response.data.temp_password}`)
+        toastSuccess(`Aluno cadastrado! Senha temporária: ${response.data.temp_password}`)
       }
     }
     resetForm()
@@ -270,7 +311,9 @@ const saveStudent = async () => {
     console.error('Erro ao salvar aluno:', error)
     const detail = error.response?.data?.detail
     const message = typeof detail === 'object' ? JSON.stringify(detail) : (detail || error.message)
-    alert('Erro ao salvar aluno: ' + message)
+    toastError('Erro ao salvar aluno: ' + message)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -292,15 +335,25 @@ const editStudent = (student) => {
   showForm.value = true
 }
 
-const deleteStudent = async (id) => {
-  if (confirm('Tem certeza que deseja deletar este aluno?')) {
-    try {
-      await api.delete(`/api/v1/students/${id}`)
-      loadStudents()
-    } catch (error) {
-      console.error('Erro ao deletar aluno:', error)
-      alert('Erro ao deletar aluno')
-    }
+const deleteStudent = (student) => {
+  pendingDeleteId.value = student.id
+  pendingDeleteName.value = student.full_name
+  showDeleteConfirm.value = true
+}
+
+const doDelete = async () => {
+  deleting.value = true
+  try {
+    await api.delete(`/api/v1/students/${pendingDeleteId.value}`)
+    await loadStudents()
+    showDeleteConfirm.value = false
+  } catch (error) {
+    console.error('Erro ao deletar aluno:', error)
+    toastError('Erro ao deletar aluno')
+  } finally {
+    deleting.value = false
+    pendingDeleteId.value = null
+    pendingDeleteName.value = ''
   }
 }
 

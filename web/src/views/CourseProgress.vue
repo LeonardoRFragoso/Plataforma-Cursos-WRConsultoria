@@ -8,19 +8,28 @@
           <h1 class="text-2xl font-bold text-secondary-900">Progresso dos Alunos</h1>
           <p class="text-sm text-gray-600">{{ course.name }}</p>
         </div>
-        <AppButton @click="goBack" class="bg-gray-600 text-white">
+        <AppButton @click="goBack" class="bg-gray-600 text-white" data-testid="back-to-lessons-btn">
           Voltar para Aulas
         </AppButton>
       </div>
 
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando...</p>
-      </div>
+      <!-- Loading -->
+      <LoadingState v-if="loading" message="Carregando progresso..." />
 
-      <div v-else-if="progressData.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhum aluno matriculado neste curso</p>
-      </div>
+      <!-- Error -->
+      <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">
+        {{ loadError }}
+        <button @click="loadProgress" class="underline ml-2">Tentar novamente</button>
+      </AppAlert>
 
+      <!-- Empty -->
+      <EmptyState
+        v-else-if="progressData.length === 0"
+        title="Nenhum aluno matriculado"
+        description="Os alunos matricululados neste curso aparecerão aqui com seu progresso."
+      />
+
+      <!-- Success -->
       <div v-else class="overflow-x-auto">
         <table class="min-w-full bg-white rounded-lg shadow">
           <thead class="bg-gray-100">
@@ -38,7 +47,7 @@
               <td class="px-4 py-3 text-sm text-gray-900">{{ row.student_name }}</td>
               <td class="px-4 py-3 text-sm text-gray-600">{{ row.class_name }}</td>
               <td class="px-4 py-3 text-sm">
-                <span :class="statusClass(row.enrollment_status)">{{ row.enrollment_status }}</span>
+                <span :class="statusClass(row.enrollment_status)">{{ formatStatus(row.enrollment_status) }}</span>
               </td>
               <td class="px-4 py-3 text-sm text-center text-gray-600">
                 {{ row.required_completed }} / {{ row.required_total }}
@@ -72,6 +81,9 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppButton from '../components/AppButton.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,6 +92,17 @@ const courseId = route.params.id
 const course = ref({})
 const progressData = ref([])
 const loading = ref(true)
+const loadError = ref('')
+
+const formatStatus = (status) => {
+  const map = {
+    'CONFIRMADA': 'Confirmada',
+    'CONCLUIDA': 'Concluída',
+    'PENDENTE': 'Pendente',
+    'CANCELADA': 'Cancelada',
+  }
+  return map[status] || status
+}
 
 const statusClass = (status) => {
   const classes = {
@@ -96,16 +119,18 @@ const loadCourse = async () => {
     const response = await api.get(`/api/v1/courses/${courseId}`)
     course.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar curso:', error)
+    // silent — course name is display-only
   }
 }
 
 const loadProgress = async () => {
+  loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get(`/api/v1/lessons/courses/${courseId}/progress`)
     progressData.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar progresso:', error)
+    loadError.value = 'Não foi possível carregar o progresso. Tente novamente.'
   } finally {
     loading.value = false
   }

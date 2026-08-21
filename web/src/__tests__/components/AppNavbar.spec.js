@@ -89,7 +89,7 @@ describe('AppNavbar', () => {
     expect(wrapper.find('[data-testid="nav-link-super-admin"]').exists()).toBe(false)
   })
 
-  it('shows admin nav links (Dashboard, Cursos, Turmas, etc.)', async () => {
+  it('shows admin nav with Dashboard flat + Gestão/Certificados/Personalização dropdown groups', async () => {
     const auth = useAuthStore()
     auth.token = 'tok'
     auth.userRole = 'admin'
@@ -99,19 +99,43 @@ describe('AppNavbar', () => {
     await router.isReady()
 
     const wrapper = mount(AppNavbar, { global: { plugins: [router] } })
+    // Dashboard is a flat link
     expect(wrapper.find('[data-testid="nav-link-dashboard"]').exists()).toBe(true)
+    // Management dropdown group exists
+    expect(wrapper.find('[data-testid="nav-group-management"]').exists()).toBe(true)
+    // Certificates dropdown group exists
+    expect(wrapper.find('[data-testid="nav-group-certificates-group"]').exists()).toBe(true)
+    // Customization dropdown group exists
+    expect(wrapper.find('[data-testid="nav-group-customization"]').exists()).toBe(true)
+    // Admin should NOT see super admin link
+    expect(wrapper.find('[data-testid="nav-link-super-admin"]').exists()).toBe(false)
+  })
+
+  it('admin dropdown shows management links when opened', async () => {
+    const auth = useAuthStore()
+    auth.token = 'tok'
+    auth.userRole = 'admin'
+    auth.user = { role: 'admin' }
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    const wrapper = mount(AppNavbar, { global: { plugins: [router] } })
+    // Dropdown items should not be visible initially
+    expect(wrapper.find('[data-testid="dropdown-panel-management"]').exists()).toBe(false)
+
+    // Open the management dropdown
+    await wrapper.find('[data-testid="nav-group-management"]').trigger('click')
+    expect(wrapper.find('[data-testid="dropdown-panel-management"]').exists()).toBe(true)
+    // Now the management links should be visible
     expect(wrapper.find('[data-testid="nav-link-courses"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-link-classes"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-link-students"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-link-enrollments"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-link-payments"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-link-certificates"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-link-white-label"]').exists()).toBe(true)
-    // Admin should NOT see super admin link
-    expect(wrapper.find('[data-testid="nav-link-super-admin"]').exists()).toBe(false)
   })
 
-  it('shows super_admin nav links including Super Admin', async () => {
+  it('shows super_admin nav with Gestão Global only', async () => {
     const auth = useAuthStore()
     auth.token = 'tok'
     auth.userRole = 'super_admin'
@@ -122,8 +146,9 @@ describe('AppNavbar', () => {
 
     const wrapper = mount(AppNavbar, { global: { plugins: [router] } })
     expect(wrapper.find('[data-testid="nav-link-super-admin"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-link-courses"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-link-white-label"]').exists()).toBe(true)
+    // Super admin should NOT see admin dropdown groups
+    expect(wrapper.find('[data-testid="nav-group-management"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-group-customization"]').exists()).toBe(false)
   })
 
   it('shows login/register when not authenticated', async () => {

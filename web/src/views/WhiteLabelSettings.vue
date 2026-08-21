@@ -4,12 +4,8 @@
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 class="text-2xl font-bold text-secondary-900 mb-6">White Label — Configurações</h1>
 
-      <div v-if="error" class="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-        {{ error }}
-      </div>
-      <div v-if="success" class="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
-        Branding atualizado com sucesso!
-      </div>
+      <AppAlert v-if="error" type="error" closable @close="error = ''">{{ error }}</AppAlert>
+      <AppAlert v-if="success" type="success" closable @close="success = false">Branding atualizado com sucesso!</AppAlert>
 
       <form @submit.prevent="handleSave" class="space-y-6 bg-white p-6 rounded-lg shadow-md border border-gray-200">
         <div>
@@ -19,7 +15,9 @@
             type="text"
             class="w-full rounded-md border-gray-300 border px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
             placeholder="Ex: Alfa Academy"
+            data-testid="wl-name-input"
           />
+          <p class="text-xs text-gray-500 mt-1">Exibido no cabeçalho, rodapé e título da página.</p>
         </div>
 
         <div>
@@ -29,7 +27,13 @@
             type="url"
             class="w-full rounded-md border-gray-300 border px-3 py-2"
             placeholder="https://..."
+            data-testid="wl-logo-input"
           />
+          <p class="text-xs text-gray-500 mt-1">URL da imagem do logo (recomendado: SVG ou PNG transparente, altura máx. 48px).</p>
+          <div v-if="form.logo_url" class="mt-2 p-3 bg-gray-50 rounded-md">
+            <img :src="form.logo_url" alt="Preview do logo" class="h-12 w-auto" />
+            <p class="text-xs text-gray-400 mt-1">Pré-visualização</p>
+          </div>
         </div>
 
         <div>
@@ -39,7 +43,9 @@
             type="url"
             class="w-full rounded-md border-gray-300 border px-3 py-2"
             placeholder="https://..."
+            data-testid="wl-logo-white-input"
           />
+          <p class="text-xs text-gray-500 mt-1">Versão branca do logo para fundos escuros (hero, rodapé).</p>
         </div>
 
         <div>
@@ -49,7 +55,9 @@
             type="url"
             class="w-full rounded-md border-gray-300 border px-3 py-2"
             placeholder="https://..."
+            data-testid="wl-favicon-input"
           />
+          <p class="text-xs text-gray-500 mt-1">Ícone exibido na aba do navegador (recomendado: 32x32px ICO ou PNG).</p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -60,6 +68,7 @@
                 v-model="form.primary_color"
                 type="color"
                 class="h-10 w-14 rounded border border-gray-300"
+                data-testid="wl-primary-color"
               />
               <input
                 v-model="form.primary_color"
@@ -68,6 +77,7 @@
                 placeholder="#0056b3"
               />
             </div>
+            <p class="text-xs text-gray-500 mt-1">Cor principal de botões e links.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Cor Secundária</label>
@@ -76,6 +86,7 @@
                 v-model="form.secondary_color"
                 type="color"
                 class="h-10 w-14 rounded border border-gray-300"
+                data-testid="wl-secondary-color"
               />
               <input
                 v-model="form.secondary_color"
@@ -84,6 +95,7 @@
                 placeholder="#1a1a1a"
               />
             </div>
+            <p class="text-xs text-gray-500 mt-1">Cor de títulos e textos de destaque.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Cor de Destaque</label>
@@ -92,6 +104,7 @@
                 v-model="form.accent_color"
                 type="color"
                 class="h-10 w-14 rounded border border-gray-300"
+                data-testid="wl-accent-color"
               />
               <input
                 v-model="form.accent_color"
@@ -100,6 +113,7 @@
                 placeholder="#ff6b35"
               />
             </div>
+            <p class="text-xs text-gray-500 mt-1">Cor de elementos de destaque e notificações.</p>
           </div>
         </div>
 
@@ -108,6 +122,7 @@
             type="submit"
             :disabled="saving"
             class="bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors disabled:opacity-50"
+            data-testid="wl-save-btn"
           >
             {{ saving ? 'Salvando...' : 'Salvar Branding' }}
           </button>
@@ -120,6 +135,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import AppNavbar from '../components/AppNavbar.vue'
+import AppAlert from '../components/AppAlert.vue'
 import { useTenantStore } from '../stores/tenant'
 import { updateTenantBranding } from '../api/tenant'
 import { TENANT_SLUG } from '../utils/tenantSlug'
@@ -155,6 +171,14 @@ async function handleSave() {
   saving.value = true
   success.value = false
   error.value = ''
+
+  // Basic validation
+  if (form.value.name && form.value.name.trim().length > 100) {
+    error.value = 'O nome da plataforma deve ter no máximo 100 caracteres.'
+    saving.value = false
+    return
+  }
+
   try {
     const payload = {}
     for (const [key, val] of Object.entries(form.value)) {

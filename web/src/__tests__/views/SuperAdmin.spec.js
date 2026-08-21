@@ -103,7 +103,7 @@ describe('SuperAdmin View', () => {
       await subTab.trigger('click')
       await flushPromises()
     }
-    expect(wrapper.text()).toContain('ACTIVE')
+    expect(wrapper.text()).toContain('Ativa')
   })
 
   it('lists partner leads', async () => {
@@ -125,15 +125,22 @@ describe('SuperAdmin View', () => {
     }
   })
 
-  it('invokes suspend on subscription', async () => {
+  it('invokes suspend on subscription after confirmation', async () => {
     const { wrapper, superAdmin } = await mountComponent()
     superAdmin.suspendSubscription.mockResolvedValue({})
+    superAdmin.listSubscriptions.mockResolvedValue([])
 
     const suspendBtn = wrapper.find('[data-testid="suspend-sub-s2"]')
     if (suspendBtn.exists()) {
       await suspendBtn.trigger('click')
       await flushPromises()
-      expect(superAdmin.suspendSubscription).toHaveBeenCalledWith('s2')
+      // Confirm dialog should now be visible
+      const confirmBtn = wrapper.find('[data-testid="confirm-ok"]')
+      if (confirmBtn.exists()) {
+        await confirmBtn.trigger('click')
+        await flushPromises()
+        expect(superAdmin.suspendSubscription).toHaveBeenCalledWith('s2')
+      }
     }
   })
 

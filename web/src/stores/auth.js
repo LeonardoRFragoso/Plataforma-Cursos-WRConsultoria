@@ -76,13 +76,8 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = meResponse.data
         userRole.value = meResponse.data.role
         localStorage.setItem('user_role', userRole.value)
-        console.log('✓ User initialized from backend:', {
-          role: userRole.value,
-          name: user.value?.full_name,
-          email: user.value?.email
-        })
       } catch (error) {
-        console.error('✗ Failed to initialize user:', error)
+        // Silent — the API interceptor handles logout/redirect on 401
       } finally {
         initialized.value = true
       }

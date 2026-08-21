@@ -9,6 +9,7 @@
           v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
+          data-testid="new-payment-btn"
         >
           + Novo Pagamento
         </AppButton>
@@ -73,20 +74,31 @@
             />
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">Salvar</AppButton>
-            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700">Cancelar</AppButton>
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-payment-btn">Salvar</AppButton>
+            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700" data-testid="cancel-payment-btn">Cancelar</AppButton>
           </div>
         </form>
       </AppCard>
 
-      <!-- Lista -->
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando pagamentos...</p>
-      </div>
+      <!-- Erro de carregamento -->
+      <AppAlert
+        v-if="loadError"
+        type="error"
+        closable
+        class="mb-6"
+        @close="loadError = ''"
+      >
+        {{ loadError }}
+      </AppAlert>
 
-      <div v-else-if="payments.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhum pagamento registrado</p>
-      </div>
+      <!-- Lista -->
+      <LoadingState v-if="loading" message="Carregando pagamentos..." />
+
+      <EmptyState
+        v-else-if="payments.length === 0"
+        title="Nenhum pagamento registrado"
+        description="Clique em 'Novo Pagamento' para registrar o primeiro pagamento."
+      />
 
       <div v-else class="overflow-x-auto">
         <table class="w-full border-collapse">
@@ -112,27 +124,44 @@
               </td>
               <td class="px-4 py-2">{{ formatDate(payment.created_at) }}</td>
               <td class="px-4 py-2 space-x-2">
-                <AppButton @click="editPayment(payment)" class="bg-blue-600 text-white text-xs px-2 py-1">Editar</AppButton>
-                <AppButton @click="deletePayment(payment.id)" class="bg-red-600 text-white text-xs px-2 py-1">Deletar</AppButton>
+                <AppButton @click="editPayment(payment)" class="bg-blue-600 text-white text-xs px-2 py-1" data-testid="edit-payment-btn">Editar</AppButton>
+                <AppButton @click="confirmDelete(payment)" class="bg-red-600 text-white text-xs px-2 py-1" data-testid="delete-payment-btn">Deletar</AppButton>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      title="Excluir pagamento"
+      :message="deleteMessage"
+      confirmText="Excluir"
+      cancelText="Cancelar"
+      :danger="true"
+      :loading="deleting"
+      @confirm="doDelete"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/useToast'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const authStore = useAuthStore()
+const { error: toastError } = useToast()
 
 const payments = ref([])
 const enrollments = ref([])
@@ -150,7 +179,18 @@ const form = ref({
   installments: '',
 })
 
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const pendingDeleteId = ref(null)
+const pendingDeleteName = ref('')
+const saving = ref(false)
+const loadError = ref('')
+
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
+
+const deleteMessage = computed(() =>
+  `Excluir o pagamento de "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
+)
 
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('pt-BR')
@@ -213,11 +253,13 @@ const getStudentCpfByPayment = (payment) => {
 
 const loadPayments = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get('/api/v1/payments/')
     payments.value = response.data
   } catch (error) {
     console.error('Erro ao carregar pagamentos:', error)
+    loadError.value = 'Erro ao carregar pagamentos. Tente novamente.'
   } finally {
     loading.value = false
   }
@@ -241,6 +283,7 @@ const loadDependencies = async () => {
 }
 
 const savePayment = async () => {
+  saving.value = true
   try {
     if (editingId.value) {
       await api.put(`/api/v1/payments/${editingId.value}`, { status: form.value.status })
@@ -251,7 +294,9 @@ const savePayment = async () => {
     loadPayments()
   } catch (error) {
     console.error('Erro ao salvar pagamento:', error)
-    alert('Erro ao salvar pagamento: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro ao salvar pagamento: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -267,15 +312,25 @@ const editPayment = (payment) => {
   showForm.value = true
 }
 
-const deletePayment = async (id) => {
-  if (confirm('Tem certeza que deseja deletar este pagamento?')) {
-    try {
-      await api.delete(`/api/v1/payments/${id}`)
-      loadPayments()
-    } catch (error) {
-      console.error('Erro ao deletar pagamento:', error)
-      alert('Erro ao deletar pagamento')
-    }
+const confirmDelete = (payment) => {
+  pendingDeleteId.value = payment.id
+  pendingDeleteName.value = getStudentCpfByPayment(payment)
+  showDeleteConfirm.value = true
+}
+
+const doDelete = async () => {
+  deleting.value = true
+  try {
+    await api.delete(`/api/v1/payments/${pendingDeleteId.value}`)
+    showDeleteConfirm.value = false
+    pendingDeleteId.value = null
+    pendingDeleteName.value = ''
+    loadPayments()
+  } catch (error) {
+    console.error('Erro ao deletar pagamento:', error)
+    toastError('Erro ao deletar pagamento')
+  } finally {
+    deleting.value = false
   }
 }
 

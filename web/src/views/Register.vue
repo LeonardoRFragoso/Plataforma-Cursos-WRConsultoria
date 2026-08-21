@@ -93,7 +93,8 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
-import { getHomeRoute, getHomeRouteForRole } from '../utils/homeRoute'
+import { getHomeRoute } from '../utils/homeRoute'
+import { resolveSafeRedirect } from '../utils/safeRedirect'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
@@ -136,8 +137,8 @@ const handleRegister = async () => {
     await authStore.register(email.value, fullName.value, password.value, cpf.value)
     success.value = true
     setTimeout(() => {
-      // New students register as 'student' role → redirect to /dashboard
-      const redirect = route.query.redirect || getHomeRouteForRole('student')
+      // New students register as 'student' role → use safe redirect resolver
+      const redirect = resolveSafeRedirect(route.query.redirect, 'student')
       router.push({ path: '/login', query: { redirect } })
     }, 2000)
   } catch (err) {

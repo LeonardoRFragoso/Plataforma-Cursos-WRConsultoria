@@ -9,6 +9,7 @@
           v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
+          data-testid="new-course-btn"
         >
           + Novo Curso
         </AppButton>
@@ -77,13 +78,14 @@
             ></textarea>
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">
-              Salvar
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-course-btn">
+              {{ saving ? 'Salvando...' : 'Salvar' }}
             </AppButton>
             <AppButton
               type="button"
-              @click="showForm = false"
+              @click="cancelForm"
               class="bg-gray-300 text-gray-700"
+              data-testid="cancel-course-btn"
             >
               Cancelar
             </AppButton>
@@ -91,15 +93,23 @@
         </form>
       </AppCard>
 
-      <!-- Lista de Cursos -->
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando cursos...</p>
-      </div>
+      <!-- Loading -->
+      <LoadingState v-if="loading" message="Carregando cursos..." />
 
-      <div v-else-if="courses.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhum curso disponível</p>
-      </div>
+      <!-- Error -->
+      <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">
+        {{ loadError }}
+        <button @click="loadCourses" class="underline ml-2">Tentar novamente</button>
+      </AppAlert>
 
+      <!-- Empty -->
+      <EmptyState
+        v-else-if="courses.length === 0"
+        title="Nenhum curso cadastrado"
+        description="Clique em 'Novo Curso' para criar o primeiro curso."
+      />
+
+      <!-- Success list -->
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AppCard v-for="course in courses" :key="course.id" class="hover:shadow-lg transition-shadow">
           <template #header>
@@ -117,25 +127,48 @@
             <AppButton
               @click="manageLessons(course)"
               class="bg-teal-600 text-white text-sm flex-1"
+              data-testid="manage-lessons-btn"
             >
               Gerenciar Aulas
             </AppButton>
             <AppButton
+              @click="viewProgress(course)"
+              class="bg-indigo-600 text-white text-sm flex-1"
+              data-testid="view-progress-btn"
+            >
+              Acompanhar Alunos
+            </AppButton>
+            <AppButton
               @click="editCourse(course)"
               class="bg-blue-600 text-white text-sm flex-1"
+              data-testid="edit-course-btn"
             >
               Editar
             </AppButton>
             <AppButton
-              @click="deleteCourse(course.id)"
+              @click="confirmDelete(course)"
               class="bg-red-600 text-white text-sm flex-1"
+              data-testid="delete-course-btn"
             >
-              Deletar
+              Excluir
             </AppButton>
           </div>
         </AppCard>
       </div>
     </div>
+
+    <!-- Delete confirmation -->
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      :title="'Excluir curso'"
+      :message="deleteMessage"
+      confirm-text="Excluir"
+      cancel-text="Cancelar"
+      danger
+      :loading="deleting"
+      @confirm="doDelete"
+      data-testid="delete-course-dialog"
+    />
   </div>
 </template>
 
@@ -143,19 +176,34 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/useToast'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const { success: toastSuccess, error: toastError } = useToast()
 
 const courses = ref([])
 const loading = ref(false)
+const saving = ref(false)
 const showForm = ref(false)
 const editingId = ref(null)
+const loadError = ref('')
+
+// Delete confirmation state
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const pendingDeleteId = ref(null)
+const pendingDeleteName = ref('')
+
 const form = ref({
   code: '',
   name: '',
@@ -170,6 +218,10 @@ const isAdmin = computed(() => {
   const role = authStore.userRole?.toLowerCase()
   return role === 'admin' || role === 'super_admin'
 })
+
+const deleteMessage = computed(() =>
+  `Excluir o curso "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
+)
 
 const formatModality = (modality) => {
   const map = {
@@ -186,28 +238,33 @@ const formatPrice = (price) => {
 
 const loadCourses = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get('/api/v1/courses/')
     courses.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar cursos:', error)
+    loadError.value = 'Não foi possível carregar os cursos. Tente novamente.'
   } finally {
     loading.value = false
   }
 }
 
 const saveCourse = async () => {
+  saving.value = true
   try {
     if (editingId.value) {
       await api.put(`/api/v1/courses/${editingId.value}`, form.value)
+      toastSuccess('Curso atualizado com sucesso!')
     } else {
       await api.post('/api/v1/courses/', form.value)
+      toastSuccess('Curso criado com sucesso!')
     }
     resetForm()
     loadCourses()
   } catch (error) {
-    console.error('Erro ao salvar curso:', error)
-    alert('Erro ao salvar curso: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro ao salvar curso: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -221,16 +278,32 @@ const manageLessons = (course) => {
   router.push(`/courses/${course.id}/lessons`)
 }
 
-const deleteCourse = async (id) => {
-  if (confirm('Tem certeza que deseja deletar este curso?')) {
-    try {
-      await api.delete(`/api/v1/courses/${id}`)
-      loadCourses()
-    } catch (error) {
-      console.error('Erro ao deletar curso:', error)
-      alert('Erro ao deletar curso')
-    }
+const viewProgress = (course) => {
+  router.push(`/courses/${course.id}/progress`)
+}
+
+const confirmDelete = (course) => {
+  pendingDeleteId.value = course.id
+  pendingDeleteName.value = course.name
+  showDeleteConfirm.value = true
+}
+
+const doDelete = async () => {
+  deleting.value = true
+  try {
+    await api.delete(`/api/v1/courses/${pendingDeleteId.value}`)
+    toastSuccess('Curso excluído com sucesso!')
+    showDeleteConfirm.value = false
+    loadCourses()
+  } catch (error) {
+    toastError('Erro ao excluir curso: ' + (error.response?.data?.detail || ''))
+  } finally {
+    deleting.value = false
   }
+}
+
+const cancelForm = () => {
+  resetForm()
 }
 
 const resetForm = () => {

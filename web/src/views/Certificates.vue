@@ -9,6 +9,7 @@
           v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
+          data-testid="new-certificate-btn"
         >
           + Novo Certificado
         </AppButton>
@@ -34,8 +35,10 @@
             </select>
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">Gerar</AppButton>
-            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700">Cancelar</AppButton>
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="generate-certificate-btn">
+              {{ saving ? 'Gerando...' : 'Gerar' }}
+            </AppButton>
+            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700" data-testid="cancel-certificate-btn">Cancelar</AppButton>
           </div>
         </form>
       </AppCard>
@@ -52,8 +55,17 @@
             placeholder="XXXX-XXXX-XXXX-XXXX"
             class="flex-1"
           />
-          <AppButton @click="validateCertificate" class="bg-blue-600 text-white mt-auto">Validar</AppButton>
+          <AppButton @click="validateCertificate" class="bg-blue-600 text-white mt-auto" data-testid="validate-certificate-btn">Validar</AppButton>
         </div>
+        <AppAlert
+          v-if="validationError"
+          type="error"
+          class="mt-4"
+          closable
+          @close="validationError = ''"
+        >
+          {{ validationError }}
+        </AppAlert>
         <div v-if="validationResult" class="mt-4 p-4 rounded" :class="validationResult.valid ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'">
           <p v-if="validationResult.valid">
             <strong>✓ Certificado válido</strong><br>
@@ -69,13 +81,23 @@
       </AppCard>
 
       <!-- Lista -->
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando certificados...</p>
-      </div>
+      <LoadingState v-if="loading" message="Carregando certificados..." />
 
-      <div v-else-if="certificates.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhum certificado emitido</p>
-      </div>
+      <AppAlert
+        v-else-if="loadError"
+        type="error"
+        class="mb-8"
+        closable
+        @close="loadError = ''"
+      >
+        {{ loadError }}
+      </AppAlert>
+
+      <EmptyState
+        v-else-if="certificates.length === 0"
+        title="Nenhum certificado emitido"
+        description="Certificados aparecerão aqui após a conclusão de cursos."
+      />
 
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <AppCard v-for="cert in certificates" :key="cert.id" class="hover:shadow-lg transition-shadow">
@@ -89,11 +111,22 @@
             <p><strong>Emitido em:</strong> {{ formatDate(cert.issued_at) }}</p>
           </div>
           <div v-if="isAdmin" class="mt-4 flex gap-2">
-            <AppButton @click="deleteCertificate(cert.id)" class="bg-red-600 text-white text-sm flex-1">Deletar</AppButton>
+            <AppButton @click="confirmDelete(cert)" class="bg-red-600 text-white text-sm flex-1" data-testid="delete-certificate-btn">Deletar</AppButton>
           </div>
         </AppCard>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      title="Excluir certificado"
+      :message="deleteMessage"
+      confirmText="Excluir"
+      cancelText="Cancelar"
+      :danger="true"
+      :loading="deleting"
+      @confirm="doDelete"
+    />
   </div>
 </template>
 
@@ -105,6 +138,13 @@ import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
+
+const { error: toastError } = useToast()
 
 const authStore = useAuthStore()
 
@@ -120,8 +160,19 @@ const form = ref({
 })
 const validationCode = ref('')
 const validationResult = ref(null)
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const pendingDeleteId = ref(null)
+const pendingDeleteNumber = ref('')
+const saving = ref(false)
+const loadError = ref('')
+const validationError = ref('')
 
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
+
+const deleteMessage = computed(() =>
+  `Excluir o certificado "${pendingDeleteNumber.value}"? Esta ação não pode ser desfeita.`
+)
 
 const completedEnrollments = computed(() => {
   return enrollments.value.filter(e => e.status === 'CONCLUIDA')
@@ -159,11 +210,13 @@ const getClassNameByEnrollment = (enrollmentId) => {
 
 const loadCertificates = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get('/api/v1/certificates/')
     certificates.value = response.data
   } catch (error) {
     console.error('Erro ao carregar certificados:', error)
+    loadError.value = 'Erro ao carregar certificados. Tente novamente.'
   } finally {
     loading.value = false
   }
@@ -187,35 +240,54 @@ const loadDependencies = async () => {
 }
 
 const saveCertificate = async () => {
+  saving.value = true
   try {
     await api.post('/api/v1/certificates/', form.value)
     resetForm()
     loadCertificates()
   } catch (error) {
     console.error('Erro ao gerar certificado:', error)
-    alert('Erro ao gerar certificado: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro ao gerar certificado: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    saving.value = false
   }
 }
 
 const validateCertificate = async () => {
+  validationError.value = ''
+  validationResult.value = null
   try {
     const response = await api.post('/api/v1/certificates/validate', { validation_code: validationCode.value })
     validationResult.value = response.data
   } catch (error) {
     console.error('Erro ao validar certificado:', error)
-    validationResult.value = { valid: false }
+    if (error.response?.status === 404) {
+      validationResult.value = { valid: false }
+    } else {
+      validationError.value = 'Erro ao validar certificado. Verifique sua conexão e tente novamente.'
+    }
   }
 }
 
-const deleteCertificate = async (id) => {
-  if (confirm('Tem certeza que deseja deletar este certificado?')) {
-    try {
-      await api.delete(`/api/v1/certificates/${id}`)
-      loadCertificates()
-    } catch (error) {
-      console.error('Erro ao deletar certificado:', error)
-      alert('Erro ao deletar certificado')
-    }
+const confirmDelete = (cert) => {
+  pendingDeleteId.value = cert.id
+  pendingDeleteNumber.value = cert.certificate_number
+  showDeleteConfirm.value = true
+}
+
+const doDelete = async () => {
+  deleting.value = true
+  try {
+    await api.delete(`/api/v1/certificates/${pendingDeleteId.value}`)
+    showDeleteConfirm.value = false
+    pendingDeleteId.value = null
+    pendingDeleteNumber.value = ''
+    loadCertificates()
+  } catch (error) {
+    console.error('Erro ao deletar certificado:', error)
+    toastError('Erro ao deletar certificado')
+  } finally {
+    deleting.value = false
   }
 }
 

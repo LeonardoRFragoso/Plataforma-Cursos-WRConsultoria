@@ -9,10 +9,10 @@
           <p class="text-sm text-gray-600">{{ course.name }}</p>
         </div>
         <div class="flex gap-2">
-          <AppButton @click="goToProgress" class="bg-gray-600 text-white">
+          <AppButton @click="goToProgress" class="bg-gray-600 text-white" data-testid="go-to-progress-btn">
             Progresso dos Alunos
           </AppButton>
-          <AppButton @click="showForm = true" class="bg-primary-600 text-white">
+          <AppButton @click="showForm = true" class="bg-primary-600 text-white" data-testid="new-lesson-btn">
             + Nova Aula
           </AppButton>
         </div>
@@ -94,13 +94,14 @@
             />
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">
-              Salvar
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-lesson-btn">
+              {{ saving ? 'Salvando...' : 'Salvar' }}
             </AppButton>
             <AppButton
               type="button"
               @click="resetForm"
               class="bg-gray-300 text-gray-700"
+              data-testid="cancel-lesson-btn"
             >
               Cancelar
             </AppButton>
@@ -108,11 +109,23 @@
         </form>
       </AppCard>
 
-      <!-- Lista de aulas -->
-      <div v-if="lessons.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhuma aula cadastrada</p>
-      </div>
+      <!-- Loading -->
+      <LoadingState v-if="loading" message="Carregando aulas..." />
 
+      <!-- Error -->
+      <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">
+        {{ loadError }}
+        <button @click="loadLessons" class="underline ml-2">Tentar novamente</button>
+      </AppAlert>
+
+      <!-- Empty -->
+      <EmptyState
+        v-else-if="lessons.length === 0"
+        title="Nenhuma aula cadastrada"
+        description="Clique em '+ Nova Aula' para adicionar a primeira aula do curso."
+      />
+
+      <!-- Success list -->
       <div v-else class="space-y-3">
         <div
           v-for="(lesson, index) in sortedLessons"
@@ -127,18 +140,22 @@
                   @click="moveUp(index)"
                   class="text-gray-400 hover:text-primary-600 text-xs"
                   title="Mover para cima"
+                  :aria-label="`Mover aula ${lesson.title} para cima`"
+                  data-testid="move-up-btn"
                 >▲</button>
                 <button
                   v-if="index < sortedLessons.length - 1"
                   @click="moveDown(index)"
                   class="text-gray-400 hover:text-primary-600 text-xs"
                   title="Mover para baixo"
+                  :aria-label="`Mover aula ${lesson.title} para baixo`"
+                  data-testid="move-down-btn"
                 >▼</button>
               </div>
               <div>
                 <p class="font-semibold text-secondary-900">{{ lesson.order }}. {{ lesson.title }}</p>
                 <div class="flex items-center gap-3 text-sm text-gray-600">
-                  <span>{{ lesson.content_type }}</span>
+                  <span>{{ formatContentType(lesson.content_type) }}</span>
                   <span v-if="lesson.is_free_preview" class="text-green-600">Grátis</span>
                   <span v-if="lesson.is_required" class="text-blue-600">Obrigatória</span>
                   <span v-else class="text-gray-400">Opcional</span>
@@ -152,123 +169,172 @@
               v-if="lesson.content_type === 'UPLOAD'"
               @click="manageVideo(lesson)"
               class="bg-indigo-600 text-white text-xs px-2 py-1"
+              data-testid="manage-video-btn"
             >{{ lesson.storage_key ? 'Trocar Vídeo' : 'Enviar Vídeo' }}</AppButton>
             <AppButton
               v-if="lesson.content_type === 'UPLOAD' && lesson.storage_key"
-              @click="removeVideo(lesson)"
+              @click="confirmRemoveVideo(lesson)"
               class="bg-orange-600 text-white text-xs px-2 py-1"
+              data-testid="remove-video-btn"
             >Remover Vídeo</AppButton>
-            <AppButton @click="manageMaterials(lesson)" class="bg-teal-600 text-white text-xs px-2 py-1">Materiais</AppButton>
-            <AppButton @click="editLesson(lesson)" class="bg-blue-600 text-white text-xs px-2 py-1">Editar</AppButton>
-            <AppButton @click="deleteLesson(lesson.id)" class="bg-red-600 text-white text-xs px-2 py-1">Deletar</AppButton>
-          </div>
-        </div>
-      </div>
-
-      <!-- Video Upload Modal -->
-      <div v-if="videoModal.visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-          <h3 class="text-lg font-semibold mb-4">Enviar Vídeo — {{ videoModal.lessonTitle }}</h3>
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo de vídeo</label>
-              <input
-                ref="videoFileInput"
-                type="file"
-                accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mpeg"
-                class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-              />
-              <p class="text-xs text-gray-500 mt-1">Formatos: MP4, WebM, OGG, MOV, MPEG. Máx: 2GB</p>
-            </div>
-            <div v-if="videoModal.uploading" class="text-sm text-primary-600">
-              Enviando vídeo... {{ videoModal.progress }}%
-            </div>
-            <div class="flex gap-2">
-              <AppButton @click="uploadVideo" :disabled="videoModal.uploading" class="bg-primary-600 text-white">
-                {{ videoModal.uploading ? 'Enviando...' : 'Enviar' }}
-              </AppButton>
-              <AppButton @click="closeVideoModal" class="bg-gray-300 text-gray-700">
-                Cancelar
-              </AppButton>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Materials Modal -->
-      <div v-if="materialsModal.visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-          <h3 class="text-lg font-semibold mb-4">Materiais — {{ materialsModal.lessonTitle }}</h3>
-          <div class="space-y-3 mb-4">
-            <div v-if="materialsModal.items.length === 0" class="text-gray-500 text-sm">
-              Nenhum material cadastrado
-            </div>
-            <div
-              v-for="material in materialsModal.items"
-              :key="material.id"
-              class="flex justify-between items-center bg-gray-50 rounded p-3"
-            >
-              <div>
-                <p class="font-medium text-sm">{{ material.title }}</p>
-                <p class="text-xs text-gray-500">{{ material.mime_type || 'arquivo' }}</p>
-              </div>
-              <button
-                @click="deleteMaterial(material)"
-                class="text-red-600 text-xs hover:underline"
-              >Remover</button>
-            </div>
-          </div>
-          <div class="border-t pt-4">
-            <h4 class="text-sm font-semibold mb-2">Adicionar material</h4>
-            <div class="space-y-3">
-              <AppInput
-                v-model="materialsModal.newTitle"
-                label="Título do material"
-                placeholder="Apostila da aula"
-              />
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo</label>
-                <input
-                  ref="materialFileInput"
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
-                  class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                />
-                <p class="text-xs text-gray-500 mt-1">PDF, DOC, PPT, XLS, TXT. Máx: 100MB</p>
-              </div>
-              <AppButton @click="uploadMaterial" class="bg-primary-600 text-white text-sm">
-                Adicionar
-              </AppButton>
-            </div>
-          </div>
-          <div class="mt-4 text-right">
-            <AppButton @click="closeMaterialsModal" class="bg-gray-300 text-gray-700">
-              Fechar
-            </AppButton>
+            <AppButton @click="manageMaterials(lesson)" class="bg-teal-600 text-white text-xs px-2 py-1" data-testid="manage-materials-btn">Materiais</AppButton>
+            <AppButton @click="editLesson(lesson)" class="bg-blue-600 text-white text-xs px-2 py-1" data-testid="edit-lesson-btn">Editar</AppButton>
+            <AppButton @click="confirmDeleteLesson(lesson)" class="bg-red-600 text-white text-xs px-2 py-1" data-testid="delete-lesson-btn">Excluir</AppButton>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Video Upload Modal -->
+    <AppModal v-model="videoModal.visible" :title="`Enviar Vídeo — ${videoModal.lessonTitle}`" size="md" :closable="!videoModal.uploading" :close-on-backdrop="!videoModal.uploading" @close="closeVideoModal">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo de vídeo</label>
+          <input
+            ref="videoFileInput"
+            type="file"
+            accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mpeg"
+            class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+            data-testid="video-file-input"
+          />
+          <p class="text-xs text-gray-500 mt-1">Formatos: MP4, WebM, OGG, MOV, MPEG. Máx: 2GB</p>
+        </div>
+        <div v-if="videoModal.uploading" class="text-sm text-primary-600">
+          Enviando vídeo... {{ videoModal.progress }}%
+        </div>
+      </div>
+      <template #footer>
+        <button @click="closeVideoModal" :disabled="videoModal.uploading" class="px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-colors disabled:opacity-50" data-testid="video-cancel-btn">
+          Cancelar
+        </button>
+        <button @click="uploadVideo" :disabled="videoModal.uploading" class="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors disabled:opacity-50" data-testid="video-upload-btn">
+          {{ videoModal.uploading ? 'Enviando...' : 'Enviar' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Materials Modal -->
+    <AppModal v-model="materialsModal.visible" :title="`Materiais — ${materialsModal.lessonTitle}`" size="lg" @close="closeMaterialsModal">
+      <div class="space-y-3 mb-4">
+        <div v-if="materialsModal.items.length === 0" class="text-gray-500 text-sm">
+          Nenhum material cadastrado
+        </div>
+        <div
+          v-for="material in materialsModal.items"
+          :key="material.id"
+          class="flex justify-between items-center bg-gray-50 rounded p-3"
+        >
+          <div>
+            <p class="font-medium text-sm">{{ material.title }}</p>
+            <p class="text-xs text-gray-500">{{ material.mime_type || 'arquivo' }}</p>
+          </div>
+          <button
+            @click="confirmDeleteMaterial(material)"
+            class="text-red-600 text-xs hover:underline"
+            data-testid="remove-material-btn"
+          >Remover</button>
+        </div>
+      </div>
+      <div class="border-t pt-4">
+        <h4 class="text-sm font-semibold mb-2">Adicionar material</h4>
+        <div class="space-y-3">
+          <AppInput
+            v-model="materialsModal.newTitle"
+            label="Título do material"
+            placeholder="Apostila da aula"
+          />
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo</label>
+            <input
+              ref="materialFileInput"
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+              class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              data-testid="material-file-input"
+            />
+            <p class="text-xs text-gray-500 mt-1">PDF, DOC, PPT, XLS, TXT. Máx: 100MB</p>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button @click="closeMaterialsModal" class="px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-colors" data-testid="materials-close-btn">
+          Fechar
+        </button>
+        <button @click="uploadMaterial" :disabled="uploadingMaterial" class="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors disabled:opacity-50" data-testid="material-upload-btn">
+          {{ uploadingMaterial ? 'Enviando...' : 'Adicionar' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Delete lesson confirmation -->
+    <ConfirmDialog
+      v-model="showDeleteLessonConfirm"
+      title="Excluir aula"
+      :message="deleteLessonMessage"
+      confirm-text="Excluir"
+      cancel-text="Cancelar"
+      danger
+      :loading="deletingLesson"
+      @confirm="doDeleteLesson"
+      data-testid="delete-lesson-dialog"
+    />
+
+    <!-- Remove video confirmation -->
+    <ConfirmDialog
+      v-model="showRemoveVideoConfirm"
+      title="Remover vídeo"
+      :message="removeVideoMessage"
+      confirm-text="Remover"
+      cancel-text="Cancelar"
+      danger
+      :loading="removingVideo"
+      @confirm="doRemoveVideo"
+      data-testid="remove-video-dialog"
+    />
+
+    <!-- Delete material confirmation -->
+    <ConfirmDialog
+      v-model="showDeleteMaterialConfirm"
+      title="Remover material"
+      :message="deleteMaterialMessage"
+      confirm-text="Remover"
+      cancel-text="Cancelar"
+      danger
+      :loading="deletingMaterial"
+      @confirm="doDeleteMaterial"
+      data-testid="delete-material-dialog"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToast } from '../composables/useToast'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import AppModal from '../components/AppModal.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { success: toastSuccess, error: toastError } = useToast()
 const courseId = route.params.id
 
 const course = ref({})
 const lessons = ref([])
 const showForm = ref(false)
 const editingId = ref(null)
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const uploadingMaterial = ref(false)
 
 const videoFileInput = ref(null)
 const materialFileInput = ref(null)
@@ -300,43 +366,84 @@ const materialsModal = ref({
   newTitle: '',
 })
 
+// Delete lesson state
+const showDeleteLessonConfirm = ref(false)
+const deletingLesson = ref(false)
+const pendingDeleteLessonId = ref(null)
+const pendingDeleteLessonTitle = ref('')
+
+// Remove video state
+const showRemoveVideoConfirm = ref(false)
+const removingVideo = ref(false)
+const pendingRemoveVideoLesson = ref(null)
+
+// Delete material state
+const showDeleteMaterialConfirm = ref(false)
+const deletingMaterial = ref(false)
+const pendingDeleteMaterial = ref(null)
+
 const sortedLessons = computed(() => {
   return [...lessons.value].sort((a, b) => a.order - b.order)
 })
+
+const deleteLessonMessage = computed(() =>
+  `Excluir a aula "${pendingDeleteLessonTitle.value}"? Esta ação não pode ser desfeita.`
+)
+
+const removeVideoMessage = computed(() =>
+  `Remover o vídeo da aula "${pendingRemoveVideoLesson.value?.title}"? O progresso dos alunos não será afetado.`
+)
+
+const deleteMaterialMessage = computed(() =>
+  `Remover o material "${pendingDeleteMaterial.value?.title}"?`
+)
+
+const formatContentType = (type) => {
+  const map = { UPLOAD: 'Upload', YOUTUBE: 'YouTube', VIMEO: 'Vimeo' }
+  return map[type] || type
+}
 
 const loadCourse = async () => {
   try {
     const response = await api.get(`/api/v1/courses/${courseId}`)
     course.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar curso:', error)
+    // silent — course name is display-only
   }
 }
 
 const loadLessons = async () => {
+  loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get(`/api/v1/lessons/courses/${courseId}/lessons`)
     lessons.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar aulas:', error)
+    loadError.value = 'Não foi possível carregar as aulas. Tente novamente.'
+  } finally {
+    loading.value = false
   }
 }
 
 const saveLesson = async () => {
+  saving.value = true
   try {
     if (editingId.value) {
       await api.put(
         `/api/v1/lessons/courses/${courseId}/lessons/${editingId.value}`,
         form.value
       )
+      toastSuccess('Aula atualizada com sucesso!')
     } else {
       await api.post(`/api/v1/lessons/courses/${courseId}/lessons`, form.value)
+      toastSuccess('Aula criada com sucesso!')
     }
     resetForm()
     loadLessons()
   } catch (error) {
-    console.error('Erro ao salvar aula:', error)
-    alert('Erro ao salvar aula: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro ao salvar aula: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -355,19 +462,27 @@ const editLesson = (lesson) => {
   showForm.value = true
 }
 
-const deleteLesson = async (id) => {
-  if (!confirm('Tem certeza que deseja deletar esta aula?')) return
+const confirmDeleteLesson = (lesson) => {
+  pendingDeleteLessonId.value = lesson.id
+  pendingDeleteLessonTitle.value = lesson.title
+  showDeleteLessonConfirm.value = true
+}
 
+const doDeleteLesson = async () => {
+  deletingLesson.value = true
   try {
-    await api.delete(`/api/v1/lessons/courses/${courseId}/lessons/${id}`)
+    await api.delete(`/api/v1/lessons/courses/${courseId}/lessons/${pendingDeleteLessonId.value}`)
+    toastSuccess('Aula excluída com sucesso!')
+    showDeleteLessonConfirm.value = false
     loadLessons()
   } catch (error) {
     if (error.response?.status === 409) {
-      alert('Não é possível deletar esta aula: existem registros de progresso de alunos. Remova o progresso primeiro ou arquive a aula.')
+      toastError('Não é possível deletar esta aula: existem registros de progresso de alunos. Remova o progresso primeiro ou arquive a aula.')
     } else {
-      console.error('Erro ao deletar aula:', error)
-      alert('Erro ao deletar aula: ' + (error.response?.data?.detail || ''))
+      toastError('Erro ao excluir aula: ' + (error.response?.data?.detail || ''))
     }
+  } finally {
+    deletingLesson.value = false
   }
 }
 
@@ -410,8 +525,7 @@ const reorderLessons = async (lessonIds) => {
     )
     lessons.value = response.data
   } catch (error) {
-    console.error('Erro ao reordenar aulas:', error)
-    alert('Erro ao reordenar: ' + (error.response?.data?.detail || ''))
+    toastError('Erro ao reordenar: ' + (error.response?.data?.detail || ''))
     loadLessons()
   }
 }
@@ -436,7 +550,7 @@ const closeVideoModal = () => {
 const uploadVideo = async () => {
   const file = videoFileInput.value?.files?.[0]
   if (!file) {
-    alert('Selecione um arquivo de vídeo')
+    toastError('Selecione um arquivo de vídeo')
     return
   }
 
@@ -445,7 +559,6 @@ const uploadVideo = async () => {
   videoModal.value.progress = 0
 
   try {
-    // Step 1: presign
     const presignResp = await api.post(`/api/v1/lessons/${lessonId}/upload-presign`, {
       filename: file.name,
       mime_type: file.type,
@@ -453,7 +566,6 @@ const uploadVideo = async () => {
     })
     const { upload_url, storage_key } = presignResp.data
 
-    // Step 2: upload to storage
     const uploadResult = await fetch(upload_url, {
       method: 'PUT',
       body: file,
@@ -466,29 +578,37 @@ const uploadVideo = async () => {
 
     videoModal.value.progress = 90
 
-    // Step 3: verify and activate
     await api.post(`/api/v1/lessons/${lessonId}/upload-complete`, null, {
       params: { storage_key }
     })
 
     videoModal.value.progress = 100
+    toastSuccess('Vídeo enviado com sucesso!')
     closeVideoModal()
     loadLessons()
   } catch (error) {
-    console.error('Erro no upload:', error)
-    alert('Erro no upload do vídeo: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro no upload do vídeo: ' + (error.response?.data?.detail || error.message))
   } finally {
     videoModal.value.uploading = false
   }
 }
 
-const removeVideo = async (lesson) => {
-  if (!confirm('Remover o vídeo desta aula? O progresso dos alunos não será afetado.')) return
+const confirmRemoveVideo = (lesson) => {
+  pendingRemoveVideoLesson.value = lesson
+  showRemoveVideoConfirm.value = true
+}
+
+const doRemoveVideo = async () => {
+  removingVideo.value = true
   try {
-    await api.post(`/api/v1/lessons/${lesson.id}/remove-video`)
+    await api.post(`/api/v1/lessons/${pendingRemoveVideoLesson.value.id}/remove-video`)
+    toastSuccess('Vídeo removido com sucesso!')
+    showRemoveVideoConfirm.value = false
     loadLessons()
   } catch (error) {
-    alert('Erro ao remover vídeo: ' + (error.response?.data?.detail || ''))
+    toastError('Erro ao remover vídeo: ' + (error.response?.data?.detail || ''))
+  } finally {
+    removingVideo.value = false
   }
 }
 
@@ -514,24 +634,24 @@ const loadMaterials = async () => {
     const response = await api.get(`/api/v1/lessons/${materialsModal.value.lessonId}/materials`)
     materialsModal.value.items = response.data
   } catch (error) {
-    console.error('Erro ao carregar materiais:', error)
+    // silent
   }
 }
 
 const uploadMaterial = async () => {
   const file = materialFileInput.value?.files?.[0]
   if (!file) {
-    alert('Selecione um arquivo')
+    toastError('Selecione um arquivo')
     return
   }
   if (!materialsModal.value.newTitle) {
-    alert('Digite um título para o material')
+    toastError('Digite um título para o material')
     return
   }
 
+  uploadingMaterial.value = true
   const lessonId = materialsModal.value.lessonId
   try {
-    // Step 1: presign
     const presignResp = await api.post(`/api/v1/lessons/${lessonId}/materials/presign`, {
       filename: file.name,
       mime_type: file.type,
@@ -539,7 +659,6 @@ const uploadMaterial = async () => {
     })
     const { upload_url, storage_key } = presignResp.data
 
-    // Step 2: upload to storage
     const uploadResult = await fetch(upload_url, {
       method: 'PUT',
       body: file,
@@ -550,7 +669,6 @@ const uploadMaterial = async () => {
       throw new Error(`Upload failed: ${uploadResult.status}`)
     }
 
-    // Step 3: create material record
     await api.post(`/api/v1/lessons/${lessonId}/materials`, {
       title: materialsModal.value.newTitle,
     }, {
@@ -561,22 +679,33 @@ const uploadMaterial = async () => {
       }
     })
 
+    toastSuccess('Material adicionado com sucesso!')
     materialsModal.value.newTitle = ''
     if (materialFileInput.value) materialFileInput.value.value = ''
     loadMaterials()
   } catch (error) {
-    console.error('Erro ao enviar material:', error)
-    alert('Erro ao enviar material: ' + (error.response?.data?.detail || error.message))
+    toastError('Erro ao enviar material: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    uploadingMaterial.value = false
   }
 }
 
-const deleteMaterial = async (material) => {
-  if (!confirm('Remover este material?')) return
+const confirmDeleteMaterial = (material) => {
+  pendingDeleteMaterial.value = material
+  showDeleteMaterialConfirm.value = true
+}
+
+const doDeleteMaterial = async () => {
+  deletingMaterial.value = true
   try {
-    await api.delete(`/api/v1/lessons/${materialsModal.value.lessonId}/materials/${material.id}`)
+    await api.delete(`/api/v1/lessons/${materialsModal.value.lessonId}/materials/${pendingDeleteMaterial.value.id}`)
+    toastSuccess('Material removido com sucesso!')
+    showDeleteMaterialConfirm.value = false
     loadMaterials()
   } catch (error) {
-    alert('Erro ao remover material: ' + (error.response?.data?.detail || ''))
+    toastError('Erro ao remover material: ' + (error.response?.data?.detail || ''))
+  } finally {
+    deletingMaterial.value = false
   }
 }
 

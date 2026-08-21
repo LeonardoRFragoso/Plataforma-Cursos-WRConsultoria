@@ -136,7 +136,8 @@ const authStore = useAuthStore()
 
 const roleMap = {
   'admin': 'Administrador',
-  'student': 'Aluno'
+  'student': 'Aluno',
+  'super_admin': 'Super Administrador',
 }
 
 const userRoleDisplay = computed(() => {

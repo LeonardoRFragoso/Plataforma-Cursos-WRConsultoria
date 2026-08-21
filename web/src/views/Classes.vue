@@ -9,6 +9,7 @@
           v-if="isAdmin"
           @click="showForm = true"
           class="bg-primary-600 text-white"
+          data-testid="new-class-btn"
         >
           + Nova Turma
         </AppButton>
@@ -27,6 +28,7 @@
                 v-model="form.course_id"
                 class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
+                :disabled="!!editingId"
               >
                 <option value="">Selecione um curso</option>
                 <option v-for="course in courses" :key="course.id" :value="course.id">
@@ -86,21 +88,33 @@
             ></textarea>
           </div>
           <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white">Salvar</AppButton>
-            <AppButton type="button" @click="showForm = false" class="bg-gray-300 text-gray-700">Cancelar</AppButton>
+            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-class-btn">
+              {{ saving ? 'Salvando...' : 'Salvar' }}
+            </AppButton>
+            <AppButton type="button" @click="cancelForm" class="bg-gray-300 text-gray-700" data-testid="cancel-class-btn">
+              Cancelar
+            </AppButton>
           </div>
         </form>
       </AppCard>
 
-      <!-- Lista -->
-      <div v-if="loading" class="text-center py-8">
-        <p class="text-gray-600">Carregando turmas...</p>
-      </div>
+      <!-- Loading -->
+      <LoadingState v-if="loading" message="Carregando turmas..." />
 
-      <div v-else-if="classes.length === 0" class="text-center py-8">
-        <p class="text-gray-600">Nenhuma turma disponível</p>
-      </div>
+      <!-- Error -->
+      <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">
+        {{ loadError }}
+        <button @click="loadClasses" class="underline ml-2">Tentar novamente</button>
+      </AppAlert>
 
+      <!-- Empty -->
+      <EmptyState
+        v-else-if="classes.length === 0"
+        title="Nenhuma turma disponível"
+        description="Clique em 'Nova Turma' para criar a primeira turma."
+      />
+
+      <!-- Success -->
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <AppCard v-for="cls in classes" :key="cls.id" class="hover:shadow-lg transition-shadow">
           <template #header>
@@ -115,33 +129,54 @@
             <p><strong>Período:</strong> {{ formatDate(cls.start_date) }} a {{ formatDate(cls.end_date) }}</p>
             <p><strong>Máx. Alunos:</strong> {{ cls.max_students }}</p>
             <p v-if="cls.location"><strong>Local:</strong> {{ cls.location }}</p>
-            <p v-if="cls.ead_link"><strong>Link EAD:</strong> <a :href="cls.ead_link" target="_blank" class="text-primary-600 hover:underline">Acessar</a></p>
+            <p v-if="cls.ead_link"><strong>Link EAD:</strong> <a :href="cls.ead_link" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">Acessar</a></p>
             <p v-if="cls.description" class="text-gray-600 mt-3">{{ cls.description }}</p>
           </div>
           <div v-if="isAdmin" class="mt-4 flex gap-2">
-            <AppButton @click="editClass(cls)" class="bg-blue-600 text-white text-sm flex-1">Editar</AppButton>
-            <AppButton @click="deleteClass(cls.id)" class="bg-red-600 text-white text-sm flex-1">Deletar</AppButton>
+            <AppButton @click="editClass(cls)" class="bg-blue-600 text-white text-sm flex-1" data-testid="edit-class-btn">Editar</AppButton>
+            <AppButton @click="confirmDelete(cls)" class="bg-red-600 text-white text-sm flex-1" data-testid="delete-class-btn">Excluir</AppButton>
           </div>
         </AppCard>
       </div>
     </div>
+
+    <!-- Delete confirmation -->
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      title="Excluir turma"
+      :message="deleteMessage"
+      confirm-text="Excluir"
+      cancel-text="Cancelar"
+      danger
+      :loading="deleting"
+      @confirm="doDelete"
+      data-testid="delete-class-dialog"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/useToast'
 import api from '../api/client'
 import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
+import AppAlert from '../components/AppAlert.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const authStore = useAuthStore()
+const { success: toastSuccess, error: toastError } = useToast()
 
 const classes = ref([])
 const courses = ref([])
 const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
 const showForm = ref(false)
 const editingId = ref(null)
 const form = ref({
@@ -155,7 +190,17 @@ const form = ref({
   description: '',
 })
 
+// Delete state
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const pendingDeleteId = ref(null)
+const pendingDeleteName = ref('')
+
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
+
+const deleteMessage = computed(() =>
+  `Excluir a turma de "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
+)
 
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('pt-BR')
@@ -190,23 +235,25 @@ const loadCourses = async () => {
     const response = await api.get('/api/v1/courses/')
     courses.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar cursos:', error)
+    // silent — courses list is for display
   }
 }
 
 const loadClasses = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await api.get('/api/v1/classes/')
     classes.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar turmas:', error)
+    loadError.value = 'Não foi possível carregar as turmas. Tente novamente.'
   } finally {
     loading.value = false
   }
 }
 
 const saveClass = async () => {
+  saving.value = true
   try {
     const payload = {
       ...form.value,
@@ -218,7 +265,6 @@ const saveClass = async () => {
     }
 
     if (editingId.value) {
-      // Atualizar só os campos permitidos pelo schema de update
       const updatePayload = {
         start_date: payload.start_date,
         end_date: payload.end_date,
@@ -229,16 +275,19 @@ const saveClass = async () => {
         status: payload.status,
       }
       await api.put(`/api/v1/classes/${editingId.value}`, updatePayload)
+      toastSuccess('Turma atualizada com sucesso!')
     } else {
       await api.post('/api/v1/classes/', payload)
+      toastSuccess('Turma criada com sucesso!')
     }
     resetForm()
     loadClasses()
   } catch (error) {
-    console.error('Erro ao salvar turma:', error)
     const detail = error.response?.data?.detail
     const message = typeof detail === 'object' ? JSON.stringify(detail) : (detail || error.message)
-    alert('Erro ao salvar turma: ' + message)
+    toastError('Erro ao salvar turma: ' + message)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -248,16 +297,28 @@ const editClass = (cls) => {
   showForm.value = true
 }
 
-const deleteClass = async (id) => {
-  if (confirm('Tem certeza que deseja deletar esta turma?')) {
-    try {
-      await api.delete(`/api/v1/classes/${id}`)
-      loadClasses()
-    } catch (error) {
-      console.error('Erro ao deletar turma:', error)
-      alert('Erro ao deletar turma')
-    }
+const confirmDelete = (cls) => {
+  pendingDeleteId.value = cls.id
+  pendingDeleteName.value = getCourseNameById(cls.course_id)
+  showDeleteConfirm.value = true
+}
+
+const doDelete = async () => {
+  deleting.value = true
+  try {
+    await api.delete(`/api/v1/classes/${pendingDeleteId.value}`)
+    toastSuccess('Turma excluída com sucesso!')
+    showDeleteConfirm.value = false
+    loadClasses()
+  } catch (error) {
+    toastError('Erro ao excluir turma: ' + (error.response?.data?.detail || ''))
+  } finally {
+    deleting.value = false
   }
+}
+
+const cancelForm = () => {
+  resetForm()
 }
 
 const resetForm = () => {
