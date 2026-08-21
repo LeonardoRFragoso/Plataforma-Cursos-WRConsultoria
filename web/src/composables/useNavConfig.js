@@ -51,6 +51,7 @@ export function useNavConfig() {
             items: [
               { to: '/courses', label: 'Cursos', testid: 'courses' },
               { to: '/classes', label: 'Turmas', testid: 'classes' },
+              { to: '/companies', label: 'Empresas', testid: 'companies' },
               { to: '/students', label: 'Alunos', testid: 'students' },
               { to: '/enrollments', label: 'Matrículas', testid: 'enrollments' },
               { to: '/payments', label: 'Pagamentos', testid: 'payments' },
