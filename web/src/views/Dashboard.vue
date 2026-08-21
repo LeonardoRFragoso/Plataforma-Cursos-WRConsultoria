@@ -6,23 +6,32 @@
       <h1 class="text-3xl font-bold text-secondary-900 mb-8">Dashboard</h1>
 
       <!-- Stats para ADMIN -->
-      <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <AppCard>
-          <div class="text-gray-600 text-sm">Total de Alunos</div>
-          <div class="text-3xl font-bold text-primary-600">{{ stats.totalStudents }}</div>
-        </AppCard>
-        <AppCard>
-          <div class="text-gray-600 text-sm">Turmas Ativas</div>
-          <div class="text-3xl font-bold text-primary-600">{{ stats.activeClasses }}</div>
-        </AppCard>
-        <AppCard>
-          <div class="text-gray-600 text-sm">Matrículas Pendentes</div>
-          <div class="text-3xl font-bold text-primary-600">{{ stats.pendingEnrollments }}</div>
-        </AppCard>
-        <AppCard>
-          <div class="text-gray-600 text-sm">Receita do Mês</div>
-          <div class="text-3xl font-bold text-primary-600">R$ {{ stats.monthlyRevenue }}</div>
-        </AppCard>
+      <div v-if="isAdmin" class="mb-8">
+        <div v-if="statsLoading" class="text-center py-4 text-gray-600" data-testid="dashboard-stats-loading">
+          Carregando estatísticas...
+        </div>
+        <div v-else-if="statsError" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md" data-testid="dashboard-stats-error">
+          Erro ao carregar estatísticas: {{ statsError }}
+          <button @click="loadStats" class="ml-2 underline hover:no-underline">Tentar novamente</button>
+        </div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <AppCard>
+            <div class="text-gray-600 text-sm">Total de Alunos</div>
+            <div class="text-3xl font-bold text-primary-600">{{ stats.totalStudents }}</div>
+          </AppCard>
+          <AppCard>
+            <div class="text-gray-600 text-sm">Turmas Ativas</div>
+            <div class="text-3xl font-bold text-primary-600">{{ stats.activeClasses }}</div>
+          </AppCard>
+          <AppCard>
+            <div class="text-gray-600 text-sm">Matrículas Pendentes</div>
+            <div class="text-3xl font-bold text-primary-600">{{ stats.pendingEnrollments }}</div>
+          </AppCard>
+          <AppCard>
+            <div class="text-gray-600 text-sm">Receita do Mês</div>
+            <div class="text-3xl font-bold text-primary-600">R$ {{ stats.monthlyRevenue }}</div>
+          </AppCard>
+        </div>
       </div>
 
       <!-- Conteúdo por Role -->
@@ -56,12 +65,15 @@
           <template #header>
             <h3 class="text-xl font-semibold text-secondary-900">📚 Meus Cursos</h3>
           </template>
-          <div v-if="loadingEnrollments" class="text-sm text-gray-600">
+          <div v-if="loadingEnrollments" class="text-sm text-gray-600" data-testid="dashboard-enrollments-loading">
             Carregando cursos...
+          </div>
+          <div v-else-if="enrollmentsError" class="text-sm text-red-600" data-testid="dashboard-enrollments-error">
+            {{ enrollmentsError }}
           </div>
           <div v-else-if="myEnrollments.length === 0" class="text-gray-600 mb-4">
             <p class="mb-4">Você não está matriculado em nenhum curso ainda.</p>
-            <AppLink to="/courses">
+            <AppLink to="/cursos">
               Explorar cursos →
             </AppLink>
           </div>
@@ -145,9 +157,12 @@ const stats = ref({
   pendingEnrollments: 0,
   monthlyRevenue: 0,
 })
+const statsLoading = ref(false)
+const statsError = ref('')
 
 const myEnrollments = ref([])
 const loadingEnrollments = ref(false)
+const enrollmentsError = ref('')
 
 const canPlay = (status) => status === 'CONFIRMADA' || status === 'CONCLUIDA'
 
@@ -172,11 +187,13 @@ const statusClass = (status) => {
 const loadMyEnrollments = async () => {
   if (!isStudent.value) return
   loadingEnrollments.value = true
+  enrollmentsError.value = ''
   try {
     const response = await api.get('/api/v1/enrollments/me')
     myEnrollments.value = response.data
   } catch (error) {
     console.error('Erro ao carregar matrículas:', error)
+    enrollmentsError.value = error.response?.data?.detail || 'Não foi possível carregar suas matrículas.'
   } finally {
     loadingEnrollments.value = false
   }
@@ -184,11 +201,16 @@ const loadMyEnrollments = async () => {
 
 const loadStats = async () => {
   if (!isAdmin.value) return
+  statsLoading.value = true
+  statsError.value = ''
   try {
     const response = await api.get('/api/v1/dashboard/stats')
     stats.value = response.data
   } catch (error) {
     console.error('Erro ao carregar estatísticas:', error)
+    statsError.value = error.response?.data?.detail || 'Não foi possível carregar as estatísticas.'
+  } finally {
+    statsLoading.value = false
   }
 }
 

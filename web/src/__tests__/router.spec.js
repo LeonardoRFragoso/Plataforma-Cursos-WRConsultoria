@@ -49,4 +49,26 @@ describe('Navigation guards', () => {
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/courses')
   })
+
+  it('redireciona student para /dashboard ao acessar rota super_admin', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'student'
+    auth.user = { role: 'student' }
+
+    await router.push('/super-admin')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
+  it('permite super_admin acessar rota super_admin', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'super_admin'
+    auth.user = { role: 'super_admin' }
+
+    await router.push('/super-admin')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/super-admin')
+  })
 })

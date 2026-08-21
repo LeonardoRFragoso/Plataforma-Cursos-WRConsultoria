@@ -12,6 +12,7 @@ describe('Login Component', () => {
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
+        { path: '/', component: { template: '<div>Home</div>' } },
         { path: '/login', component: Login },
         { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
         { path: '/register', component: { template: '<div>Register</div>' } },

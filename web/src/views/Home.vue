@@ -3,26 +3,39 @@
     <!-- Header branco com logo -->
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-        <router-link to="/" class="flex items-center">
+        <router-link :to="homeRoute" class="flex items-center">
           <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
           <span v-else class="text-xl font-bold text-primary-600">{{ tenantName }}</span>
         </router-link>
         <nav class="flex items-center space-x-6">
-          <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
-            Login
-          </router-link>
-          <router-link
-            to="/register"
-            class="bg-primary-600 text-white px-5 py-2 rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors"
-          >
-            Cadastro
-          </router-link>
-          <router-link
-            to="/seja-parceiro"
-            class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors"
-          >
-            Seja parceiro
-          </router-link>
+          <template v-if="authStore.isAuthenticated">
+            <router-link :to="homeRoute" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
+              Dashboard
+            </router-link>
+            <button
+              @click="handleLogout"
+              class="text-primary-600 hover:text-primary-700 font-medium text-sm transition-colors"
+            >
+              Sair
+            </button>
+          </template>
+          <template v-else>
+            <router-link to="/login" class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors">
+              Login
+            </router-link>
+            <router-link
+              to="/register"
+              class="bg-primary-600 text-white px-5 py-2 rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors"
+            >
+              Cadastro
+            </router-link>
+            <router-link
+              to="/seja-parceiro"
+              class="text-gray-700 hover:text-primary-600 font-medium text-sm transition-colors"
+            >
+              Seja parceiro
+            </router-link>
+          </template>
         </nav>
       </div>
     </header>
@@ -38,10 +51,18 @@
           Plataforma de cursos da {{ tenantName }}.
         </p>
         <router-link
+          v-if="!authStore.isAuthenticated"
           to="/register"
           class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
         >
           Comece Agora
+        </router-link>
+        <router-link
+          v-else
+          :to="homeRoute"
+          class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+        >
+          Ir para Dashboard
         </router-link>
       </div>
     </section>
@@ -150,13 +171,24 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTenantStore } from '../stores/tenant'
+import { useAuthStore } from '../stores/auth'
 import { fetchPublicCourses } from '../api/courses'
+import { getHomeRoute } from '../utils/homeRoute'
 
+const router = useRouter()
 const tenantStore = useTenantStore()
+const authStore = useAuthStore()
 const courses = ref([])
 const loading = ref(true)
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
+const homeRoute = computed(() => getHomeRoute(authStore))
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
+}
 
 function formatPrice(price) {
   if (price === 0 || price === null) return 'Gratuito'

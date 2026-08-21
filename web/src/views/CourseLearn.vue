@@ -54,7 +54,7 @@
                 ]"
               >
                 <span class="truncate flex-1 mr-2" data-testid="lesson-title">
-                  {{ lesson.order + 1 }}. {{ lesson.title }}
+                  {{ lesson.order }}. {{ lesson.title }}
                 </span>
                 <span v-if="lesson.completed" data-testid="lesson-completed" class="text-green-600">✓</span>
                 <span v-else-if="lesson.is_free_preview" class="text-xs text-primary-600">Preview</span>

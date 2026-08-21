@@ -3,7 +3,7 @@
     <!-- Header branco com logo -->
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-        <router-link to="/" class="flex items-center">
+        <router-link :to="homeRoute" class="flex items-center">
           <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
           <span v-else class="text-xl font-bold text-primary-600">{{ tenantStore.name || 'Plataforma de Cursos' }}</span>
         </router-link>
@@ -93,6 +93,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
+import { getHomeRoute, getHomeRouteForRole } from '../utils/homeRoute'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'
@@ -112,6 +113,8 @@ const loading = ref(false)
 const error = ref('')
 const success = ref(false)
 
+const homeRoute = computed(() => getHomeRoute(authStore))
+
 const passwordError = computed(() => {
   if (confirmPassword.value && password.value !== confirmPassword.value) {
     return 'As senhas não coincidem'
@@ -128,12 +131,13 @@ const handleRegister = async () => {
   loading.value = true
   error.value = ''
   success.value = false
-  
+
   try {
     await authStore.register(email.value, fullName.value, password.value, cpf.value)
     success.value = true
     setTimeout(() => {
-      const redirect = route.query.redirect || '/dashboard'
+      // New students register as 'student' role → redirect to /dashboard
+      const redirect = route.query.redirect || getHomeRouteForRole('student')
       router.push({ path: '/login', query: { redirect } })
     }, 2000)
   } catch (err) {

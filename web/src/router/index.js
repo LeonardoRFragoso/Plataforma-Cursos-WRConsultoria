@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getHomeRoute } from '../utils/homeRoute'
 
 export const routes = [
   {
@@ -116,6 +117,11 @@ export const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('../views/Forbidden.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFound.vue'),
@@ -141,11 +147,11 @@ export async function navigationGuard(to) {
   }
 
   if (to.meta.requiresAdmin && userRole !== 'admin' && userRole !== 'super_admin') {
-    return { path: '/dashboard' }
+    return { path: getHomeRoute(authStore) }
   }
 
   if (to.meta.requiresSuperAdmin && userRole !== 'super_admin') {
-    return { path: '/dashboard' }
+    return { path: getHomeRoute(authStore) }
   }
 
   return true

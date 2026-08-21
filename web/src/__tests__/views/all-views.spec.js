@@ -12,6 +12,7 @@ import CourseLessons from '../../views/CourseLessons.vue'
 import Courses from '../../views/Courses.vue'
 import Dashboard from '../../views/Dashboard.vue'
 import Enrollments from '../../views/Enrollments.vue'
+import Forbidden from '../../views/Forbidden.vue'
 import Home from '../../views/Home.vue'
 import Login from '../../views/Login.vue'
 import NotFound from '../../views/NotFound.vue'
@@ -44,6 +45,7 @@ const cases = [
   ['Courses', Courses, '/courses'],
   ['Dashboard', Dashboard, '/dashboard'],
   ['Enrollments', Enrollments, '/enrollments'],
+  ['Forbidden', Forbidden, '/403'],
   ['Home', Home, '/'],
   ['Login', Login, '/login'],
   ['NotFound', NotFound, '/not-found'],
@@ -77,6 +79,7 @@ describe('Views render', () => {
         { path: '/students', component: { template: '<div>students</div>' } },
         { path: '/login', component: { template: '<div>login</div>' } },
         { path: '/register', component: { template: '<div>register</div>' } },
+        { path: '/403', component: { template: '<div>forbidden</div>' } },
         { path: '/:pathMatch(.*)*', component: { template: '<div>not-found</div>' } },
       ],
     })
