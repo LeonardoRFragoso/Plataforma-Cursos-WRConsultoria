@@ -15,8 +15,6 @@ is enforced at the API layer.
 import uuid
 from datetime import timedelta
 
-import pytest
-
 from app.core.security import create_access_token
 from app.core.utils import utc_now
 
@@ -152,6 +150,7 @@ async def test_no_auth_header(client):
 async def test_wrong_secret_key_jwt_rejected(client):
     """A JWT signed with a different secret → 401."""
     from jose import jwt
+
     from app.core.config import settings
 
     payload = {

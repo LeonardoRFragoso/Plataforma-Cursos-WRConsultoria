@@ -11,20 +11,17 @@ Covers Step 16 — DASHBOARD:
 import uuid
 from datetime import timedelta
 
-import pytest
+from sqlalchemy import text
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
 from app.core.utils import utc_now
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course, CourseModality, CourseType
-from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.payment import Payment, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
-from sqlalchemy import text
 
 
 async def _seed_alfa_tenant():

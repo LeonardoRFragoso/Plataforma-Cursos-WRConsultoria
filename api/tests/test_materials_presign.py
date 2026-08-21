@@ -17,8 +17,6 @@ Uses controlled storage abstraction/mocks — no real production bucket needed.
 import uuid
 from unittest.mock import AsyncMock
 
-import pytest
-
 from app.core.storage import settings as storage_settings
 
 
@@ -208,6 +206,8 @@ async def test_materials_presign_lesson_not_found(client, admin_headers):
 
 async def test_materials_presign_cross_tenant_denied(client, admin_headers, monkeypatch):
     """Admin from WR cannot presign materials for an Alfa lesson → 404 (tenant-scoped)."""
+    from sqlalchemy import text
+
     from app.core.constants import WR_TENANT_ID
     from app.core.database import AsyncSessionLocal
     from app.core.security import create_access_token, hash_password
@@ -215,7 +215,6 @@ async def test_materials_presign_cross_tenant_denied(client, admin_headers, monk
     from app.models.lesson import Lesson, LessonContentType
     from app.models.tenant import Tenant, TenantStatus
     from app.models.user import User, UserRole
-    from sqlalchemy import text
 
     # Seed Alfa tenant
     async with AsyncSessionLocal() as db:
