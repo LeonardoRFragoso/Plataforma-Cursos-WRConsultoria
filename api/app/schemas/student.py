@@ -18,7 +18,7 @@ class StudentCreate(StudentBase):
     full_name: str
     password: str | None = None
     company_id: UUID | None = None
-    class_id: UUID
+    class_id: UUID | None = None
 
 class StudentUpdate(BaseModel):
     phone: str | None = None
@@ -34,7 +34,9 @@ class StudentResponse(StudentBase):
     user_id: UUID
     email: str | None = None
     full_name: str | None = None
+    user_active: bool | None = None
     temp_password: str | None = None
+    activation_token: str | None = None
     company_id: UUID | None = None
     created_at: datetime
     updated_at: datetime

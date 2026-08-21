@@ -3,13 +3,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_user
+from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
+from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
 from app.models.student import Student
 from app.schemas.enrollment import (
@@ -32,17 +34,21 @@ async def create_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = select(Class).where(Class.id == enrollment_data.class_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Class).where(
+        Class.id == enrollment_data.class_id,
+        Class.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     class_obj = result.scalar_one_or_none()
-    
+
     if not class_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Class not found",
         )
-    
-    enrollment = Enrollment(**enrollment_data.model_dump())
+
+    enrollment = Enrollment(tenant_id=tenant_id, **enrollment_data.model_dump())
     db.add(enrollment)
     await db.commit()
     await db.refresh(enrollment)
@@ -55,7 +61,13 @@ async def list_enrollments(
     skip: int = 0,
     limit: int = 100,
 ):
-    stmt = select(Enrollment).offset(skip).limit(limit)
+    tenant_id = get_current_tenant_id()
+    stmt = (
+        select(Enrollment)
+        .where(Enrollment.tenant_id == tenant_id)
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     enrollments = result.scalars().all()
     return enrollments
@@ -109,16 +121,20 @@ async def get_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = select(Enrollment).where(Enrollment.id == enrollment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Enrollment).where(
+        Enrollment.id == enrollment_id,
+        Enrollment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     enrollment = result.scalar_one_or_none()
-    
+
     if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
-    
+
     return enrollment
 
 @router.put("/{enrollment_id}", response_model=EnrollmentResponse)
@@ -128,20 +144,24 @@ async def update_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Enrollment).where(Enrollment.id == enrollment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Enrollment).where(
+        Enrollment.id == enrollment_id,
+        Enrollment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     enrollment = result.scalar_one_or_none()
-    
+
     if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
-    
+
     update_data = enrollment_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(enrollment, field, value)
-    
+
     await db.commit()
     await db.refresh(enrollment)
     return enrollment
@@ -152,16 +172,20 @@ async def delete_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Enrollment).where(Enrollment.id == enrollment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Enrollment).where(
+        Enrollment.id == enrollment_id,
+        Enrollment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     enrollment = result.scalar_one_or_none()
-    
+
     if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
-    
+
     await db.delete(enrollment)
     await db.commit()
 
@@ -190,6 +214,21 @@ async def purchase_enrollment(
             detail="Only students can purchase",
         )
 
+    # Resolve tenant: prefer ContextVar (set by middleware), fall back to
+    # current_user dict (set by JWT), then db.info (set by test harness).
+    try:
+        tenant_id = get_current_tenant_id()
+    except HTTPException:
+        tenant_id = None
+        if current_user.get("tenant_id"):
+            tenant_id = UUID(current_user["tenant_id"])
+        elif db.info.get("tenant_id"):
+            tenant_id = db.info["tenant_id"]
+        if not tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant not resolved",
+            )
     user_id = UUID(current_user["user_id"])
     # Trava o Student para serializar compras concorrentes do mesmo aluno.
     stmt = select(Student).where(Student.user_id == user_id).with_for_update()
@@ -236,6 +275,7 @@ async def purchase_enrollment(
         ).scalar_one_or_none()
         if not payment:
             payment = Payment(
+                tenant_id=tenant_id,
                 enrollment_id=enrollment.id,
                 amount=enrollment.price,
                 status=PaymentStatus.PENDENTE,
@@ -317,15 +357,18 @@ async def purchase_enrollment(
             continue
 
         enrollment = Enrollment(
+            tenant_id=tenant_id,
             student_id=student.id,
             class_id=class_obj.id,
             price=course.price,
             status=EnrollmentStatus.PENDENTE,
+            source=EnrollmentSource.INDIVIDUAL,
         )
         db.add(enrollment)
         await db.flush()
 
         payment = Payment(
+            tenant_id=tenant_id,
             enrollment_id=enrollment.id,
             amount=course.price,
             status=PaymentStatus.PENDENTE,
@@ -353,72 +396,161 @@ async def create_bulk_enrollments(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Cria múltiplas matrículas e um pagamento consolidado por empresa."""
-    # Validar turma
-    stmt = select(Class).where(Class.id == data.class_id)
+    """Bulk enrollment for corporate provisioning.
+
+    Creates multiple enrollments atomically. When create_payment=False
+    (default for corporate), no Payment is created — access is provisioned
+    under an external corporate contract.
+
+    When create_payment=True, a consolidated payment is created.
+
+    Capacity is checked BEFORE any writes. If there are not enough seats,
+    NO enrollments are created (atomic behavior).
+    """
+    tenant_id = get_current_tenant_id()
+
+    # Validate class (tenant-scoped, with lock)
+    stmt = (
+        select(Class)
+        .where(Class.id == data.class_id, Class.tenant_id == tenant_id)
+        .with_for_update()
+    )
     result = await db.execute(stmt)
     class_obj = result.scalar_one_or_none()
     if not class_obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
-    # Validar empresa, se informada
+    # Validate company (tenant-scoped)
     if data.company_id:
-        stmt = select(Company).where(Company.id == data.company_id)
+        stmt = select(Company).where(
+            Company.id == data.company_id,
+            Company.tenant_id == tenant_id,
+        )
         result = await db.execute(stmt)
-        if not result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Company not found",
-            )
+        company = result.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
 
-    # Validar alunos
-    stmt = select(Student).where(Student.id.in_(data.student_ids))
+    # Validate students (tenant-scoped)
+    stmt = (
+        select(Student)
+        .where(
+            Student.id.in_(data.student_ids),
+            Student.tenant_id == tenant_id,
+        )
+        .options(selectinload(Student.user))
+    )
     result = await db.execute(stmt)
     students = result.scalars().all()
-    found_ids = {str(s.id) for s in students}
-    missing = [sid for sid in data.student_ids if str(sid) not in found_ids]
+    found_ids = {s.id for s in students}
+    missing = [sid for sid in data.student_ids if sid not in found_ids]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Students not found: {missing}",
         )
 
-    # Criar matrículas
+    # If company_id provided, verify all students belong to that company
+    if data.company_id:
+        wrong_company = [s for s in students if s.company_id != data.company_id]
+        if wrong_company:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Some students do not belong to the specified company",
+            )
+
+    # Check for duplicate enrollments
+    stmt = (
+        select(Enrollment)
+        .where(
+            Enrollment.student_id.in_(data.student_ids),
+            Enrollment.class_id == data.class_id,
+            Enrollment.tenant_id == tenant_id,
+            Enrollment.status != EnrollmentStatus.CANCELADA,
+        )
+    )
+    existing = (await db.execute(stmt)).scalars().all()
+    if existing:
+        already_enrolled = [str(e.student_id) for e in existing]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Some students are already enrolled in this class: {already_enrolled}",
+        )
+
+    # Check capacity BEFORE any writes (atomic)
+    count_stmt = (
+        select(func.count(Enrollment.id))
+        .where(
+            Enrollment.class_id == data.class_id,
+            Enrollment.tenant_id == tenant_id,
+            Enrollment.status.in_([EnrollmentStatus.PENDENTE, EnrollmentStatus.CONFIRMADA]),
+        )
+    )
+    current_count = (await db.execute(count_stmt)).scalar_one()
+    available = class_obj.max_students - current_count
+    requested = len(data.student_ids)
+    if requested > available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient capacity: {requested} requested, {available} available",
+        )
+
+    # Create enrollments
     enrollments = []
-    for student_id in data.student_ids:
+    for student in students:
         enrollment = Enrollment(
-            student_id=student_id,
+            tenant_id=tenant_id,
+            student_id=student.id,
             class_id=data.class_id,
             price=data.price_per_student,
             status=data.status,
+            source=data.source,
         )
         db.add(enrollment)
         enrollments.append(enrollment)
 
     await db.flush()
 
-    # Criar pagamento consolidado
+    # Optional payment
+    payment = None
     total_amount = data.price_per_student * len(data.student_ids)
-    payment = Payment(
-        enrollment_id=None,
-        company_id=data.company_id,
-        amount=total_amount,
-        status=PaymentStatus.PENDENTE,
-        method=data.payment_method,
-        installments=data.installments,
-    )
-    db.add(payment)
+    if data.create_payment and data.payment_method:
+        payment = Payment(
+            tenant_id=tenant_id,
+            enrollment_id=None,
+            company_id=data.company_id,
+            amount=total_amount,
+            status=PaymentStatus.PENDENTE,
+            method=data.payment_method,
+            installments=data.installments,
+        )
+        db.add(payment)
+        await db.flush()
+
+    # Create audit batch record (only for corporate enrollments with company_id)
+    batch = None
+    if data.company_id:
+        batch = CorporateEnrollmentBatch(
+            tenant_id=tenant_id,
+            company_id=data.company_id,
+            class_id=data.class_id,
+            enrollment_count=len(data.student_ids),
+            created_by=UUID(current_user["user_id"]) if current_user.get("user_id") else None,
+            created_by_name=current_user.get("full_name"),
+        )
+        db.add(batch)
 
     await db.commit()
     for enrollment in enrollments:
         await db.refresh(enrollment)
-    await db.refresh(payment)
+    if payment:
+        await db.refresh(payment)
+    if batch:
+        await db.refresh(batch)
 
     return BulkEnrollmentResponse(
         enrollment_ids=[e.id for e in enrollments],
-        payment_id=payment.id,
+        payment_id=payment.id if payment else None,
         total_amount=total_amount,
+        batch_id=batch.id if batch else None,
     )

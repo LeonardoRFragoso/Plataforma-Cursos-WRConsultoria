@@ -81,6 +81,7 @@ async def admin_token(client):
 
     async with AsyncSessionLocal() as session:
         user = User(
+            tenant_id=WR_TENANT_ID,
             email=email,
             full_name="Test Admin",
             cpf=cpf,

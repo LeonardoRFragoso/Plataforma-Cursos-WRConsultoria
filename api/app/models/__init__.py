@@ -2,8 +2,9 @@ from app.models.attendance import Attendance
 from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
+from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course, CourseModality
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
 from app.models.one_time_token import OneTimeToken
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
@@ -21,9 +22,11 @@ __all__ = [
     "Class",
     "ClassStatus",
     "Company",
+    "CorporateEnrollmentBatch",
     "Course",
     "CourseModality",
     "Enrollment",
+    "EnrollmentSource",
     "EnrollmentStatus",
     "Lesson",
     "LessonContentType",

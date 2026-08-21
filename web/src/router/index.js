@@ -49,6 +49,12 @@ export const routes = [
     meta: { layout: 'public' },
   },
   {
+    path: '/ativar-conta',
+    name: 'ActivateAccount',
+    component: () => import('../views/ActivateAccount.vue'),
+    meta: { layout: 'public' },
+  },
+  {
     path: '/cursos/:id',
     name: 'CourseDetail',
     component: () => import('../views/CourseDetail.vue'),
@@ -114,9 +120,27 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
   },
   {
+    path: '/companies',
+    name: 'Companies',
+    component: () => import('../views/Companies.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
+  },
+  {
+    path: '/companies/:id',
+    name: 'CompanyDetail',
+    component: () => import('../views/CompanyDetail.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
+  },
+  {
     path: '/students',
     name: 'Students',
     component: () => import('../views/Students.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
+  },
+  {
+    path: '/students/:id',
+    name: 'StudentDetail',
+    component: () => import('../views/StudentDetail.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
   },
   {
