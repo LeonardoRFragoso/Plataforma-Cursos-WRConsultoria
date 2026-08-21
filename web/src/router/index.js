@@ -57,7 +57,7 @@ export const routes = [
   {
     path: '/cursos',
     name: 'CourseCatalog',
-    component: () => import('../views/Home.vue'),
+    component: () => import('../views/CourseCatalog.vue'),
     meta: { layout: 'public' },
   },
   {

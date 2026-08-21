@@ -37,6 +37,9 @@ dist/
 .fusebox/
 .dynamodb/
 .tern-port
+
+# Local storage (development file uploads)
+.local_storage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -17,6 +17,7 @@ from app.core.storage import (
     ALLOWED_MIME_TYPES,
     MAX_UPLOAD_SIZE,
     delete_object,
+    generate_material_download_url,
     generate_material_upload_url,
     generate_upload_url,
     generate_watch_url,
@@ -939,6 +940,62 @@ async def list_lesson_materials(
     result = await db.execute(stmt)
     materials = result.scalars().all()
     return materials
+
+
+@router.get("/{lesson_id}/materials/{material_id}/download")
+async def download_lesson_material(
+    lesson_id: UUID,
+    material_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a download URL for a material file."""
+    tenant_id = get_current_tenant_id()
+    stmt = select(LessonMaterial).where(
+        LessonMaterial.id == material_id,
+        LessonMaterial.lesson_id == lesson_id,
+        LessonMaterial.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material not found",
+        )
+
+    # Check access (except free preview lessons)
+    lesson_stmt = select(Lesson).where(
+        Lesson.id == lesson_id,
+        Lesson.tenant_id == tenant_id,
+    )
+    lesson_result = await db.execute(lesson_stmt)
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lesson not found",
+        )
+
+    if not lesson.is_free_preview:
+        has_access = await _require_course_access(db, lesson.course_id, tenant_id, current_user)
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this lesson",
+            )
+
+    # Prefer storage_key-based download URL; fall back to legacy file_url
+    if material.storage_key:
+        download_url = await generate_material_download_url(material.storage_key)
+        return {"download_url": download_url}
+    elif material.file_url:
+        return {"download_url": material.file_url}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material file not available",
+        )
 
 
 @router.delete("/{lesson_id}/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)

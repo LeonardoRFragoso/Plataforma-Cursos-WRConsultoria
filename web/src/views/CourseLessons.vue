@@ -77,14 +77,50 @@
               </div>
             </div>
 
-            <!-- URL externa -->
+            <!-- URL externa (YouTube/Vimeo) -->
             <AppInput
               v-if="form.content_type !== 'UPLOAD'"
               v-model="form.video_url"
-              label="URL do vídeo"
+              label="URL do vídeo *"
               placeholder="https://..."
               class="md:col-span-2"
             />
+
+            <!-- Video file selector (UPLOAD type, creation only) -->
+            <div v-if="form.content_type === 'UPLOAD' && !editingId" class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Vídeo da aula</label>
+              <input
+                ref="createFormVideoInput"
+                type="file"
+                accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mpeg"
+                class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                data-testid="create-lesson-video-input"
+              />
+              <p class="text-xs text-gray-500 mt-1">
+                Selecione o arquivo de vídeo. Formatos: MP4, WebM, OGG, MOV, MPEG. Máx: 2GB.
+                <span v-if="createFormVideoFile" class="text-primary-600 font-medium">
+                  Selecionado: {{ createFormVideoFile.name }} ({{ formatFileSize(createFormVideoFile.size) }})
+                </span>
+              </p>
+            </div>
+
+            <!-- Upload status for creation flow -->
+            <div v-if="createFormUploading" class="md:col-span-2">
+              <div class="bg-primary-50 border border-primary-200 rounded-md p-4">
+                <div class="flex items-center gap-3 mb-2">
+                  <svg class="animate-spin w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span class="text-sm text-primary-700 font-medium">
+                    {{ createFormUploadPhase }}
+                  </span>
+                </div>
+                <div class="w-full bg-primary-100 rounded-full h-2">
+                  <div class="bg-primary-600 h-2 rounded-full transition-all" :style="{ width: createFormProgress + '%' }"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="flex gap-2">
             <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-lesson-btn">
@@ -216,15 +252,25 @@
           :key="material.id"
           class="flex justify-between items-center bg-gray-50 rounded p-3"
         >
-          <div>
-            <p class="font-medium text-sm">{{ material.title }}</p>
-            <p class="text-xs text-gray-500">{{ material.mime_type || 'arquivo' }}</p>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-sm truncate">{{ material.title }}</p>
+            <p class="text-xs text-gray-500">
+              {{ formatMaterialType(material.mime_type) }}
+              <span v-if="material.size_bytes"> · {{ formatFileSize(material.size_bytes) }}</span>
+            </p>
           </div>
-          <button
-            @click="confirmDeleteMaterial(material)"
-            class="text-red-600 text-xs hover:underline"
-            data-testid="remove-material-btn"
-          >Remover</button>
+          <div class="flex gap-2 flex-shrink-0">
+            <button
+              @click="downloadMaterial(material)"
+              class="text-primary-600 text-xs hover:underline"
+              data-testid="download-material-btn"
+            >Baixar</button>
+            <button
+              @click="confirmDeleteMaterial(material)"
+              class="text-red-600 text-xs hover:underline"
+              data-testid="remove-material-btn"
+            >Remover</button>
+          </div>
         </div>
       </div>
       <div class="border-t pt-4">
@@ -300,7 +346,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '../composables/useToast'
 import api from '../api/client'
@@ -330,6 +376,11 @@ const uploadingMaterial = ref(false)
 
 const videoFileInput = ref(null)
 const materialFileInput = ref(null)
+const createFormVideoInput = ref(null)
+const createFormVideoFile = ref(null)
+const createFormUploading = ref(false)
+const createFormProgress = ref(0)
+const createFormUploadPhase = ref('')
 
 const form = ref({
   title: '',
@@ -376,6 +427,15 @@ const pendingDeleteMaterial = ref(null)
 
 const sortedLessons = computed(() => {
   return [...lessons.value].sort((a, b) => a.order - b.order)
+})
+
+// Track selected video file in creation form
+watch(createFormVideoInput, (el) => {
+  if (el) {
+    el.addEventListener('change', () => {
+      createFormVideoFile.value = el.files?.[0] || null
+    })
+  }
 })
 
 const deleteLessonMessage = computed(() =>
@@ -427,7 +487,15 @@ const saveLesson = async () => {
       )
       toastSuccess('Aula atualizada com sucesso!')
     } else {
-      await api.post(`/api/v1/lessons/courses/${courseId}/lessons`, form.value)
+      // Step 1: Create the lesson
+      const createResp = await api.post(`/api/v1/lessons/courses/${courseId}/lessons`, form.value)
+      const lesson = createResp.data
+
+      // Step 2: If UPLOAD type and a video file was selected, upload it
+      if (form.value.content_type === 'UPLOAD' && createFormVideoFile.value) {
+        await uploadVideoForLesson(lesson.id, createFormVideoFile.value)
+      }
+
       toastSuccess('Aula criada com sucesso!')
     }
     resetForm()
@@ -436,6 +504,96 @@ const saveLesson = async () => {
     toastError('Erro ao salvar aula: ' + (error.response?.data?.detail || error.message))
   } finally {
     saving.value = false
+  }
+}
+
+// Upload video for a newly created lesson (creation flow)
+const uploadVideoForLesson = async (lessonId, file) => {
+  createFormUploading.value = true
+  createFormProgress.value = 0
+  createFormUploadPhase.value = 'Solicitando upload...'
+
+  try {
+    // Step 1: Get presign URL
+    const presignResp = await api.post(`/api/v1/lessons/${lessonId}/upload-presign`, {
+      filename: file.name,
+      mime_type: file.type,
+      size_bytes: file.size,
+    })
+    const { upload_url, storage_key } = presignResp.data
+
+    createFormUploadPhase.value = 'Enviando vídeo...'
+    createFormProgress.value = 20
+
+    // Step 2: Upload file to storage (S3 presigned URL or local backend)
+    const uploadResult = await fetch(upload_url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    })
+
+    if (!uploadResult.ok) {
+      throw new Error(`Upload failed: ${uploadResult.status}`)
+    }
+
+    createFormUploadPhase.value = 'Verificando upload...'
+    createFormProgress.value = 80
+
+    // Step 3: Verify and activate
+    await api.post(`/api/v1/lessons/${lessonId}/upload-complete`, null, {
+      params: { storage_key }
+    })
+
+    createFormProgress.value = 100
+    createFormUploadPhase.value = 'Concluído!'
+  } catch (error) {
+    createFormUploadPhase.value = ''
+    throw error
+  } finally {
+    createFormUploading.value = false
+  }
+}
+
+// Format file size for display
+const formatFileSize = (bytes) => {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+// Format material MIME type for display
+const formatMaterialType = (mimeType) => {
+  if (!mimeType) return 'arquivo'
+  const map = {
+    'application/pdf': 'PDF',
+    'application/msword': 'DOC',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+    'application/vnd.ms-powerpoint': 'PPT',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+    'application/vnd.ms-excel': 'XLS',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+    'text/plain': 'TXT',
+  }
+  return map[mimeType] || mimeType.split('/').pop().toUpperCase()
+}
+
+// Download a material file
+const downloadMaterial = async (material) => {
+  try {
+    const resp = await api.get(`/api/v1/lessons/${materialsModal.value.lessonId}/materials/${material.id}/download`)
+    const downloadUrl = resp.data.download_url || resp.data.file_url
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank')
+    }
+  } catch (error) {
+    // Fallback: if no download endpoint, use file_url directly
+    if (material.file_url) {
+      window.open(material.file_url, '_blank')
+    } else {
+      toastError('Não foi possível baixar o material.')
+    }
   }
 }
 
@@ -490,6 +648,11 @@ const resetForm = () => {
     is_free_preview: false,
     is_required: true,
   }
+  createFormVideoFile.value = null
+  createFormUploading.value = false
+  createFormProgress.value = 0
+  createFormUploadPhase.value = ''
+  if (createFormVideoInput.value) createFormVideoInput.value.value = ''
   showForm.value = false
 }
 

@@ -8,6 +8,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const userRole = ref(localStorage.getItem('user_role') || null)
   const initialized = ref(false)
+  // True while initializeUser() is resolving the current session. Components
+  // can use this to show a neutral loading state instead of empty profile
+  // rows that look like successfully-loaded-but-blank data.
+  const loading = ref(false)
   let initPromise = null
 
   const isAuthenticated = computed(() => !!token.value)
@@ -70,6 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
+    loading.value = true
     initPromise = (async () => {
       try {
         const meResponse = await api.get('/api/v1/auth/me')
@@ -80,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Silent — the API interceptor handles logout/redirect on 401
       } finally {
         initialized.value = true
+        loading.value = false
       }
     })()
 
@@ -92,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     userRole,
     initialized,
+    loading,
     isAuthenticated,
     login,
     register,

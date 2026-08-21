@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen flex flex-col">
-    <AppNavbar />
+  <div :class="isAuthenticatedStudent ? '' : 'min-h-screen flex flex-col'">
+    <AppNavbar v-if="!isAuthenticatedStudent" />
 
     <main class="flex-1 bg-gray-50 py-12">
       <div v-if="loading" class="text-center text-gray-500">Carregando curso...</div>
@@ -20,10 +20,13 @@
         </nav>
 
         <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-          <!-- Course cover banner -->
+          <!-- Course cover — 16:9 with object-contain to preserve the
+               complete artwork (NR title, WR branding, subtitle). A 21:9
+               crop removed important edge text. -->
           <CourseCover
             :course="course"
-            ratio="21/9"
+            ratio="16/9"
+            fit="contain"
             loading="eager"
             img-test-id="course-detail-cover-img"
             fb-test-id="course-detail-cover-fallback"
@@ -134,6 +137,10 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+
+const isAuthenticatedStudent = computed(
+  () => authStore.isAuthenticated && authStore.userRole?.toLowerCase() === 'student'
+)
 
 const course = ref(null)
 const loading = ref(true)

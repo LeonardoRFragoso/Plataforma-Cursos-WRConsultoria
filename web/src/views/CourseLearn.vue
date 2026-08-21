@@ -13,6 +13,7 @@
         <CourseCover
           :course="course"
           ratio="16/9"
+          fit="cover"
           loading="lazy"
           wrapper-class="w-24 shrink-0 rounded-md overflow-hidden hidden sm:block"
           img-test-id="courselearn-context-img"

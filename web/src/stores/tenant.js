@@ -10,11 +10,18 @@ export const useTenantStore = defineStore('tenant', {
     primary_color: null,
     secondary_color: null,
     accent_color: null,
+    // `loading` is true while branding is being resolved from the API;
+    // `loaded` becomes true once the first resolution (success or fallback)
+    // completes. Components should show a neutral placeholder while
+    // `loading && !loaded` so they never permanently display the generic
+    // "Plataforma de Cursos" identity when a configured tenant exists.
+    loading: false,
     loaded: false,
   }),
 
   actions: {
     async loadBranding(slug = 'wr') {
+      this.loading = true
       try {
         const data = await fetchTenantBranding(slug)
         this.name = data.name
@@ -31,6 +38,8 @@ export const useTenantStore = defineStore('tenant', {
         this.secondary_color = '#1a1a1a'
         this.accent_color = '#ff6b35'
         this.loaded = true
+      } finally {
+        this.loading = false
       }
     },
 

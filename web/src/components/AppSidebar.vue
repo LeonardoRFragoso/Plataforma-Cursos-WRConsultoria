@@ -19,14 +19,26 @@
     >
       <!-- Branding -->
       <div class="h-16 flex items-center gap-2 px-4 border-b border-gray-200 shrink-0">
-        <router-link :to="homeRoute" class="flex items-center min-w-0" data-testid="navbar-logo" @click="$emit('close')">
+        <router-link :to="homeRoute" class="flex items-center min-w-0 gap-2" data-testid="navbar-logo" :title="tenantStore.name || ''" @click="$emit('close')">
+          <!-- Tenant logo (when configured) -->
           <img
             v-if="tenantStore.logo_url"
             :src="tenantStore.logo_url"
             :alt="tenantStore.name"
-            class="h-9 w-auto max-w-[140px] object-contain"
+            class="h-9 w-auto max-w-[120px] object-contain"
           />
-          <span v-else class="text-lg font-bold text-primary-600 truncate">{{ tenantStore.name || 'Plataforma' }}</span>
+          <!-- Neutral placeholder while branding is resolving from the API. -->
+          <span
+            v-else-if="tenantStore.loading && !tenantStore.loaded"
+            class="text-sm text-gray-400 truncate"
+            data-testid="sidebar-brand-loading"
+          >
+            Carregando…
+          </span>
+          <!-- Resolved tenant name — compact, with tooltip for full name -->
+          <template v-else>
+            <span class="text-base font-bold text-primary-600 truncate">{{ tenantStore.name || 'Plataforma' }}</span>
+          </template>
         </router-link>
       </div>
 
@@ -38,7 +50,7 @@
           :key="link.to"
           :to="link.to"
           :class="[
-            'block rounded-md px-3 py-2 text-sm font-medium transition-colors',
+            'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
             isActive(link.to)
               ? 'bg-primary-50 text-primary-700'
               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50',
@@ -47,7 +59,8 @@
           :aria-current="isActive(link.to) ? 'page' : undefined"
           @click="$emit('close')"
         >
-          {{ link.label }}
+          <NavIcon v-if="link.icon" :name="link.icon" />
+          <span>{{ link.label }}</span>
         </router-link>
 
         <!-- Collapsible groups -->
@@ -125,6 +138,7 @@ import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 import { useNavConfig } from '../composables/useNavConfig'
 import { getHomeRoute } from '../utils/homeRoute'
+import NavIcon from './NavIcon.vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },

@@ -37,12 +37,12 @@ describe('CourseCover.vue', () => {
   it('renders fallback for unmapped course', () => {
     const wrapper = mount(CourseCover, {
       props: {
-        course: { category: 'NR 1', code: 'NR-01-F', name: 'NR 1' },
+        course: { category: 'Unknown', code: 'UNK-F', name: 'Unknown Course' },
       },
     })
     const fallback = wrapper.find('[data-testid="course-cover-fallback"]')
     expect(fallback.exists()).toBe(true)
-    expect(fallback.text()).toContain('NR-01-F')
+    expect(fallback.text()).toContain('UNK-F')
   })
 
   it('uses lazy loading by default', () => {

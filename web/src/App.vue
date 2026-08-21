@@ -33,9 +33,21 @@ const { toasts, removeToast } = useToast()
 // renders inside the centered PublicLayout. The layout component stays mounted
 // across route changes so the shell remains stable while only the workspace
 // content swaps.
-const layoutComponent = computed(() =>
-  route.meta.layout === 'authenticated' ? AuthenticatedLayout : PublicLayout
-)
+//
+// Catalog (/cursos) and course detail (/cursos/:id) are public pages, but when
+// an authenticated STUDENT visits them we render inside the AppShell so the
+// student keeps their sidebar/topbar context (Option A from PR #16). Public
+// visitors and admins still get the PublicLayout.
+const layoutComponent = computed(() => {
+  if (route.meta.layout === 'authenticated') return AuthenticatedLayout
+  if (route.meta.layout === 'public' && authStore.isAuthenticated && authStore.userRole?.toLowerCase() === 'student') {
+    // Only upgrade the catalog-family pages to the authenticated shell
+    if (route.path === '/cursos' || route.path.startsWith('/cursos/')) {
+      return AuthenticatedLayout
+    }
+  }
+  return PublicLayout
+})
 
 onMounted(async () => {
   if (authStore.token) {

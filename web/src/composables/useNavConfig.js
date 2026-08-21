@@ -31,9 +31,9 @@ export function useNavConfig() {
     if (role.value === 'student') {
       return {
         flat: [
-          { to: '/dashboard', label: 'Dashboard', testid: 'dashboard' },
-          { to: '/cursos', label: 'Catálogo', testid: 'catalog' },
-          { to: '/certificates', label: 'Certificados', testid: 'certificates' },
+          { to: '/dashboard', label: 'Dashboard', testid: 'dashboard', icon: 'home' },
+          { to: '/cursos', label: 'Catálogo', testid: 'catalog', icon: 'catalog' },
+          { to: '/certificates', label: 'Certificados', testid: 'certificates', icon: 'cert' },
         ],
         groups: [],
       }

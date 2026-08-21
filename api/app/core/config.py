@@ -29,7 +29,7 @@ def _normalize_database_url(url: str) -> str:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
     ENVIRONMENT: str = "development"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos"
@@ -87,12 +87,22 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: list[str] = ["*"]
     
     # Storage S3-compatível (Cloudflare R2 / Backblaze B2 / MinIO / AWS S3)
+    # STORAGE_BACKEND: "s3" (default, production) or "local" (development)
+    STORAGE_BACKEND: str = "s3"
     STORAGE_ENDPOINT: str = ""
     STORAGE_ACCESS_KEY: str = ""
     STORAGE_SECRET_KEY: str = ""
     STORAGE_BUCKET: str = "wr-videos"
     STORAGE_REGION: str = "auto"
     STORAGE_WATCH_URL_EXPIRATION: int = 7200  # segundos
+
+    # Local storage directory (only used when STORAGE_BACKEND=local)
+    STORAGE_LOCAL_DIR: str = ".local_storage"
+
+    # Backend's own base URL — used to build local upload/serve URLs.
+    # In development this is the API server URL. In production it is the
+    # public API URL (may differ from FRONTEND_URL which is the web app).
+    API_BASE_URL: str = "http://localhost:8000"
 
     # Chave de criptografia para secrets de tenant (32 bytes base64).
     # Em produção deve ser definida via env. Se vazia, fallback para uma

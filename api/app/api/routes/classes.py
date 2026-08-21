@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_admin
 from app.models.class_model import Class, ClassStatus
@@ -12,6 +13,18 @@ from app.models.user import User, UserRole
 from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
 
 router = APIRouter()
+
+
+def _generate_ead_access_link(course_id: UUID) -> str:
+    """Generate the canonical platform EAD access URL for a course.
+
+    Uses the configured FRONTEND_URL (the public web application base URL)
+    + the authenticated learning route. This is the platform's own access
+    point — NOT an external meeting link.
+    """
+    base = settings.FRONTEND_URL.rstrip("/")
+    return f"{base}/courses/{course_id}/learn"
+
 
 @router.post("/", response_model=ClassResponse, status_code=status.HTTP_201_CREATED)
 async def create_class(
@@ -56,25 +69,30 @@ async def create_class(
             detail="Cannot create a class with CANCELADA status",
         )
 
+    # Auto-generate EAD access link for EAD and SEMIPRESENCIAL courses
+    # when the admin hasn't provided one. The platform's own learning route
+    # is the canonical access point — admins should not need to manually
+    # invent a URL.
+    ead_link = class_data.ead_link
+    if course.modality in (CourseModality.EAD, CourseModality.SEMIPRESENCIAL) and not ead_link:
+        ead_link = _generate_ead_access_link(course.id)
+
     if course.modality == CourseModality.PRESENCIAL and not class_data.location:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="In-person classes require a location",
         )
 
-    if course.modality == CourseModality.EAD and not class_data.ead_link:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="EAD classes require an ead_link",
-        )
-
-    if course.modality == CourseModality.SEMIPRESENCIAL and not (class_data.location or class_data.ead_link):
+    if course.modality == CourseModality.SEMIPRESENCIAL and not (class_data.location or ead_link):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hybrid classes require a location or ead_link",
         )
 
-    class_obj = Class(**class_data.model_dump())
+    # Build the class with the auto-generated ead_link if applicable
+    class_dict = class_data.model_dump()
+    class_dict["ead_link"] = ead_link
+    class_obj = Class(**class_dict)
     db.add(class_obj)
     await db.commit()
     await db.refresh(class_obj)

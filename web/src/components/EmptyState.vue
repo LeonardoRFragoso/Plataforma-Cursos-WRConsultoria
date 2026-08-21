@@ -4,8 +4,9 @@
     :class="class_"
     data-testid="empty-state"
   >
-    <div v-if="icon" class="mb-3 text-gray-400">
-      <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+    <div v-if="icon" class="mb-3">
+      <span v-if="isEmoji" class="text-4xl" aria-hidden="true">{{ icon }}</span>
+      <svg v-else class="w-12 h-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" :d="icon" />
       </svg>
     </div>
@@ -18,7 +19,9 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   title: {
     type: String,
     required: true,
@@ -35,5 +38,13 @@ defineProps({
     type: String,
     default: '',
   },
+})
+
+// Detect emoji icons (short, non-path strings) vs SVG path data.
+const isEmoji = computed(() => {
+  const v = props.icon || ''
+  if (!v) return false
+  // SVG path data starts with M/m/L/l/C/c etc. and contains numbers
+  return !/^[MmLlCcHhVvZzAa]/.test(v) && v.length <= 4
 })
 </script>

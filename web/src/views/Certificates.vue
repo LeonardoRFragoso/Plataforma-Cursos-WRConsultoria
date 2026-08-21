@@ -1,19 +1,89 @@
 <template>
   <div>
-    <AppPageHeader title="Certificados" description="Emita e valide certificados.">
-      <template #actions>
-        <AppButton
-          v-if="isAdmin"
-          @click="showForm = true"
-          class="bg-primary-600 text-white"
-          data-testid="new-certificate-btn"
-        >
-          + Novo Certificado
-        </AppButton>
-      </template>
-    </AppPageHeader>
+    <!-- ════════════════════════════════════════════════════════════
+         STUDENT CERTIFICATES — "Meus Certificados"
+         ════════════════════════════════════════════════════════════ -->
+    <template v-if="isStudent">
+      <AppPageHeader
+        title="Meus Certificados"
+        description="Consulte e baixe os certificados conquistados nos seus cursos."
+      />
 
-      <!-- Formulário -->
+      <!-- Loading -->
+      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div v-for="i in 2" :key="i" class="h-56 rounded-xl bg-gray-100 animate-pulse" />
+      </div>
+
+      <!-- Error -->
+      <div
+        v-else-if="loadError"
+        class="rounded-xl border border-red-200 bg-red-50 p-6 text-center"
+        data-testid="certificates-error"
+      >
+        <p class="text-red-700 mb-3">Não foi possível carregar seus certificados.</p>
+        <button
+          @click="loadMyCertificates"
+          class="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+        >
+          Tentar novamente
+        </button>
+      </div>
+
+      <!-- Empty -->
+      <EmptyState
+        v-else-if="myCertificates.length === 0"
+        icon="🏆"
+        title="Você ainda não possui certificados."
+        description="Conclua os requisitos dos seus cursos para liberar seus certificados."
+      >
+        <router-link
+          to="/dashboard"
+          class="inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+        >
+          Ver meus cursos
+        </router-link>
+      </EmptyState>
+
+      <!-- Certificate grid -->
+      <div v-else class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <CertificateCard
+            v-for="cert in myCertificates"
+            :key="cert.id"
+            :certificate="cert"
+            :test-id="'student-cert-' + cert.id"
+          />
+        </div>
+
+        <!-- Subtle validation link -->
+        <div class="text-center pt-2">
+          <router-link
+            to="/validar-certificado"
+            class="text-sm text-gray-500 hover:text-primary-600 underline hover:no-underline"
+          >
+            Validar outro certificado →
+          </router-link>
+        </div>
+      </div>
+    </template>
+
+    <!-- ════════════════════════════════════════════════════════════
+         ADMIN CERTIFICATES — management tools
+         ════════════════════════════════════════════════════════════ -->
+    <template v-else-if="isAdmin">
+      <AppPageHeader title="Certificados" description="Gerencie e valide certificados.">
+        <template #actions>
+          <AppButton
+            @click="showForm = true"
+            class="bg-primary-600 text-white"
+            data-testid="new-certificate-btn"
+          >
+            + Novo Certificado
+          </AppButton>
+        </template>
+      </AppPageHeader>
+
+      <!-- Generate form -->
       <AppCard v-if="showForm" class="mb-8">
         <template #header>
           <h2 class="text-xl font-semibold text-secondary-900">Gerar Certificado</h2>
@@ -41,7 +111,7 @@
         </form>
       </AppCard>
 
-      <!-- Validação -->
+      <!-- Validation -->
       <AppCard class="mb-8">
         <template #header>
           <h2 class="text-xl font-semibold text-secondary-900">Validar Certificado</h2>
@@ -78,9 +148,8 @@
         </div>
       </AppCard>
 
-      <!-- Lista -->
+      <!-- Admin list -->
       <LoadingState v-if="loading" message="Carregando certificados..." />
-
       <AppAlert
         v-else-if="loadError"
         type="error"
@@ -90,17 +159,15 @@
       >
         {{ loadError }}
       </AppAlert>
-
       <EmptyState
-        v-else-if="certificates.length === 0"
+        v-else-if="adminCertificates.length === 0"
         title="Nenhum certificado emitido"
         description="Certificados aparecerão aqui após a conclusão de cursos."
       />
-
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <AppCard v-for="cert in certificates" :key="cert.id" class="hover:shadow-lg transition-shadow">
+        <AppCard v-for="cert in adminCertificates" :key="cert.id" class="hover:shadow-lg transition-shadow">
           <template #header>
-            <h3 class="text-lg font-semibold text-secondary-900">{{ getStudentCpfByPayment(cert) }}</h3>
+            <h3 class="text-lg font-semibold text-secondary-900">{{ getStudentCpfByEnrollment(cert) }}</h3>
           </template>
           <div class="space-y-2 text-sm">
             <p><strong>Número:</strong> {{ cert.certificate_number }}</p>
@@ -108,22 +175,23 @@
             <p><strong>Curso:</strong> {{ getClassNameByEnrollment(cert.enrollment_id) }}</p>
             <p><strong>Emitido em:</strong> {{ formatDate(cert.issued_at) }}</p>
           </div>
-          <div v-if="isAdmin" class="mt-4 flex gap-2">
+          <div class="mt-4 flex gap-2">
             <AppButton @click="confirmDelete(cert)" class="bg-red-600 text-white text-sm flex-1" data-testid="delete-certificate-btn">Deletar</AppButton>
           </div>
         </AppCard>
       </div>
 
-    <ConfirmDialog
-      v-model="showDeleteConfirm"
-      title="Excluir certificado"
-      :message="deleteMessage"
-      confirmText="Excluir"
-      cancelText="Cancelar"
-      :danger="true"
-      :loading="deleting"
-      @confirm="doDelete"
-    />
+      <ConfirmDialog
+        v-model="showDeleteConfirm"
+        title="Excluir certificado"
+        :message="deleteMessage"
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        :danger="true"
+        :loading="deleting"
+        @confirm="doDelete"
+      />
+    </template>
   </div>
 </template>
 
@@ -131,6 +199,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
+import { fetchMyCertificates } from '../api/certificates'
 import AppPageHeader from '../components/AppPageHeader.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
@@ -139,22 +208,42 @@ import AppAlert from '../components/AppAlert.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadingState from '../components/LoadingState.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CertificateCard from '../components/CertificateCard.vue'
 import { useToast } from '../composables/useToast'
 
 const { error: toastError } = useToast()
-
 const authStore = useAuthStore()
 
-const certificates = ref([])
+const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
+const isStudent = computed(() => authStore.userRole?.toLowerCase() === 'student')
+
+// ── Student certificates ──
+const myCertificates = ref([])
+const loading = ref(false)
+const loadError = ref('')
+
+const loadMyCertificates = async () => {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const { data } = await fetchMyCertificates()
+    myCertificates.value = data
+  } catch (error) {
+    console.error('Erro ao carregar certificados:', error)
+    loadError.value = 'Não foi possível carregar seus certificados.'
+  } finally {
+    loading.value = false
+  }
+}
+
+// ── Admin certificates ──
+const adminCertificates = ref([])
 const enrollments = ref([])
 const students = ref([])
 const classes = ref([])
 const courses = ref([])
-const loading = ref(false)
 const showForm = ref(false)
-const form = ref({
-  enrollment_id: '',
-})
+const form = ref({ enrollment_id: '' })
 const validationCode = ref('')
 const validationResult = ref(null)
 const showDeleteConfirm = ref(false)
@@ -162,30 +251,23 @@ const deleting = ref(false)
 const pendingDeleteId = ref(null)
 const pendingDeleteNumber = ref('')
 const saving = ref(false)
-const loadError = ref('')
 const validationError = ref('')
-
-const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
 
 const deleteMessage = computed(() =>
   `Excluir o certificado "${pendingDeleteNumber.value}"? Esta ação não pode ser desfeita.`
 )
 
-const completedEnrollments = computed(() => {
-  return enrollments.value.filter(e => e.status === 'CONCLUIDA')
-})
+const completedEnrollments = computed(() =>
+  enrollments.value.filter(e => e.status === 'CONCLUIDA')
+)
 
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString('pt-BR')
-}
+const formatDate = (date) => new Date(date).toLocaleDateString('pt-BR')
 
-const getStudentCpfById = (id) => {
-  return students.value.find(s => s.id === id)?.cpf || 'Aluno desconhecido'
-}
+const getStudentCpfById = (id) =>
+  students.value.find(s => s.id === id)?.cpf || 'Aluno desconhecido'
 
-const getCourseNameById = (id) => {
-  return courses.value.find(c => c.id === id)?.name || 'Curso desconhecido'
-}
+const getCourseNameById = (id) =>
+  courses.value.find(c => c.id === id)?.name || 'Curso desconhecido'
 
 const getClassNameById = (classId) => {
   const cls = classes.value.find(c => c.id === classId)
@@ -193,7 +275,7 @@ const getClassNameById = (classId) => {
   return `${getCourseNameById(cls.course_id)} - ${formatDate(cls.start_date)}`
 }
 
-const getStudentCpfByPayment = (cert) => {
+const getStudentCpfByEnrollment = (cert) => {
   const enrollment = enrollments.value.find(e => e.id === cert.enrollment_id)
   if (!enrollment) return 'Desconhecido'
   return getStudentCpfById(enrollment.student_id)
@@ -205,12 +287,12 @@ const getClassNameByEnrollment = (enrollmentId) => {
   return getClassNameById(enrollment.class_id)
 }
 
-const loadCertificates = async () => {
+const loadAdminCertificates = async () => {
   loading.value = true
   loadError.value = ''
   try {
     const response = await api.get('/api/v1/certificates/')
-    certificates.value = response.data
+    adminCertificates.value = response.data
   } catch (error) {
     console.error('Erro ao carregar certificados:', error)
     loadError.value = 'Erro ao carregar certificados. Tente novamente.'
@@ -240,8 +322,9 @@ const saveCertificate = async () => {
   saving.value = true
   try {
     await api.post('/api/v1/certificates/', form.value)
-    resetForm()
-    loadCertificates()
+    form.value = { enrollment_id: '' }
+    showForm.value = false
+    loadAdminCertificates()
   } catch (error) {
     console.error('Erro ao gerar certificado:', error)
     toastError('Erro ao gerar certificado: ' + (error.response?.data?.detail || error.message))
@@ -279,7 +362,7 @@ const doDelete = async () => {
     showDeleteConfirm.value = false
     pendingDeleteId.value = null
     pendingDeleteNumber.value = ''
-    loadCertificates()
+    loadAdminCertificates()
   } catch (error) {
     console.error('Erro ao deletar certificado:', error)
     toastError('Erro ao deletar certificado')
@@ -288,13 +371,13 @@ const doDelete = async () => {
   }
 }
 
-const resetForm = () => {
-  form.value = { enrollment_id: '' }
-  showForm.value = false
-}
-
-onMounted(() => {
-  loadDependencies()
-  loadCertificates()
+onMounted(async () => {
+  await authStore.initializeUser()
+  if (isStudent.value) {
+    loadMyCertificates()
+  } else if (isAdmin.value) {
+    loadDependencies()
+    loadAdminCertificates()
+  }
 })
 </script>

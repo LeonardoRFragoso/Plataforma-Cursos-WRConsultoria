@@ -33,6 +33,9 @@
                   {{ course.name }}
                 </option>
               </select>
+              <p v-if="selectedCourseModality" class="text-xs text-gray-500 mt-1">
+                Modalidade: {{ formatModality(selectedCourseModality) }}
+              </p>
             </div>
             <AppInput
               v-model="form.max_students"
@@ -53,16 +56,48 @@
               type="date"
               required
             />
+
+            <!-- Location: shown for PRESENCIAL and SEMIPRESENCIAL -->
             <AppInput
+              v-if="showLocationField"
               v-model="form.location"
-              label="Local (Presencial)"
-              placeholder="Sala 101"
+              :label="selectedCourseModality === 'SEMIPRESENCIAL' ? 'Local (Presencial)' : 'Local *'"
+              :placeholder="'Sala 101'"
             />
-            <AppInput
-              v-model="form.ead_link"
-              label="Link EAD"
-              placeholder="https://..."
-            />
+
+            <!-- EAD access link: auto-generated for EAD and SEMIPRESENCIAL -->
+            <div v-if="showEadField">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Acesso EAD</label>
+              <div v-if="editingId && form.ead_link" class="flex items-center gap-2">
+                <input
+                  :value="form.ead_link"
+                  type="text"
+                  readonly
+                  class="flex-1 px-4 py-2 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-600"
+                />
+                <button
+                  type="button"
+                  @click="copyEadLink"
+                  class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                  data-testid="copy-ead-link-btn"
+                >
+                  Copiar
+                </button>
+                <a
+                  :href="form.ead_link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="px-3 py-2 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+                  data-testid="open-ead-link-btn"
+                >
+                  Abrir
+                </a>
+              </div>
+              <div v-else class="px-4 py-2 border border-gray-200 rounded-md bg-gray-50">
+                <p class="text-sm text-gray-500">Será gerado automaticamente após salvar a turma.</p>
+              </div>
+            </div>
+
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
@@ -127,7 +162,15 @@
             <p><strong>Período:</strong> {{ formatDate(cls.start_date) }} a {{ formatDate(cls.end_date) }}</p>
             <p><strong>Máx. Alunos:</strong> {{ cls.max_students }}</p>
             <p v-if="cls.location"><strong>Local:</strong> {{ cls.location }}</p>
-            <p v-if="cls.ead_link"><strong>Link EAD:</strong> <a :href="cls.ead_link" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">Acessar</a></p>
+            <div v-if="cls.ead_link" class="flex items-center gap-2">
+              <strong>EAD:</strong>
+              <a :href="cls.ead_link" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline truncate">Acessar</a>
+              <button
+                @click="copyToClipboard(cls.ead_link)"
+                class="text-xs text-gray-400 hover:text-primary-600"
+                title="Copiar link"
+              >📋</button>
+            </div>
             <p v-if="cls.description" class="text-gray-600 mt-3">{{ cls.description }}</p>
           </div>
           <div v-if="isAdmin" class="mt-4 flex gap-2">
@@ -195,6 +238,22 @@ const pendingDeleteName = ref('')
 
 const isAdmin = computed(() => authStore.userRole?.toLowerCase() === 'admin' || authStore.userRole?.toLowerCase() === 'super_admin')
 
+const selectedCourseModality = computed(() => {
+  if (!form.value.course_id) return null
+  const course = courses.value.find(c => c.id === form.value.course_id)
+  return course?.modality || null
+})
+
+const showLocationField = computed(() => {
+  const m = selectedCourseModality.value
+  return m === 'PRESENCIAL' || m === 'SEMIPRESENCIAL'
+})
+
+const showEadField = computed(() => {
+  const m = selectedCourseModality.value
+  return m === 'EAD' || m === 'SEMIPRESENCIAL'
+})
+
 const deleteMessage = computed(() =>
   `Excluir a turma de "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
 )
@@ -213,6 +272,11 @@ const formatStatus = (status) => {
   return map[status] || status
 }
 
+const formatModality = (modality) => {
+  const map = { PRESENCIAL: 'Presencial', EAD: 'EAD', SEMIPRESENCIAL: 'Semipresencial' }
+  return map[modality] || modality
+}
+
 const getStatusColor = (status) => {
   const colors = {
     'ABERTA': 'bg-green-100 text-green-800',
@@ -225,6 +289,21 @@ const getStatusColor = (status) => {
 
 const getCourseNameById = (courseId) => {
   return courses.value.find(c => c.id === courseId)?.name || 'Curso desconhecido'
+}
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    toastSuccess('Link copiado!')
+  } catch {
+    toastError('Não foi possível copiar o link.')
+  }
+}
+
+const copyEadLink = () => {
+  if (form.value.ead_link) {
+    copyToClipboard(form.value.ead_link)
+  }
 }
 
 const loadCourses = async () => {
@@ -257,7 +336,9 @@ const saveClass = async () => {
       responsible_admin_id: authStore.user?.id,
       max_students: Number(form.value.max_students),
       location: form.value.location || null,
-      ead_link: form.value.ead_link || null,
+      // Don't send ead_link — backend auto-generates it for EAD/SEMIPRESENCIAL.
+      // For editing, preserve existing link by sending it through.
+      ead_link: editingId.value ? (form.value.ead_link || null) : null,
       description: form.value.description || null,
     }
 

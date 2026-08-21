@@ -20,6 +20,7 @@ from app.schemas.certificate import (
     CertificateResponse,
     CertificateValidationRequest,
     CertificateValidationResponse,
+    StudentCertificateResponse,
 )
 from app.services.certificate_service import CertificateService
 
@@ -192,6 +193,60 @@ async def list_certificates(
     result = await db.execute(stmt)
     certificates = result.scalars().all()
     return certificates
+
+
+@router.get("/me", response_model=list[StudentCertificateResponse])
+async def list_my_certificates(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the authenticated student's certificates with course context.
+
+    Students only. Admins/super_admins get an empty list (they use the
+    tenant-scoped GET /). The query is filtered at the DB layer by both
+    the resolved tenant_id and the student's own user_id, so cross-tenant
+    and cross-student certificates are never loaded.
+    """
+    if current_user.get("role") != "student":
+        return []
+
+    tenant_id = get_current_tenant_id()
+    user_id = UUID(current_user["user_id"])
+
+    stmt = (
+        select(Certificate, Enrollment, Student, Class, Course)
+        .join(Enrollment, Certificate.enrollment_id == Enrollment.id)
+        .join(Student, Enrollment.student_id == Student.id)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(
+            Certificate.tenant_id == tenant_id,
+            Student.user_id == user_id,
+        )
+        .order_by(Certificate.issued_at.desc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        StudentCertificateResponse(
+            id=certificate.id,
+            enrollment_id=certificate.enrollment_id,
+            certificate_number=certificate.certificate_number,
+            validation_code=certificate.validation_code,
+            issued_at=certificate.issued_at,
+            course_id=course.id,
+            course_name=course.name,
+            course_code=course.code,
+            course_category=course.category,
+            cover_image_url=course.cover_image_url,
+            cover_image_alt=course.cover_image_alt,
+            created_at=certificate.created_at,
+            updated_at=certificate.updated_at,
+        )
+        for certificate, _enrollment, _student, _class, course in rows
+    ]
+
 
 @router.get("/{certificate_id}", response_model=CertificateResponse)
 async def get_certificate(

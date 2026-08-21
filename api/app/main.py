@@ -21,6 +21,7 @@ from app.api.routes import (
     payments,
     plans,
     reports,
+    storage,
     students,
     super_admin,
     tenant_secrets,
@@ -236,6 +237,7 @@ app.include_router(
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
+app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
 
 @app.get("/")
 async def root():

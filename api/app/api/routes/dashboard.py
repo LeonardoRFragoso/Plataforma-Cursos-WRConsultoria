@@ -1,11 +1,10 @@
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id
+from app.core.utils import utc_now
 from app.models.class_model import Class, ClassStatus
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
@@ -21,7 +20,13 @@ async def get_dashboard_stats(
 ):
     """Retorna estatísticas financeiras e operacionais do tenant."""
     tenant_id = get_current_tenant_id()
-    start_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # All timestamp columns in this schema are TIMESTAMP WITHOUT TIME ZONE and
+    # utc_now() returns a naive UTC datetime. Comparing a tz-aware datetime
+    # against a naive column raises asyncpg DataError (offset-naive vs
+    # offset-aware), which surfaces in the browser as a CORS-style failure
+    # because the unhandled 500 bypasses CORS header injection. Keep this
+    # naive to match the column/utc_now() convention.
+    start_of_month = utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     total_students = await db.scalar(
         select(func.count(Student.id)).where(Student.tenant_id == tenant_id)

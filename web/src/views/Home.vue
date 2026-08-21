@@ -5,6 +5,13 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <router-link :to="homeRoute" class="flex items-center" data-testid="home-logo">
           <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
+          <span
+            v-else-if="tenantStore.loading && !tenantStore.loaded"
+            class="text-sm text-gray-400"
+            data-testid="home-brand-loading"
+          >
+            Carregando…
+          </span>
           <span v-else class="text-xl font-bold text-primary-600">{{ tenantName }}</span>
         </router-link>
         <!-- Desktop nav -->
@@ -119,107 +126,116 @@
       </div>
     </header>
 
-    <!-- Hero Section -->
-    <section class="relative overflow-hidden bg-primary-600 text-white" data-testid="home-hero">
-      <!-- WR hero artwork (only rendered for WR tenant) -->
+    <!-- Hero Section.
+
+         WR: the generated hero artwork already embeds the marketing headline,
+         WR logo and people. We display it intact (no overlay headline, no
+         aggressive darkening) and place the CTA in a clean action bar below
+         the artwork so embedded typography stays legible. A visually-hidden
+         h1 provides the accessible heading without duplicating visible text.
+
+         Non-WR: neutral tenant-colored gradient + visible headline (no
+         /assets/wr/ reference). -->
+    <section class="bg-primary-900 text-white" data-testid="home-hero">
       <template v-if="wrHero">
-        <!-- Desktop/tablet: full banner image with overlay CTA -->
-        <div class="hidden sm:block relative">
+        <!-- Desktop/tablet: full 16:9 artwork intact, CTA bar below -->
+        <div class="hidden sm:block">
           <img
             :src="wrHero.src"
             :alt="wrHero.alt"
             fetchpriority="high"
             width="1672"
             height="941"
-            class="w-full h-auto object-cover"
+            class="block w-full h-auto object-cover"
             data-testid="home-hero-img"
           />
-          <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent flex items-center">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-              <div class="max-w-lg">
-                <h1 class="text-3xl sm:text-4xl font-bold mb-4 leading-tight drop-shadow-lg">
-                  Treinamentos que preparam equipes para trabalhar com segurança
-                </h1>
-                <p class="text-base sm:text-lg text-white/90 mb-6 drop-shadow">
-                  Plataforma de cursos da {{ tenantName }}.
-                </p>
-                <router-link
-                  v-if="!authStore.isAuthenticated"
-                  to="/register"
-                  class="inline-block bg-white text-primary-600 px-6 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow-lg"
-                >
-                  Comece Agora
-                </router-link>
-                <router-link
-                  v-else
-                  :to="homeRoute"
-                  class="inline-block bg-white text-primary-600 px-6 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow-lg"
-                >
-                  Ir para Dashboard
-                </router-link>
-              </div>
-            </div>
-          </div>
         </div>
-        <!-- Mobile: HTML heading + CTA with hero image below (text in image too small on mobile) -->
-        <div class="sm:hidden relative">
-          <div class="px-4 py-10 text-center bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900">
-            <h1 class="text-2xl font-bold mb-4 leading-tight">
-              Treinamentos que preparam equipes para trabalhar com segurança
-            </h1>
-            <p class="text-sm text-white/90 mb-6">
-              Plataforma de cursos da {{ tenantName }}.
-            </p>
-            <router-link
-              v-if="!authStore.isAuthenticated"
-              to="/register"
-              class="inline-block bg-white text-primary-600 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow-lg"
-            >
-              Comece Agora
-            </router-link>
-            <router-link
-              v-else
-              :to="homeRoute"
-              class="inline-block bg-white text-primary-600 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow-lg"
-            >
-              Ir para Dashboard
-            </router-link>
-          </div>
+        <!-- Mobile: controlled crop of the visual area (embedded text is not
+             readable at 390px), then HTML headline + CTA below. -->
+        <div class="sm:hidden">
           <img
             :src="wrHero.src"
             :alt="wrHero.alt"
             loading="eager"
             width="1672"
             height="941"
-            class="w-full h-auto object-cover"
+            class="block w-full object-cover"
+            style="aspect-ratio: 4/3;"
             data-testid="home-hero-img-mobile"
           />
+          <div class="px-4 py-8 text-center">
+            <h1 class="text-2xl font-bold mb-3 leading-tight">
+              Treinamentos que preparam equipes para trabalhar com segurança
+            </h1>
+            <p class="text-sm text-white/85 mb-5">
+              Plataforma de cursos da {{ tenantName }}.
+            </p>
+            <router-link
+              v-if="!authStore.isAuthenticated"
+              to="/register"
+              class="inline-block bg-white text-primary-700 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow"
+            >
+              Comece Agora
+            </router-link>
+            <router-link
+              v-else
+              :to="homeRoute"
+              class="inline-block bg-white text-primary-700 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow"
+            >
+              Ir para Dashboard
+            </router-link>
+          </div>
         </div>
-      </template>
-      <!-- Non-WR hero: gradient + text (no /assets/wr/ reference) -->
-      <template v-else>
-        <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-          <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
-            Cursos e certificações<br />com qualidade reconhecida
-          </h1>
-          <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
-            Plataforma de cursos da {{ tenantName }}.
-          </p>
+        <!-- Desktop CTA action bar (below artwork) -->
+        <div class="hidden sm:block px-6 lg:px-8 py-6 text-center">
+          <p class="text-base text-white/90 mb-3">Explore nossos treinamentos profissionais.</p>
           <router-link
             v-if="!authStore.isAuthenticated"
-            to="/register"
-            class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+            to="/cursos"
+            class="inline-block bg-white text-primary-700 px-7 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow"
+            data-testid="home-hero-cta"
           >
-            Comece Agora
+            Ver cursos
           </router-link>
           <router-link
             v-else
             :to="homeRoute"
-            class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+            class="inline-block bg-white text-primary-700 px-7 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow"
+            data-testid="home-hero-cta"
           >
             Ir para Dashboard
           </router-link>
+        </div>
+        <!-- Accessible heading for desktop (visually hidden — the artwork
+             already conveys the marketing headline visually). -->
+        <h1 class="sr-only">Treinamentos que preparam equipes para trabalhar com segurança — {{ tenantName }}</h1>
+      </template>
+      <!-- Non-WR hero: gradient + visible text (no /assets/wr/ reference) -->
+      <template v-else>
+        <div class="relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
+          <div class="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+            <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
+              Cursos e certificações<br />com qualidade reconhecida
+            </h1>
+            <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
+              Plataforma de cursos da {{ tenantName }}.
+            </p>
+            <router-link
+              v-if="!authStore.isAuthenticated"
+              to="/register"
+              class="inline-block bg-white text-primary-700 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+            >
+              Comece Agora
+            </router-link>
+            <router-link
+              v-else
+              :to="homeRoute"
+              class="inline-block bg-white text-primary-700 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+            >
+              Ir para Dashboard
+            </router-link>
+          </div>
         </div>
       </template>
     </section>
@@ -271,7 +287,10 @@
       </div>
     </section>
 
-    <!-- Vitrine de Cursos -->
+    <!-- Vitrine de Cursos — distinguishes LOADING / ERROR / EMPTY / SUCCESS.
+
+         Only a small featured subset is rendered so we don't load every
+         course cover image on the Home page. -->
     <section class="py-20 bg-white" data-testid="home-featured-courses">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
@@ -281,9 +300,52 @@
           </p>
         </div>
 
-        <div v-if="loading" class="text-center text-gray-500">Carregando cursos...</div>
+        <!-- LOADING: skeleton cards (no fake course data) -->
+        <div
+          v-if="loading"
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          data-testid="home-featured-loading"
+          aria-busy="true"
+        >
+          <div
+            v-for="n in 3"
+            :key="n"
+            class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden"
+          >
+            <div class="aspect-video bg-gray-200 animate-pulse"></div>
+            <div class="p-6 space-y-3">
+              <div class="h-5 bg-gray-200 rounded animate-pulse w-1/3"></div>
+              <div class="h-6 bg-gray-200 rounded animate-pulse w-3/4"></div>
+              <div class="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
+            </div>
+          </div>
+        </div>
 
-        <div v-else-if="courses.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <!-- ERROR: clear retry state, never shown as "empty" -->
+        <div
+          v-else-if="loadError"
+          class="max-w-md mx-auto text-center bg-red-50 border border-red-200 rounded-lg p-8"
+          data-testid="home-featured-error"
+        >
+          <svg class="w-10 h-10 mx-auto mb-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-red-700 font-medium mb-1">Não foi possível carregar os cursos.</p>
+          <p class="text-sm text-red-600 mb-4">Verifique sua conexão e tente novamente.</p>
+          <button
+            @click="loadCourses"
+            class="px-5 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+
+        <!-- SUCCESS: real API course cards with complete cover artwork -->
+        <div
+          v-else-if="courses.length"
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          data-testid="home-featured-success"
+        >
           <div
             v-for="course in courses"
             :key="course.id"
@@ -292,16 +354,17 @@
             <CourseCover
               :course="course"
               ratio="16/9"
+              fit="contain"
               loading="lazy"
               :img-test-id="'home-course-cover-img'"
               :fb-test-id="'home-course-cover-fallback'"
             />
-            <div class="p-6 flex-1">
-              <h3 class="text-xl font-semibold text-secondary-900 mb-2">{{ course.name }}</h3>
-              <p class="text-sm text-gray-500 mb-4 uppercase tracking-wide">{{ course.category }}</p>
-              <p class="text-gray-600 text-sm mb-4 line-clamp-3">{{ course.description }}</p>
-              <div class="flex items-center justify-between text-sm text-gray-600">
-                <span>Carga: {{ course.carga_horaria }}h</span>
+            <div class="p-6 flex-1 flex flex-col">
+              <p class="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-1">{{ course.code }}</p>
+              <h3 class="text-lg font-semibold text-secondary-900 mb-2">{{ course.name }}</h3>
+              <p class="text-sm text-gray-500 mb-4">{{ course.category }}</p>
+              <div class="mt-auto flex items-center justify-between text-sm text-gray-600 pt-3 border-t border-gray-100">
+                <span>{{ course.carga_horaria }}h · {{ formatModality(course.modality) }}</span>
                 <span class="font-semibold text-primary-600">{{ formatPrice(course.price) }}</span>
               </div>
             </div>
@@ -316,8 +379,31 @@
           </div>
         </div>
 
-        <div v-else class="text-center text-gray-500">
-          Nenhum curso disponível no momento.
+        <!-- TRUE EMPTY: intentional compact state -->
+        <div
+          v-else
+          class="max-w-md mx-auto text-center bg-gray-50 border border-gray-200 rounded-lg p-8"
+          data-testid="home-featured-empty"
+        >
+          <svg class="w-10 h-10 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <p class="text-gray-700 font-medium mb-1">Nenhum curso disponível no momento.</p>
+          <p class="text-sm text-gray-500">Novos treinamentos serão disponibilizados em breve.</p>
+        </div>
+
+        <!-- CTA to full catalog -->
+        <div
+          v-if="courses.length && !loading && !loadError"
+          class="text-center mt-12"
+          data-testid="home-featured-cta"
+        >
+          <router-link
+            to="/cursos"
+            class="inline-block px-7 py-3 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold text-base transition-colors shadow"
+          >
+            Ver todos os cursos
+          </router-link>
         </div>
       </div>
     </section>
@@ -348,6 +434,7 @@ const tenantStore = useTenantStore()
 const authStore = useAuthStore()
 const courses = ref([])
 const loading = ref(true)
+const loadError = ref('')
 const mobileMenuOpen = ref(false)
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 const homeRoute = computed(() => getHomeRoute(authStore))
@@ -389,14 +476,34 @@ function formatPrice(price) {
   }).format(price)
 }
 
-onMounted(async () => {
+function formatModality(modality) {
+  const map = {
+    PRESENCIAL: 'Presencial',
+    EAD: 'EAD',
+    SEMIPRESENCIAL: 'Semipresencial',
+  }
+  return map[modality] || modality || ''
+}
+
+// Featured subset only — Home must not load every course cover image.
+const FEATURED_LIMIT = 6
+
+async function loadCourses() {
+  loading.value = true
+  loadError.value = ''
   try {
     const { data } = await fetchPublicCourses()
-    courses.value = data
-  } catch {
+    // Distinguish a real empty catalog from an API failure: a successful
+    // response (even an empty array) clears the error; only a thrown error
+    // sets the error state.
+    courses.value = Array.isArray(data) ? data.slice(0, FEATURED_LIMIT) : []
+  } catch (error) {
     courses.value = []
+    loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadCourses)
 </script>

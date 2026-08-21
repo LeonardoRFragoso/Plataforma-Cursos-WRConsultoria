@@ -1,97 +1,88 @@
 <template>
-  <div class="min-h-screen flex flex-col">
-    <!-- Header branco com logo -->
-    <header class="bg-white shadow-md border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-        <router-link :to="homeRoute" class="flex items-center">
-          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
-          <span v-else class="text-xl font-bold text-primary-600">{{ tenantStore.name || 'Plataforma de Cursos' }}</span>
-        </router-link>
-        <AppLink to="/register" variant="primary">
-          Cadastre-se
-        </AppLink>
+  <AuthLayout>
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-8 sm:p-10" data-testid="login-card">
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold text-secondary-900 mb-2">Acesse sua conta</h1>
+        <p class="text-sm text-gray-500">Entre para acessar seus cursos e certificados.</p>
       </div>
-    </header>
 
-    <div class="flex-1 flex items-center justify-center bg-gray-50 py-12">
-      <AppCard class="w-full max-w-md">
-        <div class="text-center mb-6">
-          <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-16 w-auto mx-auto mb-4" />
-          <h2 class="text-2xl font-bold text-secondary-900">{{ tenantStore.name || 'Plataforma de Cursos' }}</h2>
-        </div>
-        
-        <form @submit.prevent="handleLogin" class="space-y-4">
-          <AppInput
+      <form @submit.prevent="handleLogin" class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">CPF ou E-mail</label>
+          <input
             v-model="identifier"
             type="text"
-            label="CPF ou E-mail"
-            placeholder="CPF (11 dígitos) ou seu@email.com"
             required
+            placeholder="CPF (11 dígitos) ou seu@email.com"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            data-testid="login-identifier"
           />
+        </div>
 
-          <AppInput
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Senha</label>
+          <input
             v-model="password"
             type="password"
-            label="Senha"
-            placeholder="••••••••"
             required
+            placeholder="••••••••"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            data-testid="login-password"
           />
-
-          <AppButton type="submit" :disabled="loading" class="w-full">
-            {{ loading ? 'Entrando...' : 'Entrar' }}
-          </AppButton>
-        </form>
-
-        <div v-if="error" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-          {{ error }}
         </div>
 
-        <div class="mt-6 text-center space-y-4">
-          <p class="text-gray-600">
+        <button
+          type="submit"
+          :disabled="loading"
+          class="w-full py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          data-testid="login-submit"
+        >
+          {{ loading ? 'Entrando...' : 'Entrar' }}
+        </button>
+      </form>
+
+      <div v-if="error" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm" data-testid="login-error">
+        {{ error }}
+      </div>
+
+      <div class="mt-8 space-y-3">
+        <div class="text-center">
+          <p class="text-sm text-gray-600">
             Não tem conta?
-            <AppLink to="/register" variant="primary">
+            <router-link to="/register" class="text-primary-600 hover:text-primary-700 font-semibold" data-testid="login-register-link">
               Cadastre-se
-            </AppLink>
-          </p>
-
-          <div class="border-t border-gray-200 pt-4">
-            <router-link
-              to="/recuperar-senha"
-              class="text-sm text-primary-600 hover:text-primary-700 font-medium"
-              data-testid="forgot-password-link"
-            >
-              Esqueci minha senha
             </router-link>
-          </div>
+          </p>
         </div>
-      </AppCard>
+        <div class="border-t border-gray-100 pt-3 text-center">
+          <router-link
+            to="/recuperar-senha"
+            class="text-sm text-primary-600 hover:text-primary-700 font-medium"
+            data-testid="forgot-password-link"
+          >
+            Esqueci minha senha
+          </router-link>
+        </div>
+      </div>
     </div>
-  </div>
+  </AuthLayout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { useTenantStore } from '../stores/tenant'
-import { getHomeRoute } from '../utils/homeRoute'
 import { resolveSafeRedirect } from '../utils/safeRedirect'
-import AppCard from '../components/AppCard.vue'
-import AppButton from '../components/AppButton.vue'
-import AppInput from '../components/AppInput.vue'
-import AppLink from '../components/AppLink.vue'
+import AuthLayout from '../layouts/AuthLayout.vue'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const tenantStore = useTenantStore()
 
 const identifier = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
-
-const homeRoute = computed(() => getHomeRoute(authStore))
 
 const handleLogin = async () => {
   loading.value = true

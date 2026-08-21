@@ -141,6 +141,7 @@
               <CourseCover
                 :course="course"
                 ratio="16/9"
+                fit="cover"
                 loading="lazy"
                 wrapper-class="w-24 shrink-0 rounded-md overflow-hidden"
                 img-test-id="admin-course-thumb-img"

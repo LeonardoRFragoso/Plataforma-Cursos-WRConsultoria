@@ -3,6 +3,13 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
       <router-link :to="homeRoute" class="flex items-center" data-testid="navbar-logo">
         <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
+        <span
+          v-else-if="tenantStore.loading && !tenantStore.loaded"
+          class="text-sm text-gray-400"
+          data-testid="navbar-brand-loading"
+        >
+          Carregando…
+        </span>
         <span v-else class="text-xl font-bold text-primary-600">{{ tenantStore.name || 'Plataforma' }}</span>
       </router-link>
 

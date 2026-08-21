@@ -11,7 +11,9 @@ vi.mock('../../utils/tenantSlug', () => ({
 import {
   isWrTenant,
   getWrHero,
+  getWrAuthVisual,
   getCourseCover,
+  extractFamily,
   isValidMediaUrl,
   getWrAssetPaths,
 } from '../../utils/courseMedia'
@@ -56,6 +58,74 @@ describe('courseMedia — getWrHero', () => {
   })
 })
 
+describe('courseMedia — getWrAuthVisual', () => {
+  beforeEach(() => {
+    tenantSlugMock.value = 'wr'
+  })
+
+  it('returns auth visual for WR tenant', () => {
+    const visual = getWrAuthVisual()
+    expect(visual).not.toBeNull()
+    expect(visual.src).toBe('/assets/wr/hero/wr-training-hero.webp')
+  })
+
+  it('returns null for non-WR tenant', () => {
+    tenantSlugMock.value = 'alfa'
+    const visual = getWrAuthVisual()
+    expect(visual).toBeNull()
+  })
+})
+
+describe('courseMedia — extractFamily', () => {
+  it('extracts NR-10 from NR-10-B', () => {
+    expect(extractFamily('NR-10-B')).toBe('NR-10')
+  })
+
+  it('extracts NR-10 from NR-10-AE', () => {
+    expect(extractFamily('NR-10-AE')).toBe('NR-10')
+  })
+
+  it('extracts NR-10 from NR-10 (no suffix)', () => {
+    expect(extractFamily('NR-10')).toBe('NR-10')
+  })
+
+  it('extracts NR-05 from NR-05-F', () => {
+    expect(extractFamily('NR-05-F')).toBe('NR-05')
+  })
+
+  it('extracts PS from PS-F', () => {
+    expect(extractFamily('PS-F')).toBe('PS')
+  })
+
+  it('extracts PCA from PCA-F', () => {
+    expect(extractFamily('PCA-F')).toBe('PCA')
+  })
+
+  it('extracts OPS from OPS-01', () => {
+    expect(extractFamily('OPS-01')).toBe('OPS')
+  })
+
+  it('extracts RISC from RISC-01', () => {
+    expect(extractFamily('RISC-01')).toBe('RISC')
+  })
+
+  it('returns code as-is when no dash', () => {
+    expect(extractFamily('NR10')).toBe('NR10')
+  })
+
+  it('handles null gracefully', () => {
+    expect(extractFamily(null)).toBeNull()
+  })
+
+  it('handles undefined gracefully', () => {
+    expect(extractFamily(undefined)).toBeNull()
+  })
+
+  it('normalizes to uppercase', () => {
+    expect(extractFamily('nr-10-b')).toBe('NR-10')
+  })
+})
+
 describe('courseMedia — getCourseCover (WR tenant)', () => {
   beforeEach(() => {
     tenantSlugMock.value = 'wr'
@@ -80,8 +150,32 @@ describe('courseMedia — getCourseCover (WR tenant)', () => {
     expect(cover.src).toBe('/assets/wr/courses/primeiros-socorros.webp')
   })
 
+  it('resolves NR-01 family from code NR-01-F', () => {
+    const cover = getCourseCover({ category: 'NR 1', code: 'NR-01-F', name: 'NR 1 - Disposições Gerais' })
+    expect(cover.isFallback).toBe(false)
+    expect(cover.src).toBe('/assets/wr/courses/nr-01-disposicoes-gerais.webp')
+  })
+
+  it('resolves NR-01 family from code NR-01-R (reciclagem shares base art)', () => {
+    const cover = getCourseCover({ category: 'NR 1', code: 'NR-01-R', name: 'NR 1 - Reciclagem' })
+    expect(cover.isFallback).toBe(false)
+    expect(cover.src).toBe('/assets/wr/courses/nr-01-disposicoes-gerais.webp')
+  })
+
+  it('resolves Brigada Voluntária from code BV-F', () => {
+    const cover = getCourseCover({ category: 'Complementares', code: 'BV-F', name: 'Brigada Voluntária' })
+    expect(cover.isFallback).toBe(false)
+    expect(cover.src).toBe('/assets/wr/courses/brigada-voluntaria.webp')
+  })
+
+  it('resolves Gestão de Riscos from code RISC-01', () => {
+    const cover = getCourseCover({ category: 'Engenharia', code: 'RISC-01', name: 'Gestão de Riscos' })
+    expect(cover.isFallback).toBe(false)
+    expect(cover.src).toBe('/assets/wr/courses/gestao-riscos.webp')
+  })
+
   it('returns fallback for unmapped WR course', () => {
-    const cover = getCourseCover({ category: 'NR 1', code: 'NR-01-F', name: 'NR 1' })
+    const cover = getCourseCover({ category: 'Unknown', code: 'UNK-F', name: 'Unknown' })
     expect(cover.isFallback).toBe(true)
     expect(cover.src).toBe('')
   })
@@ -163,9 +257,9 @@ describe('courseMedia — isValidMediaUrl', () => {
 })
 
 describe('courseMedia — getWrAssetPaths', () => {
-  it('returns all 10 asset paths', () => {
+  it('returns all asset paths (1 hero + 33 course families = 34)', () => {
     const paths = getWrAssetPaths()
-    expect(paths).toHaveLength(10)
+    expect(paths).toHaveLength(34)
     paths.forEach((p) => {
       expect(p).toContain('/assets/wr/')
     })
@@ -176,7 +270,7 @@ describe('courseMedia — getWrAssetPaths', () => {
     expect(paths).toContain('/assets/wr/hero/wr-training-hero.webp')
   })
 
-  it('includes all 9 course paths', () => {
+  it('includes original 9 AI-generated course paths', () => {
     const paths = getWrAssetPaths()
     expect(paths).toContain('/assets/wr/courses/nr-10-eletricidade.webp')
     expect(paths).toContain('/assets/wr/courses/nr-05-cipa.webp')
@@ -187,6 +281,34 @@ describe('courseMedia — getWrAssetPaths', () => {
     expect(paths).toContain('/assets/wr/courses/nr-33-espaco-confinado.webp')
     expect(paths).toContain('/assets/wr/courses/nr-35-trabalho-em-altura.webp')
     expect(paths).toContain('/assets/wr/courses/primeiros-socorros.webp')
+  })
+
+  it('includes generated course family paths', () => {
+    const paths = getWrAssetPaths()
+    expect(paths).toContain('/assets/wr/courses/nr-01-disposicoes-gerais.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-06-epi.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-17-ergonomia.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-22-cipamin.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-23-protecao-contra-incendios.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-26-sinalizacao-seguranca.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-29-trabalho-portuario.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-31-trabalho-rural.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-32-servicos-saude.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-34-trabalho-naval.webp')
+    expect(paths).toContain('/assets/wr/courses/nr-36-frigorificos.webp')
+    expect(paths).toContain('/assets/wr/courses/pca-conservacao-auditiva.webp')
+    expect(paths).toContain('/assets/wr/courses/ppr-protecao-respiratoria.webp')
+    expect(paths).toContain('/assets/wr/courses/brigada-voluntaria.webp')
+    expect(paths).toContain('/assets/wr/courses/direcao-defensiva.webp')
+    expect(paths).toContain('/assets/wr/courses/desenvolvimento-pessoal.webp')
+    expect(paths).toContain('/assets/wr/courses/ginastica-laboral.webp')
+    expect(paths).toContain('/assets/wr/courses/lingua-estrangeira-ingles.webp')
+    expect(paths).toContain('/assets/wr/courses/negocios.webp')
+    expect(paths).toContain('/assets/wr/courses/qualificacao-profissional.webp')
+    expect(paths).toContain('/assets/wr/courses/saude.webp')
+    expect(paths).toContain('/assets/wr/courses/operacional.webp')
+    expect(paths).toContain('/assets/wr/courses/gestao-riscos.webp')
+    expect(paths).toContain('/assets/wr/courses/integracao-seguranca.webp')
   })
 })
 

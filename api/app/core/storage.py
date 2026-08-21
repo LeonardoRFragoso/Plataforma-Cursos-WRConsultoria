@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 from uuid import UUID
 
 import boto3
@@ -26,6 +27,36 @@ MAX_MATERIAL_SIZE = 100 * 1024 * 1024  # 100 MB
 
 # Filenames that must never be used (path traversal, special files)
 _UNSAFE_PATTERNS = re.compile(r'(\.\.|//|\\|\x00|/\.|/\.\.)')
+
+
+# ─── Backend selection ───
+
+def _is_local_backend() -> bool:
+    """True when STORAGE_BACKEND=local (development mode)."""
+    return settings.STORAGE_BACKEND.lower() == "local"
+
+
+def _local_storage_root() -> Path:
+    """Return the root directory for local file storage."""
+    base = Path(settings.STORAGE_LOCAL_DIR)
+    if not base.is_absolute():
+        # Resolve relative to the api/ directory (where the app runs from)
+        base = Path(__file__).resolve().parent.parent.parent / base
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _local_file_path(storage_key: str) -> Path:
+    """Resolve a storage_key to a local filesystem path, with traversal protection."""
+    root = _local_storage_root()
+    target = (root / storage_key).resolve()
+    # Ensure the resolved path is within the storage root
+    if not str(target).startswith(str(root)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid storage key",
+        )
+    return target
 
 
 def _get_s3_client():
@@ -100,6 +131,32 @@ def _is_legacy_key(key: str) -> bool:
     return key.startswith("lessons/") and "/video/" not in key
 
 
+# ─── Local storage helpers ───
+
+def save_local_file(storage_key: str, file_data: bytes, content_type: str | None = None) -> None:
+    """Save file bytes to the local storage directory."""
+    path = _local_file_path(storage_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(file_data)
+
+
+def get_local_file_path(storage_key: str) -> Path:
+    """Return the filesystem path for a storage key (for serving)."""
+    return _local_file_path(storage_key)
+
+
+def _local_upload_url(storage_key: str) -> str:
+    """Build a backend URL for local-mode file upload (PUT)."""
+    return f"{settings.API_BASE_URL}/api/v1/storage/upload"
+
+
+def _local_serve_url(storage_key: str) -> str:
+    """Build a backend URL for local-mode file serving (GET)."""
+    return f"{settings.API_BASE_URL}/api/v1/storage/files/{storage_key}"
+
+
+# ─── Video upload URL generation ───
+
 async def generate_upload_url(
     lesson_id: UUID,
     filename: str,
@@ -113,13 +170,10 @@ async def generate_upload_url(
 
     When tenant_id and course_id are provided, generates a tenant-aware key.
     Otherwise falls back to legacy key format.
-    """
-    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Storage not configured",
-        )
 
+    In local mode, returns a backend upload endpoint URL instead of an S3
+    presigned URL. The client PUTs the file to this endpoint.
+    """
     if content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -132,11 +186,23 @@ async def generate_upload_url(
             detail=f"File size exceeds maximum of {MAX_UPLOAD_SIZE} bytes",
         )
 
-    s3 = _get_s3_client()
     if tenant_id is not None and course_id is not None:
         key = _tenant_key_for_video(tenant_id, course_id, lesson_id, filename)
     else:
         key = _key_for_lesson(lesson_id, filename)
+
+    if _is_local_backend():
+        # Local mode: return backend upload endpoint URL
+        return _local_upload_url(key), key
+
+    # S3 mode
+    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage not configured",
+        )
+
+    s3 = _get_s3_client()
 
     try:
         params = {
@@ -172,12 +238,6 @@ async def generate_watch_url(
     reconstructing the legacy key from lesson_id + filename for
     backward compatibility with old records.
     """
-    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Storage not configured",
-        )
-
     if storage_key:
         key = storage_key
     elif lesson_id and filename:
@@ -186,6 +246,15 @@ async def generate_watch_url(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not uploaded yet",
+        )
+
+    if _is_local_backend():
+        return _local_serve_url(key)
+
+    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage not configured",
         )
 
     s3 = _get_s3_client()
@@ -211,6 +280,10 @@ async def generate_watch_url(
 
 async def verify_object_exists(storage_key: str) -> bool:
     """Verify that an object exists in storage using head_object."""
+    if _is_local_backend():
+        path = _local_file_path(storage_key)
+        return path.exists() and path.is_file()
+
     if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -227,6 +300,12 @@ async def verify_object_exists(storage_key: str) -> bool:
 
 async def delete_object(storage_key: str) -> None:
     """Delete an object from storage."""
+    if _is_local_backend():
+        path = _local_file_path(storage_key)
+        if path.exists() and path.is_file():
+            path.unlink()
+        return
+
     if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
         return  # No storage configured, nothing to delete
 
@@ -247,12 +326,6 @@ async def generate_material_upload_url(
     expiration: int = 3600,
 ) -> tuple[str, str]:
     """Generate presigned URL for material upload with tenant-aware key."""
-    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Storage not configured",
-        )
-
     if mime_type not in ALLOWED_MATERIAL_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -265,8 +338,18 @@ async def generate_material_upload_url(
             detail=f"Material size exceeds maximum of {MAX_MATERIAL_SIZE} bytes",
         )
 
-    s3 = _get_s3_client()
     key = _tenant_key_for_material(tenant_id, course_id, lesson_id, filename)
+
+    if _is_local_backend():
+        return _local_upload_url(key), key
+
+    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage not configured",
+        )
+
+    s3 = _get_s3_client()
 
     try:
         url = s3.generate_presigned_url(
@@ -292,6 +375,9 @@ async def generate_material_download_url(
     expiration: int | None = None,
 ) -> str:
     """Generate presigned URL for downloading a material."""
+    if _is_local_backend():
+        return _local_serve_url(storage_key)
+
     if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -29,22 +29,37 @@
           </svg>
         </button>
 
-        <!-- Tenant / platform context -->
+        <!-- Breadcrumb / page context -->
         <div class="min-w-0">
-          <p class="truncate text-sm font-semibold text-secondary-900">
-            {{ tenantStore.name || 'Plataforma' }}
+          <p
+            v-if="tenantStore.loading && !tenantStore.loaded"
+            class="truncate text-sm text-gray-400"
+            data-testid="topbar-brand-loading"
+          >
+            Carregando…
           </p>
-          <p class="truncate text-xs text-gray-500">{{ roleLabel }}</p>
+          <p v-else class="truncate text-sm font-semibold text-secondary-900">
+            {{ currentpageTitle }}
+          </p>
+          <p class="truncate text-xs text-gray-500">{{ tenantStore.name || 'Plataforma' }}</p>
         </div>
       </div>
 
-      <!-- User context -->
+      <!-- User context with avatar -->
       <div class="flex items-center gap-3">
         <div class="hidden sm:block text-right">
           <p class="text-sm font-medium text-secondary-900 truncate max-w-[180px]">
             {{ authStore.user?.full_name || authStore.user?.email || '—' }}
           </p>
           <p class="text-xs text-gray-500">{{ roleLabel }}</p>
+        </div>
+        <!-- Avatar initials -->
+        <div
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          :style="avatarStyle"
+          :title="authStore.user?.full_name || ''"
+        >
+          {{ initials }}
         </div>
         <button
           type="button"
@@ -61,7 +76,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 
@@ -71,6 +86,7 @@ defineProps({
 
 defineEmits(['toggle-drawer'])
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
@@ -84,6 +100,44 @@ const roleMap = {
 const roleLabel = computed(
   () => roleMap[authStore.userRole?.toLowerCase()] || authStore.userRole || '—'
 )
+
+const PAGE_TITLES = {
+  '/dashboard': 'Dashboard',
+  '/cursos': 'Catálogo',
+  '/certificates': 'Meus Certificados',
+  '/courses': 'Cursos',
+  '/classes': 'Turmas',
+  '/students': 'Alunos',
+  '/enrollments': 'Matrículas',
+  '/payments': 'Pagamentos',
+  '/settings/white-label': 'White Label',
+  '/super-admin': 'Gestão Global',
+}
+
+const currentpageTitle = computed(() => {
+  const path = route.path
+  // Try exact match
+  if (PAGE_TITLES[path]) return PAGE_TITLES[path]
+  // Try prefix match for nested routes
+  for (const key of Object.keys(PAGE_TITLES)) {
+    if (path.startsWith(key + '/')) return PAGE_TITLES[key]
+  }
+  return tenantStore.name || 'Plataforma'
+})
+
+const initials = computed(() => {
+  const name = authStore.user?.full_name || ''
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+})
+
+const avatarStyle = computed(() => {
+  const primary = tenantStore.primary_color || '#0056b3'
+  const secondary = tenantStore.secondary_color || '#1a1a1a'
+  return { background: `linear-gradient(135deg, ${primary}, ${secondary})` }
+})
 
 const handleLogout = () => {
   authStore.logout()

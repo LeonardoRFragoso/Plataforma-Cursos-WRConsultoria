@@ -5,7 +5,14 @@
     :style="aspectRatioStyle"
     data-testid="course-cover"
   >
-    <!-- Real image (WR cover or backend-provided) -->
+    <!-- Real image (WR cover or backend-provided).
+
+         The generated WR covers are complete promotional artworks that
+         contain the NR title, WR branding and subtitles near the edges.
+         Aggressive object-cover crops that text away, so by default we use
+         object-contain over a neutral/tenant-tinted background to preserve
+         the complete artwork. Callers that want a filled crop (e.g. tiny
+         thumbnails where legibility is already lost) can pass fit="cover". -->
     <img
       v-if="!cover.isFallback && cover.src"
       :src="cover.src"
@@ -13,7 +20,8 @@
       :loading="loading"
       :width="width"
       :height="height"
-      class="w-full h-full object-cover"
+      class="w-full h-full"
+      :class="imgFitClass"
       :data-testid="imgTestId"
       @error="onError"
     />
@@ -43,6 +51,9 @@ import { useTenantStore } from '../stores/tenant'
 const props = defineProps({
   course: { type: Object, required: true },
   ratio: { type: String, default: '16/9' },
+  // 'contain' preserves the complete artwork (default for text-bearing
+  // covers); 'cover' fills the frame (use only for tiny thumbnails).
+  fit: { type: String, default: 'contain' },
   loading: { type: String, default: 'lazy' },
   width: { type: Number, default: 1672 },
   height: { type: Number, default: 941 },
@@ -64,6 +75,10 @@ const cover = computed(() => {
 const aspectRatioStyle = computed(() => ({
   aspectRatio: props.ratio,
 }))
+
+const imgFitClass = computed(() =>
+  props.fit === 'cover' ? 'object-cover' : 'object-contain'
+)
 
 const fallbackStyle = computed(() => {
   const primary = tenantStore.primary_color || '#0056b3'
