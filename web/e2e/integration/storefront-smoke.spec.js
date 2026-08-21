@@ -73,6 +73,13 @@ async function apiGet(path, token) {
   return { status: res.status, data }
 }
 
+async function apiDelete(path, token) {
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers })
+  return { status: res.status }
+}
+
 test.describe('full-stack storefront smoke', () => {
   test.skip(async () => {
     try {
@@ -243,5 +250,26 @@ test.describe('full-stack storefront smoke', () => {
     // 11. Access CourseLearn page
     await page.click('a:has-text("Acessar curso")')
     await expect(page).toHaveURL(/\/courses\/.*\/learn/, { timeout: 10000 })
+  })
+
+  // ─── E2E Data Hygiene (Step 20) ───
+  // Clean up all data created by this spec so repeated E2E execution does
+  // not pollute the manual demo environment. Uses unique deterministic
+  // identifiers (Date.now()-based) in beforeAll and deletes them here.
+  test.afterAll(async () => {
+    if (!adminToken) return
+    // Delete in dependency order: payment → enrollment → student → class → course
+    // Best-effort — ignore errors if records were already removed.
+    if (paymentId) await apiDelete(`/api/v1/payments/${paymentId}`, adminToken).catch(() => {})
+    if (enrollmentId) await apiDelete(`/api/v1/enrollments/${enrollmentId}`, adminToken).catch(() => {})
+    if (studentToken) {
+      // Students are deleted via admin API by student id
+      const meRes = await apiGet('/api/v1/auth/me', studentToken).catch(() => null)
+      if (meRes?.data?.id) {
+        await apiDelete(`/api/v1/students/${meRes.data.id}`, adminToken).catch(() => {})
+      }
+    }
+    if (classId) await apiDelete(`/api/v1/classes/${classId}`, adminToken).catch(() => {})
+    if (courseId) await apiDelete(`/api/v1/courses/${courseId}`, adminToken).catch(() => {})
   })
 })

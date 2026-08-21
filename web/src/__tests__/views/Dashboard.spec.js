@@ -4,7 +4,6 @@ import { setActivePinia, createPinia, storeToRefs } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import api from '../../api/client'
-import AppLink from '../../components/AppLink.vue'
 import Dashboard from '../../views/Dashboard.vue'
 
 vi.mock('../../api/client', () => ({
@@ -37,6 +36,14 @@ const setupRouter = () => {
       { path: '/:pathMatch(.*)*', component: { template: '<div></div>' } },
     ],
   })
+}
+
+// Resolve the href rendered by a CourseProgressCard CTA (router-link) given the
+// course id. The Dashboard delegates player links to CourseProgressCard, which
+// stamps each CTA with data-testid="progress-card[-pending]-{courseId}-cta".
+const ctaHref = (wrapper, courseId) => {
+  const sel = `[data-testid="progress-card-${courseId}-cta"], [data-testid="progress-card-pending-${courseId}-cta"]`
+  return wrapper.find(sel).attributes('href')
 }
 
 describe('Dashboard', () => {
@@ -76,11 +83,14 @@ describe('Dashboard', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Meus Cursos')
+    // The redesigned student dashboard leads with "Continue aprendendo".
+    expect(wrapper.text()).toContain('Continue aprendendo')
     expect(wrapper.text()).toContain('Curso de Teste')
     expect(wrapper.text()).toContain('Curso Confirmado')
-    expect(wrapper.text()).toContain('PENDENTE')
-    expect(wrapper.text()).toContain('CONFIRMADA')
+    // PENDENTE is conveyed via a waiting hint rather than a raw status string.
+    expect(wrapper.text()).toContain('Aguardando confirmação da matrícula')
+    // CONFIRMADA is playable and offers a "Continuar curso" CTA.
+    expect(wrapper.text()).toContain('Continuar curso')
     expect(api.get).toHaveBeenCalledWith('/api/v1/enrollments/me')
   })
 
@@ -99,8 +109,8 @@ describe('Dashboard', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Você não está matriculado em nenhum curso ainda.')
-    expect(wrapper.text()).toContain('Explorar cursos')
+    expect(wrapper.text()).toContain('Você ainda não está matriculado em nenhum curso.')
+    expect(wrapper.text()).toContain('Explorar catálogo')
   })
 
   it('links to player for CONFIRMADA and CONCLUIDA', async () => {
@@ -120,12 +130,9 @@ describe('Dashboard', () => {
     })
     await flushPromises()
 
-    const links = wrapper.findAllComponents(AppLink).filter((c) =>
-      c.text().includes('Curso Confirmado') || c.text().includes('Curso Concluído')
-    )
-    expect(links.length).toBe(2)
-    expect(links.some((c) => c.props('to') === '/courses/c1/learn')).toBe(true)
-    expect(links.some((c) => c.props('to') === '/courses/c2/learn')).toBe(true)
+    // Both playable enrollments must link to their respective learn routes.
+    expect(ctaHref(wrapper, 'c1')).toContain('/courses/c1/learn')
+    expect(ctaHref(wrapper, 'c2')).toContain('/courses/c2/learn')
   })
 
   it('does not link to player for PENDENTE and shows waiting message', async () => {
@@ -142,15 +149,13 @@ describe('Dashboard', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('PENDENTE')
-    expect(wrapper.text()).toContain('Aguardando confirmação')
-    const links = wrapper.findAllComponents(AppLink).filter((c) =>
-      c.text().includes('Curso de Teste')
-    )
-    expect(links.length).toBe(0)
+    expect(wrapper.text()).toContain('Aguardando confirmação da matrícula')
+    // PENDENTE is not playable; CTA must route to the catalog, not the player.
+    expect(ctaHref(wrapper, 'c1')).toContain('/cursos')
+    expect(ctaHref(wrapper, 'c1')).not.toContain('/learn')
   })
 
-  it('does not link to player for CANCELADA and shows cancelled message', async () => {
+  it('does not link to player for CANCELADA and routes to catalog', async () => {
     api.get.mockResolvedValue({
       data: [{ ...baseEnrollment, status: 'CANCELADA' }],
     })
@@ -164,11 +169,8 @@ describe('Dashboard', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('CANCELADA')
-    expect(wrapper.text()).toContain('Matrícula cancelada')
-    const links = wrapper.findAllComponents(AppLink).filter((c) =>
-      c.text().includes('Curso de Teste')
-    )
-    expect(links.length).toBe(0)
+    // CANCELADA is not playable; CTA must route to the catalog, not the player.
+    expect(ctaHref(wrapper, 'c1')).toContain('/cursos')
+    expect(ctaHref(wrapper, 'c1')).not.toContain('/learn')
   })
 })

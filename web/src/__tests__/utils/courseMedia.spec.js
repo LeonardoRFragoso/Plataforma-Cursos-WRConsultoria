@@ -66,7 +66,7 @@ describe('courseMedia — getWrAuthVisual', () => {
   it('returns auth visual for WR tenant', () => {
     const visual = getWrAuthVisual()
     expect(visual).not.toBeNull()
-    expect(visual.src).toBe('/assets/wr/hero/wr-training-hero.webp')
+    expect(visual.src).toBe('/assets/wr/auth/wr-auth-training.webp')
   })
 
   it('returns null for non-WR tenant', () => {
