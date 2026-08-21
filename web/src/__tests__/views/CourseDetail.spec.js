@@ -32,10 +32,18 @@ function buildRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
+      { path: '/', component: { template: '<div></div>' } },
+      { path: '/dashboard', component: { template: '<div></div>' } },
       { path: '/courses/:id', name: 'CourseDetail', component: CourseDetail },
       { path: '/courses/:id/learn', name: 'CourseLearn', component: { template: '<div>learn</div>' } },
+      { path: '/cursos', component: { template: '<div></div>' } },
+      { path: '/cursos/:id', component: { template: '<div></div>' } },
+      { path: '/certificates', component: { template: '<div></div>' } },
+      { path: '/validar-certificado', component: { template: '<div></div>' } },
+      { path: '/seja-parceiro', component: { template: '<div></div>' } },
       { path: '/login', name: 'Login', component: { template: '<div>login</div>' } },
       { path: '/register', name: 'Register', component: { template: '<div>register</div>' } },
+      { path: '/:pathMatch(.*)*', component: { template: '<div></div>' } },
     ],
   })
 }

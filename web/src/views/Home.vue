@@ -3,11 +3,12 @@
     <!-- Header branco com logo -->
     <header class="bg-white shadow-md border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-        <router-link :to="homeRoute" class="flex items-center">
+        <router-link :to="homeRoute" class="flex items-center" data-testid="home-logo">
           <img v-if="tenantStore.logo_url" :src="tenantStore.logo_url" :alt="tenantStore.name" class="h-12 w-auto" />
           <span v-else class="text-xl font-bold text-primary-600">{{ tenantName }}</span>
         </router-link>
-        <nav class="flex items-center space-x-4">
+        <!-- Desktop nav -->
+        <nav class="hidden md:flex items-center space-x-4">
           <template v-if="authStore.isAuthenticated">
             <!-- Role-aware authenticated navigation -->
             <router-link
@@ -52,6 +53,69 @@
             </router-link>
           </template>
         </nav>
+        <!-- Mobile hamburger -->
+        <button
+          @click="mobileMenuOpen = !mobileMenuOpen"
+          class="md:hidden text-gray-700 hover:text-primary-600"
+          data-testid="home-mobile-menu-toggle"
+          :aria-expanded="mobileMenuOpen"
+          aria-controls="home-mobile-menu"
+          aria-label="Menu"
+        >
+          <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <svg v-else class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <!-- Mobile menu panel -->
+      <div
+        v-if="mobileMenuOpen"
+        id="home-mobile-menu"
+        class="md:hidden border-t border-gray-200 bg-white px-4 pb-4 space-y-1"
+        data-testid="home-mobile-menu"
+      >
+        <template v-if="authStore.isAuthenticated">
+          <router-link
+            v-for="link in authedLinks"
+            :key="link.to"
+            :to="link.to"
+            @click="mobileMenuOpen = false"
+            class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm"
+            :data-testid="'home-mobile-nav-' + link.testid"
+          >
+            {{ link.label }}
+          </router-link>
+          <button
+            @click="handleLogout"
+            class="block w-full text-left py-2 px-3 rounded-md text-gray-500 hover:text-red-600 hover:bg-gray-50 font-medium text-sm"
+            data-testid="home-mobile-nav-logout"
+          >
+            Sair
+          </button>
+        </template>
+        <template v-else>
+          <router-link to="/" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm" data-testid="home-mobile-nav-inicio">
+            Início
+          </router-link>
+          <router-link to="/cursos" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm" data-testid="home-mobile-nav-cursos">
+            Cursos
+          </router-link>
+          <router-link to="/validar-certificado" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm" data-testid="home-mobile-nav-validar">
+            Validar certificado
+          </router-link>
+          <router-link to="/seja-parceiro" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm" data-testid="home-mobile-nav-parceiro">
+            Seja parceiro
+          </router-link>
+          <router-link to="/login" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-50 font-medium text-sm" data-testid="home-mobile-nav-login">
+            Login
+          </router-link>
+          <router-link to="/register" @click="mobileMenuOpen = false" class="block py-2 px-3 rounded-md bg-primary-600 text-white hover:bg-primary-700 font-semibold text-sm" data-testid="home-mobile-nav-cadastro">
+            Cadastro
+          </router-link>
+        </template>
       </div>
     </header>
 
@@ -197,6 +261,7 @@ const tenantStore = useTenantStore()
 const authStore = useAuthStore()
 const courses = ref([])
 const loading = ref(true)
+const mobileMenuOpen = ref(false)
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 const homeRoute = computed(() => getHomeRoute(authStore))
 

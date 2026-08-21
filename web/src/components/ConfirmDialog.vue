@@ -8,9 +8,11 @@
     size="sm"
     @close="emit('close')"
   >
-    <p class="text-sm text-gray-600">
-      {{ message }}
-    </p>
+    <div v-bind="$attrs" data-testid="confirm-dialog-content">
+      <p class="text-sm text-gray-600">
+        {{ message }}
+      </p>
+    </div>
 
     <template #footer>
       <button
@@ -40,6 +42,10 @@
 
 <script setup>
 import AppModal from './AppModal.vue'
+
+defineOptions({
+  inheritAttrs: false,
+})
 
 const props = defineProps({
   modelValue: {

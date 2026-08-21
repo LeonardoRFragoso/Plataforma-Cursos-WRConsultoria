@@ -95,6 +95,13 @@ const error = ref('')
 const submitted = ref(false)
 const devToken = ref('')
 
+// Fail-closed: only expose raw reset token in DEV with explicit opt-in flag.
+// Production, staging, and preview builds must NEVER display reset tokens
+// even if the backend accidentally returns the field.
+const canExposeDevToken =
+  import.meta.env.DEV &&
+  import.meta.env.VITE_ALLOW_DEV_RESET_TOKEN === 'true'
+
 async function handleSubmit() {
   loading.value = true
   error.value = ''
@@ -102,8 +109,8 @@ async function handleSubmit() {
     const response = await api.post('/api/v1/auth/forgot-password', {
       email: email.value,
     })
-    // In dev/test, backend returns reset_token
-    if (response.data?.reset_token) {
+    // Only store dev token if explicitly allowed (fail-closed by default)
+    if (canExposeDevToken && response.data?.reset_token) {
       devToken.value = response.data.reset_token
     }
     submitted.value = true

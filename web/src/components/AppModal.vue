@@ -5,10 +5,11 @@
         v-if="modelValue"
         class="fixed inset-0 z-50 flex items-center justify-center p-4"
         @keydown.esc="handleEscape"
+        @keydown.tab="handleTab"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="titleId"
-        ref="modalRef"
+        ref="overlayRef"
       >
         <div
           class="absolute inset-0 bg-black bg-opacity-50"
@@ -20,6 +21,8 @@
           class="relative bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto"
           :class="sizeClass"
           role="document"
+          ref="dialogRef"
+          tabindex="-1"
         >
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -32,6 +35,7 @@
               class="text-gray-400 hover:text-gray-600 transition-colors"
               :aria-label="'Fechar: ' + title"
               data-testid="modal-close"
+              ref="closeBtnRef"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -58,7 +62,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -86,7 +90,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'close'])
 
-const modalRef = ref(null)
+const overlayRef = ref(null)
+const dialogRef = ref(null)
+const closeBtnRef = ref(null)
+const previouslyFocused = ref(null)
 const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`
 
 const sizeClass = computed(() => {
@@ -113,20 +120,71 @@ const handleEscape = () => {
   if (props.closable) handleClose()
 }
 
+// Focus containment: keep Tab/Shift+Tab inside the modal
+const handleTab = (e) => {
+  const modal = dialogRef.value
+  if (!modal) return
+
+  const focusable = modal.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )
+  if (focusable.length === 0) {
+    // No focusable elements — keep focus on dialog container
+    e.preventDefault()
+    modal.focus()
+    return
+  }
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+
+  if (e.shiftKey) {
+    if (document.activeElement === first || document.activeElement === modal) {
+      e.preventDefault()
+      last.focus()
+    }
+  } else {
+    if (document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+}
+
+const restoreFocus = () => {
+  if (previouslyFocused.value && typeof previouslyFocused.value.focus === 'function') {
+    previouslyFocused.value.focus()
+  }
+  previouslyFocused.value = null
+}
+
 watch(
   () => props.modelValue,
   async (val) => {
     if (val) {
+      // Store the element that had focus before opening
+      previouslyFocused.value = document.activeElement
       await nextTick()
-      // Focus the modal container for keyboard accessibility
-      modalRef.value?.focus()
+      // Focus the close button if available, otherwise the dialog container
+      if (closeBtnRef.value && props.closable) {
+        closeBtnRef.value.focus()
+      } else if (dialogRef.value) {
+        dialogRef.value.focus()
+      }
       // Prevent body scroll
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
+      restoreFocus()
     }
   }
 )
+
+// Cleanup on unmount: restore body scroll and focus
+onBeforeUnmount(() => {
+  document.body.style.overflow = ''
+  restoreFocus()
+})
 </script>
 
 <style scoped>

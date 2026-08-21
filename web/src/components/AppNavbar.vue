@@ -225,7 +225,6 @@ const navConfig = computed(() => {
     return {
       flat: [
         { to: '/dashboard', label: 'Dashboard', testid: 'dashboard' },
-        { to: '/cursos', label: 'Meus Cursos', testid: 'my-courses' },
         { to: '/cursos', label: 'Catálogo', testid: 'catalog' },
         { to: '/certificates', label: 'Certificados', testid: 'certificates' },
       ],

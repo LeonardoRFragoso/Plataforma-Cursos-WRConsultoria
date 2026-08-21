@@ -32,6 +32,7 @@ const setupRouter = () => {
       { path: '/courses', component: { template: '<div></div>' } },
       { path: '/courses/:id', component: { template: '<div></div>' } },
       { path: '/courses/:id/learn', component: { template: '<div></div>' } },
+      { path: '/cursos', component: { template: '<div></div>' } },
       { path: '/certificates', component: { template: '<div></div>' } },
       { path: '/:pathMatch(.*)*', component: { template: '<div></div>' } },
     ],

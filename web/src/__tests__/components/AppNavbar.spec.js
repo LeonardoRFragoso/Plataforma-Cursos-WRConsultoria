@@ -25,6 +25,11 @@ describe('AppNavbar', () => {
         { path: '/super-admin', component: { template: '<div>sa</div>' } },
         { path: '/login', component: { template: '<div>login</div>' } },
         { path: '/register', component: { template: '<div>reg</div>' } },
+        { path: '/cursos', component: { template: '<div>catalog</div>' } },
+        { path: '/validar-certificado', component: { template: '<div>validate</div>' } },
+        { path: '/seja-parceiro', component: { template: '<div>partner</div>' } },
+        { path: '/recuperar-senha', component: { template: '<div>forgot</div>' } },
+        { path: '/redefinir-senha', component: { template: '<div>reset</div>' } },
       ],
     })
   })
@@ -71,7 +76,7 @@ describe('AppNavbar', () => {
     expect(logo.attributes('href')).toBe('/super-admin')
   })
 
-  it('shows student nav links (Dashboard, Certificates)', async () => {
+  it('shows student nav links (Dashboard, Catálogo, Certificates) — no duplication', async () => {
     const auth = useAuthStore()
     auth.token = 'tok'
     auth.userRole = 'student'
@@ -82,11 +87,19 @@ describe('AppNavbar', () => {
 
     const wrapper = mount(AppNavbar, { global: { plugins: [router] } })
     expect(wrapper.find('[data-testid="nav-link-dashboard"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-link-catalog"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-link-certificates"]').exists()).toBe(true)
     // Student should NOT see admin-only links
     expect(wrapper.find('[data-testid="nav-link-courses"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-link-classes"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-link-super-admin"]').exists()).toBe(false)
+    // No "Meus Cursos" link (removed to avoid duplication with Catálogo)
+    expect(wrapper.find('[data-testid="nav-link-my-courses"]').exists()).toBe(false)
+    // Verify no two links point to the same route with different labels
+    const navLinks = wrapper.findAll('[data-testid^="nav-link-"]')
+    const routes = navLinks.map((l) => l.attributes('href'))
+    const uniqueRoutes = new Set(routes)
+    expect(routes.length).toBe(uniqueRoutes.size)
   })
 
   it('shows admin nav with Dashboard flat + Gestão/Certificados/Personalização dropdown groups', async () => {

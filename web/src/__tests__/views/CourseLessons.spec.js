@@ -30,6 +30,14 @@ describe('CourseLessons View', () => {
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
+        { path: '/', component: { template: '<div></div>' } },
+        { path: '/dashboard', component: { template: '<div></div>' } },
+        { path: '/cursos', component: { template: '<div></div>' } },
+        { path: '/certificates', component: { template: '<div></div>' } },
+        { path: '/validar-certificado', component: { template: '<div></div>' } },
+        { path: '/seja-parceiro', component: { template: '<div></div>' } },
+        { path: '/login', component: { template: '<div></div>' } },
+        { path: '/register', component: { template: '<div></div>' } },
         {
           path: '/courses/:id/lessons',
           name: 'CourseLessons',
@@ -40,6 +48,7 @@ describe('CourseLessons View', () => {
           name: 'CourseProgress',
           component: { template: '<div></div>' },
         },
+        { path: '/:pathMatch(.*)*', component: { template: '<div></div>' } },
       ],
     })
 
