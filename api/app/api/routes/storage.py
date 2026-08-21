@@ -11,12 +11,10 @@ Security:
 - Content-Type is derived from the file extension
 """
 import mimetypes
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 
-from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.storage import _is_local_backend, get_local_file_path, save_local_file
 
@@ -75,10 +73,7 @@ async def serve_file(
             detail="Local storage not enabled",
         )
 
-    try:
-        path = get_local_file_path(storage_key)
-    except HTTPException:
-        raise
+    path = get_local_file_path(storage_key)
 
     if not path.exists() or not path.is_file():
         raise HTTPException(
