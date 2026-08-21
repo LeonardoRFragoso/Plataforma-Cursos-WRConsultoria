@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enrollment import EnrollmentStatus
+from app.models.enrollment import EnrollmentSource, EnrollmentStatus
 from app.models.payment import PaymentMethod
 from app.schemas.payment import PaymentResponse
 
@@ -13,6 +13,7 @@ class EnrollmentBase(BaseModel):
     class_id: UUID
     price: float
     status: EnrollmentStatus = EnrollmentStatus.PENDENTE
+    source: EnrollmentSource = EnrollmentSource.INDIVIDUAL
 
 class EnrollmentCreate(EnrollmentBase):
     pass
@@ -50,17 +51,20 @@ class MyEnrollmentResponse(BaseModel):
 class BulkEnrollmentCreate(BaseModel):
     class_id: UUID
     student_ids: list[UUID]
-    price_per_student: float
+    price_per_student: float = 0.0
     company_id: UUID | None = None
-    status: EnrollmentStatus = EnrollmentStatus.PENDENTE
-    payment_method: PaymentMethod = PaymentMethod.BOLETO
+    status: EnrollmentStatus = EnrollmentStatus.CONFIRMADA
+    source: EnrollmentSource = EnrollmentSource.CORPORATE
+    payment_method: PaymentMethod | None = None
     installments: str | None = None
+    create_payment: bool = False
 
 
 class BulkEnrollmentResponse(BaseModel):
     enrollment_ids: list[UUID]
-    payment_id: UUID
+    payment_id: UUID | None = None
     total_amount: float
+    batch_id: UUID | None = None
 
 
 class EnrollmentPurchaseRequest(BaseModel):

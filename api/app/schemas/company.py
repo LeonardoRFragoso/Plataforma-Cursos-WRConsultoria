@@ -36,6 +36,7 @@ class CompanyUpdate(BaseModel):
 
 class CompanyResponse(CompanyBase):
     id: UUID
+    tenant_id: UUID
     created_at: datetime
     updated_at: datetime
 
