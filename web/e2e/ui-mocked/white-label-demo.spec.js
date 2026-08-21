@@ -43,21 +43,26 @@ test.describe('White Label — WR tenant', () => {
         body: JSON.stringify(WR_BRANDING),
       })
     )
-    await page.route(`${API_BASE}/api/v1/courses`, (route) =>
-      route.fulfill({
+    await page.route('**/api/v1/courses**', (route) => {
+      const url = route.request().url()
+      if (url.includes('/api/v1/courses/') && !url.includes('?')) {
+        return route.fallback()
+      }
+      return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
           { id: 'c1', code: 'NR-10', name: 'NR-10 Segurança', category: 'Seg', price: 250, is_active: true },
         ]),
       })
-    )
+    })
   })
 
   test('displays WR tenant name and primary color', async ({ page }) => {
     await page.goto('/')
-    // Wait for branding to load — tenant name appears in hero subtitle
-    await expect(page.getByText('Plataforma de cursos da WR Consultoria e Soluções').first()).toBeVisible({ timeout: 10000 })
+    // The WR hero uses a full-bleed artwork on desktop; the tenant name is
+    // consistently visible in the features section heading and footer.
+    await expect(page.getByText('Por que escolher a WR Consultoria e Soluções?')).toBeVisible({ timeout: 10000 })
     // Primary color applied to CSS variable
     const primaryColor = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()
@@ -83,22 +88,28 @@ test.describe('White Label — Alfa tenant', () => {
         body: JSON.stringify(ALFA_BRANDING),
       })
     )
-    await page.route(`${API_BASE}/api/v1/courses`, (route) =>
-      route.fulfill({
+    await page.route('**/api/v1/courses**', (route) => {
+      const url = route.request().url()
+      if (url.includes('/api/v1/courses/') && !url.includes('?')) {
+        return route.fallback()
+      }
+      return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
           { id: 'c2', code: 'SEG-01', name: 'Integração de Segurança', category: 'Eng', price: 400, is_active: true },
         ]),
       })
-    )
+    })
   })
 
   test('displays Alfa tenant name and primary color', async ({ page }) => {
     await page.goto('/')
-    // Wait for branding to load — tenant name appears in hero subtitle
-    await expect(page.getByText('Plataforma de cursos da Alfa Academy').first()).toBeVisible({ timeout: 10000 })
-    // Must NOT show WR branding
+    // Tenant name is visible in the features section heading (the WR hero
+    // artwork renders on localhost because TENANT_SLUG resolves to "wr",
+    // but the tenant name comes from the branding API and is visible here).
+    await expect(page.getByText('Por que escolher a Alfa Academy?')).toBeVisible({ timeout: 10000 })
+    // Must NOT show WR branding text
     await expect(page.getByText('WR Consultoria')).not.toBeVisible()
 
     const primaryColor = await page.evaluate(() =>

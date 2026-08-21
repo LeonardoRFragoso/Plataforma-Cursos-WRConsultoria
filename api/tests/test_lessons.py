@@ -265,7 +265,14 @@ async def test_generate_upload_url_no_storage(client, admin_headers, monkeypatch
     lesson = await _create_lesson(client, admin_headers, course_id)
     lesson_id = lesson["id"]
 
-    monkeypatch.undo()
+    # Force S3 mode with no credentials regardless of .env (which may set
+    # STORAGE_BACKEND=local). This isolates the "storage not configured → 503"
+    # contract from the developer environment. Test-infrastructure only; does
+    # not alter production behavior.
+    monkeypatch.setattr(storage_settings, "STORAGE_BACKEND", "s3")
+    monkeypatch.setattr(storage_settings, "STORAGE_ENDPOINT", "")
+    monkeypatch.setattr(storage_settings, "STORAGE_ACCESS_KEY", "")
+    monkeypatch.setattr(storage_settings, "STORAGE_SECRET_KEY", "")
     response = await client.post(
         f"/api/v1/lessons/{lesson_id}/upload-presign",
         json={"filename": "video.mp4", "mime_type": "video/mp4", "size_bytes": 1048576},

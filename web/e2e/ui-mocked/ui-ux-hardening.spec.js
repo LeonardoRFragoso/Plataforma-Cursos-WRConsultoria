@@ -602,8 +602,14 @@ test.describe('Application shell', () => {
 
 test.describe('WR Visual Media', () => {
   async function mockWrCourses(page) {
-    await page.route(`${API_BASE}/api/v1/courses`, (route) =>
-      route.fulfill({
+    // fetchPublicCourses() requests /api/v1/courses/ (trailing slash + query).
+    // Use a glob and route.fallback() for specific-course URLs.
+    await page.route('**/api/v1/courses**', (route) => {
+      const url = route.request().url()
+      if (url.includes('/api/v1/courses/') && !url.includes('?')) {
+        return route.fallback()
+      }
+      return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
@@ -631,7 +637,7 @@ test.describe('WR Visual Media', () => {
           },
         ]),
       })
-    )
+    })
   }
 
   test('Home hero is visible for WR tenant', async ({ page }) => {
@@ -719,7 +725,7 @@ test.describe('WR Visual Media', () => {
       })
     )
     await page.goto('/dashboard')
-    const thumb = page.locator('[data-testid="dashboard-course-thumb-img"], [data-testid="dashboard-course-thumb-fallback"]')
+    const thumb = page.locator('[data-testid="progress-card-cover-img"], [data-testid="progress-card-cover-fallback"]')
     await expect(thumb.first()).toBeVisible()
   })
 

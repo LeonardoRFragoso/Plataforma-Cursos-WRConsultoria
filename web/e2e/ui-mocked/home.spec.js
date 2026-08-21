@@ -23,8 +23,15 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('fluxo 1: página inicial carrega e exibe cursos disponíveis', async ({ page }) => {
-  await page.route(`${API_BASE}/api/v1/courses`, (route) =>
-    route.fulfill({
+  // fetchPublicCourses() requests /api/v1/courses/ (trailing slash) with
+  // query params — use a glob so the mock matches the actual request URL.
+  await page.route('**/api/v1/courses**', (route) => {
+    // Only fulfill the list endpoint; let specific-course requests fall through.
+    const url = route.request().url()
+    if (url.includes('/api/v1/courses/') && !url.includes('?')) {
+      return route.fallback()
+    }
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify([
@@ -38,7 +45,7 @@ test('fluxo 1: página inicial carrega e exibe cursos disponíveis', async ({ pa
         },
       ]),
     })
-  )
+  })
 
   await page.goto('/')
   // WR tenant shows the hero artwork with a different headline
@@ -74,7 +81,7 @@ test('fluxo 2: login de estudante redireciona para dashboard', async ({ page }) 
   )
 
   await page.goto('/login')
-  await expect(page.locator('h2')).toBeVisible()
+  await expect(page.locator('h1')).toBeVisible()
 
   await page.fill('input[placeholder*="CPF"]', 'student@test.com')
   await page.fill('input[type="password"]', 'password123')
@@ -181,7 +188,7 @@ test('fluxo 4: validação de certificado com código válido', async ({ page })
   await page.goto('/validar-certificado')
   await expect(page.locator('h1')).toContainText('Validar certificado')
 
-  await page.fill('input[placeholder="Cole o código aqui"]', validCode)
+  await page.fill('input[placeholder="Cole o código de validação aqui"]', validCode)
   await page.click('button[type="submit"]')
 
   await expect(page.locator('text=Certificado válido')).toBeVisible()
