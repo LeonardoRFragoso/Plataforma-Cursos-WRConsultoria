@@ -12,7 +12,22 @@
       </div>
 
       <div v-else-if="course" class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Breadcrumb -->
+        <nav class="mb-4 text-sm text-gray-500" aria-label="Breadcrumb">
+          <router-link to="/cursos" class="hover:text-primary-600">Catálogo</router-link>
+          <span class="mx-2">/</span>
+          <span class="text-gray-700">{{ course.category }}</span>
+        </nav>
+
         <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+          <!-- Course cover banner -->
+          <CourseCover
+            :course="course"
+            ratio="21/9"
+            loading="eager"
+            img-test-id="course-detail-cover-img"
+            fb-test-id="course-detail-cover-fallback"
+          />
           <div class="p-8 md:p-12">
             <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
               <div class="flex-1">
@@ -113,6 +128,7 @@ import { useTenantStore } from '../stores/tenant'
 import { fetchCourse } from '../api/courses'
 import { purchaseCourse, getMyEnrollments, createCheckout } from '../api/enrollments'
 import AppNavbar from '../components/AppNavbar.vue'
+import CourseCover from '../components/CourseCover.vue'
 
 const route = useRoute()
 const router = useRouter()

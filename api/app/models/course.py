@@ -43,6 +43,8 @@ class Course(Base):
     tipo_curso = Column(Enum(CourseType), default=CourseType.FORMACAO, nullable=False)
     price = Column(Float, nullable=False)
     prerequisites = Column(Text, nullable=True)
+    cover_image_url = Column(String, nullable=True)
+    cover_image_alt = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

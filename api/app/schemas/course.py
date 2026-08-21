@@ -15,6 +15,8 @@ class CourseBase(BaseModel):
     modality: CourseModality
     price: float
     prerequisites: str | None = None
+    cover_image_url: str | None = None
+    cover_image_alt: str | None = None
     is_active: bool = True
 
 class CourseCreate(CourseBase):
@@ -27,6 +29,8 @@ class CourseUpdate(BaseModel):
     modality: CourseModality | None = None
     price: float | None = None
     prerequisites: str | None = None
+    cover_image_url: str | None = None
+    cover_image_alt: str | None = None
     is_active: bool | None = None
 
 class CourseResponse(CourseBase):

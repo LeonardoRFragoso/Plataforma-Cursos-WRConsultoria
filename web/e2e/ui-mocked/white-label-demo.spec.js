@@ -57,7 +57,7 @@ test.describe('White Label — WR tenant', () => {
   test('displays WR tenant name and primary color', async ({ page }) => {
     await page.goto('/')
     // Wait for branding to load — tenant name appears in hero subtitle
-    await expect(page.getByText('Plataforma de cursos da WR Consultoria e Soluções')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Plataforma de cursos da WR Consultoria e Soluções').first()).toBeVisible({ timeout: 10000 })
     // Primary color applied to CSS variable
     const primaryColor = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()
@@ -97,7 +97,7 @@ test.describe('White Label — Alfa tenant', () => {
   test('displays Alfa tenant name and primary color', async ({ page }) => {
     await page.goto('/')
     // Wait for branding to load — tenant name appears in hero subtitle
-    await expect(page.getByText('Plataforma de cursos da Alfa Academy')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Plataforma de cursos da Alfa Academy').first()).toBeVisible({ timeout: 10000 })
     // Must NOT show WR branding
     await expect(page.getByText('WR Consultoria')).not.toBeVisible()
 

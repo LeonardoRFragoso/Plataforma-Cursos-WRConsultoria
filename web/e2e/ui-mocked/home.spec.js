@@ -41,8 +41,9 @@ test('fluxo 1: página inicial carrega e exibe cursos disponíveis', async ({ pa
   )
 
   await page.goto('/')
-  await expect(page.locator('h1')).toContainText('Cursos e certificações')
-  await expect(page.locator('text=Cursos disponíveis')).toBeVisible()
+  // WR tenant shows the hero artwork with a different headline
+  await expect(page.locator('[data-testid="home-hero"]')).toBeVisible()
+  await expect(page.locator('text=Cursos em destaque')).toBeVisible()
   await expect(page.locator('text=NR-10 Segurança em Instalações Elétricas')).toBeVisible()
 })
 

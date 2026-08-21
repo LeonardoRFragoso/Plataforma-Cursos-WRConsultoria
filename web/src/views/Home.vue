@@ -120,30 +120,108 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="relative bg-primary-600 text-white overflow-hidden">
-      <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
-      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-        <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
-          Cursos e certificações<br />com qualidade reconhecida
-        </h1>
-        <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
-          Plataforma de cursos da {{ tenantName }}.
-        </p>
-        <router-link
-          v-if="!authStore.isAuthenticated"
-          to="/register"
-          class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
-        >
-          Comece Agora
-        </router-link>
-        <router-link
-          v-else
-          :to="homeRoute"
-          class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
-        >
-          Ir para Dashboard
-        </router-link>
-      </div>
+    <section class="relative overflow-hidden bg-primary-600 text-white" data-testid="home-hero">
+      <!-- WR hero artwork (only rendered for WR tenant) -->
+      <template v-if="wrHero">
+        <!-- Desktop/tablet: full banner image with overlay CTA -->
+        <div class="hidden sm:block relative">
+          <img
+            :src="wrHero.src"
+            :alt="wrHero.alt"
+            fetchpriority="high"
+            width="1672"
+            height="941"
+            class="w-full h-auto object-cover"
+            data-testid="home-hero-img"
+          />
+          <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent flex items-center">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+              <div class="max-w-lg">
+                <h1 class="text-3xl sm:text-4xl font-bold mb-4 leading-tight drop-shadow-lg">
+                  Treinamentos que preparam equipes para trabalhar com segurança
+                </h1>
+                <p class="text-base sm:text-lg text-white/90 mb-6 drop-shadow">
+                  Plataforma de cursos da {{ tenantName }}.
+                </p>
+                <router-link
+                  v-if="!authStore.isAuthenticated"
+                  to="/register"
+                  class="inline-block bg-white text-primary-600 px-6 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow-lg"
+                >
+                  Comece Agora
+                </router-link>
+                <router-link
+                  v-else
+                  :to="homeRoute"
+                  class="inline-block bg-white text-primary-600 px-6 py-3 rounded-md hover:bg-primary-50 transition-colors text-base font-semibold shadow-lg"
+                >
+                  Ir para Dashboard
+                </router-link>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Mobile: HTML heading + CTA with hero image below (text in image too small on mobile) -->
+        <div class="sm:hidden relative">
+          <div class="px-4 py-10 text-center bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900">
+            <h1 class="text-2xl font-bold mb-4 leading-tight">
+              Treinamentos que preparam equipes para trabalhar com segurança
+            </h1>
+            <p class="text-sm text-white/90 mb-6">
+              Plataforma de cursos da {{ tenantName }}.
+            </p>
+            <router-link
+              v-if="!authStore.isAuthenticated"
+              to="/register"
+              class="inline-block bg-white text-primary-600 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow-lg"
+            >
+              Comece Agora
+            </router-link>
+            <router-link
+              v-else
+              :to="homeRoute"
+              class="inline-block bg-white text-primary-600 px-6 py-2.5 rounded-md hover:bg-primary-50 transition-colors text-sm font-semibold shadow-lg"
+            >
+              Ir para Dashboard
+            </router-link>
+          </div>
+          <img
+            :src="wrHero.src"
+            :alt="wrHero.alt"
+            loading="eager"
+            width="1672"
+            height="941"
+            class="w-full h-auto object-cover"
+            data-testid="home-hero-img-mobile"
+          />
+        </div>
+      </template>
+      <!-- Non-WR hero: gradient + text (no /assets/wr/ reference) -->
+      <template v-else>
+        <div class="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-700 to-secondary-900"></div>
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+          <h1 class="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
+            Cursos e certificações<br />com qualidade reconhecida
+          </h1>
+          <p class="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
+            Plataforma de cursos da {{ tenantName }}.
+          </p>
+          <router-link
+            v-if="!authStore.isAuthenticated"
+            to="/register"
+            class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+          >
+            Comece Agora
+          </router-link>
+          <router-link
+            v-else
+            :to="homeRoute"
+            class="inline-block bg-white text-primary-600 px-8 py-3 rounded-md hover:bg-primary-50 transition-colors text-lg font-semibold shadow-lg"
+          >
+            Ir para Dashboard
+          </router-link>
+        </div>
+      </template>
     </section>
 
     <!-- Features -->
@@ -194,10 +272,10 @@
     </section>
 
     <!-- Vitrine de Cursos -->
-    <section class="py-20 bg-white">
+    <section class="py-20 bg-white" data-testid="home-featured-courses">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
-          <h2 class="text-3xl font-bold text-secondary-900 mb-4">Cursos disponíveis</h2>
+          <h2 class="text-3xl font-bold text-secondary-900 mb-4">Cursos em destaque</h2>
           <p class="text-gray-600 max-w-2xl mx-auto">
             Escolha um curso e inicie sua jornada de capacitação.
           </p>
@@ -211,6 +289,13 @@
             :key="course.id"
             class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200 overflow-hidden flex flex-col"
           >
+            <CourseCover
+              :course="course"
+              ratio="16/9"
+              loading="lazy"
+              :img-test-id="'home-course-cover-img'"
+              :fb-test-id="'home-course-cover-fallback'"
+            />
             <div class="p-6 flex-1">
               <h3 class="text-xl font-semibold text-secondary-900 mb-2">{{ course.name }}</h3>
               <p class="text-sm text-gray-500 mb-4 uppercase tracking-wide">{{ course.category }}</p>
@@ -255,6 +340,8 @@ import { useTenantStore } from '../stores/tenant'
 import { useAuthStore } from '../stores/auth'
 import { fetchPublicCourses } from '../api/courses'
 import { getHomeRoute } from '../utils/homeRoute'
+import { getWrHero } from '../utils/courseMedia'
+import CourseCover from '../components/CourseCover.vue'
 
 const router = useRouter()
 const tenantStore = useTenantStore()
@@ -264,6 +351,7 @@ const loading = ref(true)
 const mobileMenuOpen = ref(false)
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 const homeRoute = computed(() => getHomeRoute(authStore))
+const wrHero = computed(() => getWrHero())
 
 const authedLinks = computed(() => {
   const role = authStore.userRole?.toLowerCase()

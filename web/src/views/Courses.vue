@@ -75,6 +75,32 @@
               rows="3"
             ></textarea>
           </div>
+          <!-- Course media fields -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <AppInput
+              v-model="form.cover_image_url"
+              label="URL da imagem de capa (opcional)"
+              placeholder="/assets/wr/courses/nr-10.webp ou https://..."
+              data-testid="course-cover-image-url"
+            />
+            <AppInput
+              v-model="form.cover_image_alt"
+              label="Texto alternativo da capa (opcional)"
+              placeholder="Descrição da imagem para acessibilidade"
+              data-testid="course-cover-image-alt"
+            />
+          </div>
+          <!-- Cover preview -->
+          <div v-if="form.cover_image_url" class="mt-2">
+            <p class="text-sm text-gray-500 mb-1">Pré-visualização:</p>
+            <img
+              :src="form.cover_image_url"
+              :alt="form.cover_image_alt || 'Preview'"
+              class="w-full max-w-xs rounded-md border border-gray-200"
+              style="aspect-ratio: 16/9; object-fit: cover;"
+              data-testid="course-cover-preview"
+            />
+          </div>
           <div class="flex gap-2">
             <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-course-btn">
               {{ saving ? 'Salvando...' : 'Salvar' }}
@@ -111,7 +137,17 @@
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AppCard v-for="course in courses" :key="course.id" class="hover:shadow-lg transition-shadow">
           <template #header>
-            <h3 class="text-lg font-semibold text-secondary-900">{{ course.name }}</h3>
+            <div class="flex items-start gap-3">
+              <CourseCover
+                :course="course"
+                ratio="16/9"
+                loading="lazy"
+                wrapper-class="w-24 shrink-0 rounded-md overflow-hidden"
+                img-test-id="admin-course-thumb-img"
+                fb-test-id="admin-course-thumb-fallback"
+              />
+              <h3 class="text-lg font-semibold text-secondary-900 flex-1">{{ course.name }}</h3>
+            </div>
           </template>
           <div class="space-y-2 text-sm">
             <p><strong>Código:</strong> {{ course.code }}</p>
@@ -183,6 +219,7 @@ import AppAlert from '../components/AppAlert.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadingState from '../components/LoadingState.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CourseCover from '../components/CourseCover.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -209,6 +246,8 @@ const form = ref({
   price: 0,
   modality: 'PRESENCIAL',
   description: '',
+  cover_image_url: '',
+  cover_image_alt: '',
 })
 
 const isAdmin = computed(() => {
@@ -313,6 +352,8 @@ const resetForm = () => {
     price: 0,
     modality: 'PRESENCIAL',
     description: '',
+    cover_image_url: '',
+    cover_image_alt: '',
   }
   showForm.value = false
 }

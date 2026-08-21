@@ -737,3 +737,127 @@ Features deliberately not implemented in this phase:
 ---
 
 *Document generated from a static read of `web/src/` — router, views, components, stores, utils, and composables. All file paths and line references are accurate as of the current codebase state.*
+
+---
+
+## WR Visual Media Integration
+
+### Overview
+
+A curated set of 10 WR-specific visual assets (1 hero + 9 course covers) has been integrated into the platform. Assets are optimized as WebP (94% size reduction from PNG source), stored under `web/public/assets/wr/`, and resolved via a central tenant-aware media resolver. Non-WR tenants receive ZERO `/assets/wr/` references — they get a neutral, tenant-colored gradient fallback.
+
+### Asset Inventory
+
+| ASSET | COURSE | TENANT | ROUTES | ALT | FALLBACK | RESPONSIVE | RESULT |
+|-------|--------|--------|--------|-----|----------|------------|--------|
+| `hero/wr-training-hero.webp` | — (Home hero) | WR only | `/`, `/cursos` | "Equipe de treinamentos WR — treinamentos que preparam equipes para trabalhar com segurança" | Gradient hero (non-WR) | Desktop: full banner + overlay CTA; Mobile: HTML heading + image below | PASS |
+| `courses/nr-05-cipa.webp` | NR 5 (CIPA) | WR only | `/`, `/cursos`, `/cursos/:id`, `/dashboard`, `/courses`, `/courses/:id/learn` | "Treinamento NR-5 sobre CIPA e prevenção de acidentes" | Gradient + course code | 16:9 aspect ratio, lazy loaded | PASS |
+| `courses/nr-10-eletricidade.webp` | NR 10 (Eletricidade) | WR only | same as above | "Treinamento NR-10 sobre segurança em instalações e serviços em eletricidade" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-11-movimentacao-materiais.webp` | NR 11 (Movimentação) | WR only | same | "Treinamento NR-11 sobre movimentação e armazenagem de materiais" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-12-maquinas-e-equipamentos.webp` | NR 12 (Máquinas) | WR only | same | "Treinamento NR-12 sobre segurança no trabalho em máquinas e equipamentos" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-18-construcao-civil.webp` | NR 18 (Construção) | WR only | same | "Treinamento NR-18 sobre segurança na construção civil" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-20-inflamaveis-combustiveis.webp` | NR 20 (Inflamáveis) | WR only | same | "Treinamento NR-20 sobre segurança com inflamáveis e combustíveis" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-33-espaco-confinado.webp` | NR 33 (Espaço Confinado) | WR only | same | "Treinamento NR-33 sobre segurança em espaço confinado" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/nr-35-trabalho-em-altura.webp` | NR 35 (Altura) | WR only | same | "Treinamento NR-35 sobre trabalho em altura" | Gradient + course code | 16:9, lazy | PASS |
+| `courses/primeiros-socorros.webp` | Primeiros Socorros (code PS-F) | WR only | same | "Treinamento de primeiros socorros — atendimento inicial em situações de emergência" | Gradient + course code | 16:9, lazy | PASS |
+
+### Optimization Results
+
+| Format | Total Size | Count | Dimensions |
+|--------|-----------|-------|------------|
+| Original PNG | 20.5 MB | 10 | 1672x941 each |
+| Optimized WebP (q=90) | 1.22 MB | 10 | 1672x941 each |
+| Reduction | 94% | — | Lossless dimensions |
+
+### Media Architecture
+
+**Backend Course model** (`api/app/models/course.py`):
+- `cover_image_url` — nullable String, admin can set per-course cover image URL/path
+- `cover_image_alt` — nullable String, accessibility alt text for cover image
+- Migration: `e5f6a7b8c9d0_add_course_cover_media_fields.py` (non-destructive, nullable columns)
+
+**Backend schemas** (`api/app/schemas/course.py`):
+- `CourseBase`, `CourseCreate`, `CourseUpdate`, `CourseResponse` all include `cover_image_url` and `cover_image_alt`
+- `MyEnrollmentResponse` includes `course_code`, `course_category`, `cover_image_url`, `cover_image_alt` for student dashboard thumbnails
+
+**Frontend media resolver** (`web/src/utils/courseMedia.js`):
+- `isWrTenant()` — checks `TENANT_SLUG === 'wr'`
+- `getWrHero()` — returns WR hero artwork or `null` for non-WR tenants
+- `getCourseCover(course)` — resolution priority: 1) backend `cover_image_url`, 2) WR category/code mapping, 3) neutral fallback
+- `isValidMediaUrl(url)` — rejects `javascript:`, `data:text/html`, accepts relative paths and `http(s)://`
+- `getWrAssetPaths()` — returns all 10 WR asset paths (for isolation testing)
+
+**Frontend component** (`web/src/components/CourseCover.vue`):
+- Reusable cover component with 16:9 aspect ratio by default
+- Renders WR cover image, backend-provided image, or neutral gradient fallback
+- Fallback uses tenant primary/secondary colors + course code/category
+- `loading="lazy"` by default, `loading="eager"` for above-the-fold covers
+- `@error` handler falls back to gradient on image load failure
+- Props: `course`, `ratio`, `loading`, `width`, `height`, `wrapperClass`, `imgTestId`, `fbTestId`
+
+### White Label Isolation
+
+**Hard requirement:** Non-WR tenants must render ZERO `/assets/wr/` references.
+
+- `getWrHero()` returns `null` for non-WR tenants → Home renders gradient hero (no WR image)
+- `getCourseCover()` skips WR mapping for non-WR tenants → CourseCover renders gradient fallback
+- `getWrAssetPaths()` is only used for testing, never in production rendering
+- Admin-provided `cover_image_url` is tenant-scoped (stored per-course in tenant-scoped DB)
+- E2E test verifies: Alfa tenant DOM contains 0 elements with `[src*="/assets/wr/"]`
+
+### WR Course Mapping
+
+Media is mapped by course `category` (e.g., "NR 10") or `code` (e.g., "PS-F" for Primeiros Socorros). The mapping is based on the actual WR seed data in `api/app/seeds/courses_seed.py`:
+
+| Category | Code Pattern | Asset |
+|----------|-------------|-------|
+| NR 5 | NR-05-* | nr-05-cipa.webp |
+| NR 10 | NR-10-* | nr-10-eletricidade.webp |
+| NR 11 | NR-11-* | nr-11-movimentacao-materiais.webp |
+| NR 12 | NR-12-* | nr-12-maquinas-e-equipamentos.webp |
+| NR 18 | NR-18-* | nr-18-construcao-civil.webp |
+| NR 20 | NR-20-* | nr-20-inflamaveis-combustiveis.webp |
+| NR 33 | NR-33-* | nr-33-espaco-confinado.webp |
+| NR 35 | NR-35-* | nr-35-trabalho-em-altura.webp |
+| Programas | PS-F | primeiros-socorros.webp |
+
+### Neutral Fallback
+
+Courses without a mapped cover (WR unmapped, Alfa, future tenants) render a neutral fallback:
+- Gradient background using `tenantStore.primary_color` → `tenantStore.secondary_color`
+- Course code displayed in bold white text
+- Course category displayed below in smaller white text
+- No broken image icons
+- Works for all tenants without WR asset references
+
+### Home Hero Design
+
+**WR tenant (desktop/tablet ≥640px):**
+- Full-width hero image (1672x941) with dark gradient overlay
+- HTML heading + subtitle + CTA overlaid on left side
+- `fetchpriority="high"` for LCP optimization
+
+**WR tenant (mobile <640px):**
+- HTML heading + CTA in gradient background (text in image too small on mobile)
+- Hero image rendered below the CTA section
+- `loading="eager"` for immediate visibility
+
+**Non-WR tenant:**
+- Original gradient hero with centered text (no WR image reference)
+
+### Performance
+
+- Hero image: `fetchpriority="high"` (desktop), `loading="eager"` (mobile) — above-the-fold LCP
+- Course covers: `loading="lazy"` — below-the-fold, deferred loading
+- All images have `width` and `height` attributes to prevent CLS
+- `aspect-ratio` CSS on wrapper prevents layout shift during load
+- WebP format: 94% smaller than PNG source
+- Total asset weight: 1.22 MB for all 10 images
+
+### Admin Course Media Editing
+
+Admin Courses form (`web/src/views/Courses.vue`) includes:
+- `cover_image_url` input field (URL or relative path)
+- `cover_image_alt` input field (accessibility text)
+- Live preview image when URL is provided
+- URL validation via `isValidMediaUrl()` rejects `javascript:` and `data:text/html`

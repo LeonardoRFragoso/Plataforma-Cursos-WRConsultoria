@@ -76,19 +76,39 @@
           </div>
           <ul v-else class="space-y-3">
             <li v-for="enrollment in myEnrollments" :key="enrollment.id" class="border border-gray-200 rounded-md p-3 hover:bg-gray-50">
-              <AppLink v-if="canPlay(enrollment.status)" :to="`/courses/${enrollment.course_id}/learn`" class="block">
-                <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
-                <div class="text-sm text-gray-600">
-                  {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
-                  <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+              <AppLink v-if="canPlay(enrollment.status)" :to="`/courses/${enrollment.course_id}/learn`" class="flex gap-3 items-start">
+                <CourseCover
+                  :course="enrollment"
+                  ratio="16/9"
+                  loading="lazy"
+                  wrapper-class="w-20 shrink-0 rounded overflow-hidden"
+                  img-test-id="dashboard-course-thumb-img"
+                  fb-test-id="dashboard-course-thumb-fallback"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
+                  <div class="text-sm text-gray-600">
+                    {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
+                    <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+                  </div>
                 </div>
               </AppLink>
-              <div v-else class="block cursor-not-allowed opacity-75">
-                <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
-                <div class="text-sm text-gray-600">
-                  {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
-                  <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
-                  <span class="ml-2 text-xs italic">{{ statusMessage(enrollment.status) }}</span>
+              <div v-else class="flex gap-3 items-start cursor-not-allowed opacity-75">
+                <CourseCover
+                  :course="enrollment"
+                  ratio="16/9"
+                  loading="lazy"
+                  wrapper-class="w-20 shrink-0 rounded overflow-hidden"
+                  img-test-id="dashboard-course-thumb-img"
+                  fb-test-id="dashboard-course-thumb-fallback"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="font-semibold text-secondary-900">{{ enrollment.course_name }}</div>
+                  <div class="text-sm text-gray-600">
+                    {{ new Date(enrollment.start_date).toLocaleDateString('pt-BR') }} a {{ new Date(enrollment.end_date).toLocaleDateString('pt-BR') }}
+                    <span class="ml-2 px-2 py-0.5 rounded text-xs" :class="statusClass(enrollment.status)">{{ enrollment.status }}</span>
+                    <span class="ml-2 text-xs italic">{{ statusMessage(enrollment.status) }}</span>
+                  </div>
                 </div>
               </div>
             </li>
@@ -127,6 +147,7 @@ import api from '../api/client'
 import AppPageHeader from '../components/AppPageHeader.vue'
 import AppCard from '../components/AppCard.vue'
 import AppLink from '../components/AppLink.vue'
+import CourseCover from '../components/CourseCover.vue'
 
 const authStore = useAuthStore()
 

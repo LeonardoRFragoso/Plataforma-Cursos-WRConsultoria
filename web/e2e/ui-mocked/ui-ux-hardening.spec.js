@@ -595,3 +595,239 @@ test.describe('Application shell', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
   })
 })
+
+// ============================================================
+// WR VISUAL MEDIA INTEGRATION
+// ============================================================
+
+test.describe('WR Visual Media', () => {
+  async function mockWrCourses(page) {
+    await page.route(`${API_BASE}/api/v1/courses`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'course-nr10',
+            code: 'NR-10-B',
+            name: 'NR 10 - Básico',
+            category: 'NR 10',
+            description: 'Segurança em Instalações Elétricas',
+            carga_horaria: 40,
+            modality: 'SEMIPRESENCIAL',
+            price: 299.9,
+            is_active: true,
+          },
+          {
+            id: 'course-nr35',
+            code: 'NR-35-F',
+            name: 'NR 35 - Trabalho em Altura',
+            category: 'NR 35',
+            description: 'Trabalho em altura',
+            carga_horaria: 8,
+            modality: 'SEMIPRESENCIAL',
+            price: 149.9,
+            is_active: true,
+          },
+        ]),
+      })
+    )
+  }
+
+  test('Home hero is visible for WR tenant', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.goto('/')
+    await expect(page.locator('[data-testid="home-hero"]')).toBeVisible()
+  })
+
+  test('Home hero image references /assets/wr/ for WR tenant', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.goto('/')
+    const heroImg = page.locator('[data-testid="home-hero-img"]')
+    await expect(heroImg).toBeVisible()
+    const src = await heroImg.getAttribute('src')
+    expect(src).toContain('/assets/wr/hero/')
+  })
+
+  test('featured course covers are visible on Home', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.goto('/')
+    await expect(page.locator('[data-testid="home-featured-courses"]')).toBeVisible()
+    const covers = page.locator('[data-testid="home-course-cover-img"], [data-testid="home-course-cover-fallback"]')
+    await expect(covers.first()).toBeVisible()
+  })
+
+  test('NR-10 course uses correct WR cover image', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.goto('/')
+    const nr10Cover = page.locator('[data-testid="home-course-cover-img"]').first()
+    await expect(nr10Cover).toBeVisible()
+    const src = await nr10Cover.getAttribute('src')
+    expect(src).toBe('/assets/wr/courses/nr-10-eletricidade.webp')
+  })
+
+  test('CourseDetail shows cover banner', async ({ page }) => {
+    await mockTenantBranding(page)
+    await page.route(`${API_BASE}/api/v1/courses/course-nr10`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'course-nr10',
+          code: 'NR-10-B',
+          name: 'NR 10 - Básico',
+          category: 'NR 10',
+          description: 'Segurança em Instalações Elétricas',
+          carga_horaria: 40,
+          modality: 'SEMIPRESENCIAL',
+          price: 299.9,
+          is_active: true,
+        }),
+      })
+    )
+    await page.goto('/cursos/course-nr10')
+    const cover = page.locator('[data-testid="course-detail-cover-img"], [data-testid="course-detail-cover-fallback"]')
+    await expect(cover.first()).toBeVisible()
+  })
+
+  test('Student Dashboard shows course thumbnails', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await page.route(`${API_BASE}/api/v1/enrollments/me`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'enr-1',
+            status: 'CONFIRMADA',
+            course_id: 'course-nr10',
+            course_name: 'NR 10 - Básico',
+            course_code: 'NR-10-B',
+            course_category: 'NR 10',
+            class_id: 'cls-1',
+            start_date: '2026-01-01',
+            end_date: '2026-12-31',
+            enrollment_date: '2026-01-01T00:00:00',
+          },
+        ]),
+      })
+    )
+    await page.goto('/dashboard')
+    const thumb = page.locator('[data-testid="dashboard-course-thumb-img"], [data-testid="dashboard-course-thumb-fallback"]')
+    await expect(thumb.first()).toBeVisible()
+  })
+
+  test('Admin Courses shows cover thumbnails', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'admin')
+    await setAuth(page, 'admin')
+    await mockWrCourses(page)
+    // Admin Courses page uses trailing slash
+    await page.route(`${API_BASE}/api/v1/courses/`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'course-nr10',
+            code: 'NR-10-B',
+            name: 'NR 10 - Básico',
+            category: 'NR 10',
+            description: 'Segurança em Instalações Elétricas',
+            carga_horaria: 40,
+            modality: 'SEMIPRESENCIAL',
+            price: 299.9,
+            is_active: true,
+          },
+        ]),
+      })
+    )
+    await mockEmptyList(page, '/api/v1/classes')
+    await mockEmptyList(page, '/api/v1/students')
+    await mockEmptyList(page, '/api/v1/enrollments')
+    await mockEmptyList(page, '/api/v1/payments')
+    await mockEmptyList(page, '/api/v1/certificates')
+    await page.goto('/courses')
+    const thumb = page.locator('[data-testid="admin-course-thumb-img"], [data-testid="admin-course-thumb-fallback"]')
+    await expect(thumb.first()).toBeVisible()
+  })
+
+  test('CourseLearn shows contextual course media', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await page.route(`${API_BASE}/api/v1/courses/course-nr10`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'course-nr10',
+          code: 'NR-10-B',
+          name: 'NR 10 - Básico',
+          category: 'NR 10',
+          description: 'Segurança em Instalações Elétricas',
+          carga_horaria: 40,
+          modality: 'SEMIPRESENCIAL',
+          price: 299.9,
+          is_active: true,
+        }),
+      })
+    )
+    await page.route(`${API_BASE}/api/v1/enrollments/me`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'enr-1',
+            status: 'CONFIRMADA',
+            course_id: 'course-nr10',
+            course_name: 'NR 10 - Básico',
+            course_code: 'NR-10-B',
+            course_category: 'NR 10',
+            class_id: 'cls-1',
+            start_date: '2026-01-01',
+            end_date: '2026-12-31',
+            enrollment_date: '2026-01-01T00:00:00',
+          },
+        ]),
+      })
+    )
+    await page.route(`${API_BASE}/api/v1/lessons/courses/course-nr10/lessons`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+    )
+    await page.goto('/courses/course-nr10/learn')
+    const media = page.locator('[data-testid="courselearn-context-img"], [data-testid="courselearn-context-fallback"]')
+    await expect(media.first()).toBeVisible()
+  })
+
+  test('WR media — no horizontal overflow at 390px mobile', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+
+  test('WR media — no horizontal overflow at 1920px desktop', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockWrCourses(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+})

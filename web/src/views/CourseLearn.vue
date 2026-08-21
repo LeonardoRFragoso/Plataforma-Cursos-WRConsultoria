@@ -9,21 +9,31 @@
     </div>
 
     <div v-else class="w-full">
-      <div class="mb-4">
-        <h1 class="text-2xl font-bold text-secondary-900">{{ course.name }}</h1>
-        <p class="text-sm text-gray-600">
-          Progresso do curso:
-          <span data-testid="course-progress-percent">{{ progress.percentage || 0 }}%</span>
-        </p>
-        <p class="text-sm text-gray-600">
-          Aulas obrigatórias concluídas:
-          <span data-testid="course-progress-required">{{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }}</span>
-        </p>
-        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-          <div
-            class="bg-primary-600 h-2.5 rounded-full transition-all"
-            :style="{ width: `${progress.percentage || 0}%` }"
-          ></div>
+      <div class="mb-4 flex items-start gap-4">
+        <CourseCover
+          :course="course"
+          ratio="16/9"
+          loading="lazy"
+          wrapper-class="w-24 shrink-0 rounded-md overflow-hidden hidden sm:block"
+          img-test-id="courselearn-context-img"
+          fb-test-id="courselearn-context-fallback"
+        />
+        <div class="flex-1 min-w-0">
+          <h1 class="text-2xl font-bold text-secondary-900">{{ course.name }}</h1>
+          <p class="text-sm text-gray-600">
+            Progresso do curso:
+            <span data-testid="course-progress-percent">{{ progress.percentage || 0 }}%</span>
+          </p>
+          <p class="text-sm text-gray-600">
+            Aulas obrigatórias concluídas:
+            <span data-testid="course-progress-required">{{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }}</span>
+          </p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+            <div
+              class="bg-primary-600 h-2.5 rounded-full transition-all"
+              :style="{ width: `${progress.percentage || 0}%` }"
+            ></div>
+          </div>
         </div>
       </div>
 
@@ -140,6 +150,7 @@ import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useToast } from '../composables/useToast'
 import AppCard from '../components/AppCard.vue'
+import CourseCover from '../components/CourseCover.vue'
 import AppButton from '../components/AppButton.vue'
 import AppLink from '../components/AppLink.vue'
 
