@@ -1,7 +1,7 @@
 import uuid
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base

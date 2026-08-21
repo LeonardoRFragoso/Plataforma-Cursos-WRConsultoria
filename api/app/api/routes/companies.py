@@ -9,11 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_tenant_id, hash_password
+from app.core.security import get_current_admin, get_current_tenant_id
 from app.models.certificate import Certificate
-from app.models.class_model import Class
 from app.models.company import Company
-from app.models.course import Course
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.student import Student
 from app.models.user import User, UserRole
@@ -340,7 +338,9 @@ async def add_employee(
     if (await db.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    # Create user without password — activation required
+    # Create user without password — activation required.
+    # User is born INACTIVE: login is impossible until /auth/activate
+    # sets the password hash and flips is_active to True atomically.
     user = User(
         tenant_id=tenant_id,
         email=str(employee_data.email),
@@ -348,7 +348,7 @@ async def add_employee(
         full_name=employee_data.full_name,
         password_hash=None,
         role=UserRole.STUDENT,
-        is_active=True,
+        is_active=False,
     )
     db.add(user)
     await db.flush()
@@ -501,7 +501,7 @@ async def import_employees_csv(
                 full_name=full_name,
                 password_hash=None,
                 role=UserRole.STUDENT,
-                is_active=True,
+                is_active=False,
             )
             db.add(user)
             await db.flush()
@@ -531,7 +531,7 @@ async def import_employees_csv(
                 "full_name": full_name,
                 "token": raw_token,
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             failed += 1
             results.append(ImportRowResult(
                 row=i, full_name=full_name, cpf=cpf_raw, email=email,

@@ -33,6 +33,7 @@ describe('useNavConfig', () => {
     expect(management.items.map((i) => i.to)).toEqual([
       '/courses',
       '/classes',
+      '/companies',
       '/students',
       '/enrollments',
       '/payments',

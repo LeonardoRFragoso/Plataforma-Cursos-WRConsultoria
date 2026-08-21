@@ -421,7 +421,6 @@ async def create_bulk_enrollments(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
     # Validate company (tenant-scoped)
-    company_name = None
     if data.company_id:
         stmt = select(Company).where(
             Company.id == data.company_id,
@@ -431,7 +430,6 @@ async def create_bulk_enrollments(
         company = result.scalar_one_or_none()
         if not company:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
-        company_name = company.trade_name or company.legal_name
 
     # Validate students (tenant-scoped)
     stmt = (

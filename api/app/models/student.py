@@ -45,3 +45,8 @@ class Student(Base):
     @property
     def full_name(self):
         return self.user.full_name if self.user else None
+
+    @property
+    def user_active(self):
+        """Expose the linked user's is_active status for admin UIs."""
+        return self.user.is_active if self.user else None

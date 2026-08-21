@@ -94,8 +94,26 @@ def _resolve_request_tenant_id(request: Request) -> UUID:
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    stmt = select(User).where(User.email == user_data.email)
+async def register(
+    user_data: UserCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public B2C registration.
+
+    Tenant boundary: the resolved request tenant (set by TenantResolver
+    middleware) is authoritative. Both User and Student are created with
+    that tenant_id. Duplicate email/CPF checks are scoped to the same
+    tenant, matching the unique constraints (tenant_id, email) and
+    (tenant_id, cpf).
+    """
+    resolved_tenant_id = _resolve_request_tenant_id(request)
+
+    # Duplicate email check — tenant-scoped (matches uq_user_tenant_email)
+    stmt = select(User).where(
+        User.email == user_data.email,
+        User.tenant_id == resolved_tenant_id,
+    )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -110,7 +128,11 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             detail="CPF must contain 11 digits",
         )
 
-    stmt = select(User).where(User.cpf == cpf)
+    # Duplicate CPF check — tenant-scoped (matches uq_user_tenant_cpf)
+    stmt = select(User).where(
+        User.cpf == cpf,
+        User.tenant_id == resolved_tenant_id,
+    )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -119,6 +141,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         )
 
     user = User(
+        tenant_id=resolved_tenant_id,
         email=user_data.email,
         cpf=cpf,
         full_name=user_data.full_name,
@@ -129,6 +152,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     student = Student(
+        tenant_id=resolved_tenant_id,
         user_id=user.id,
         cpf=cpf,
         phone=None,

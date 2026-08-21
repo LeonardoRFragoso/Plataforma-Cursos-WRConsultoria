@@ -49,6 +49,12 @@ export const routes = [
     meta: { layout: 'public' },
   },
   {
+    path: '/ativar-conta',
+    name: 'ActivateAccount',
+    component: () => import('../views/ActivateAccount.vue'),
+    meta: { layout: 'public' },
+  },
+  {
     path: '/cursos/:id',
     name: 'CourseDetail',
     component: () => import('../views/CourseDetail.vue'),

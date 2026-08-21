@@ -146,7 +146,7 @@ async def create_student(
             full_name=student_data.full_name,
             password_hash=hash_password(temp_password) if temp_password else None,
             role=UserRole.STUDENT,
-            is_active=True,
+            is_active=bool(temp_password),
         )
         db.add(user)
         await db.flush()

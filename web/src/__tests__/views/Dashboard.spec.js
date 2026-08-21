@@ -10,6 +10,10 @@ vi.mock('../../api/client', () => ({
   default: { get: vi.fn() },
 }))
 
+vi.mock('../../api/certificates', () => ({
+  fetchMyCertificates: vi.fn(() => Promise.resolve({ data: [] })),
+}))
+
 let pinia
 
 const baseEnrollment = {

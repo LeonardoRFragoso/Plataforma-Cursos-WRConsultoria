@@ -34,6 +34,7 @@ class StudentResponse(StudentBase):
     user_id: UUID
     email: str | None = None
     full_name: str | None = None
+    user_active: bool | None = None
     temp_password: str | None = None
     activation_token: str | None = None
     company_id: UUID | None = None

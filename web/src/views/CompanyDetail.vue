@@ -501,7 +501,7 @@ const closeAddEmployee = () => {
 
 const buildActivationLink = (token) => {
   const base = window.location.origin
-  return `${base}/redefinir-senha?token=${token}&activation=1`
+  return `${base}/ativar-conta?token=${token}`
 }
 
 const copyActivationLink = () => {
