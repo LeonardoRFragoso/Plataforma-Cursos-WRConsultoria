@@ -1,8 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 class="text-2xl font-bold text-secondary-900 mb-6">Gestão Global — Painel SaaS</h1>
+  <div>
+    <AppPageHeader title="Gestão Global — Painel SaaS" description="Administração global de tenants, planos e assinaturas." />
 
       <AppAlert v-if="error" type="error" closable @close="error = ''">{{ error }}</AppAlert>
 
@@ -168,7 +166,6 @@
           </table>
         </div>
       </template>
-    </div>
 
     <!-- Approve partner confirmation -->
     <ConfirmDialog
@@ -211,7 +208,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import AppNavbar from '../components/AppNavbar.vue'
+import AppPageHeader from '../components/AppPageHeader.vue'
 import AppAlert from '../components/AppAlert.vue'
 import LoadingState from '../components/LoadingState.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'

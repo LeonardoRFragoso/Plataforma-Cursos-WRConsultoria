@@ -22,10 +22,6 @@ vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }))
 
-vi.mock('../../components/AppNavbar.vue', () => ({
-  default: { template: '<div class="navbar-mock"></div>' },
-}))
-
 const setupRouter = () => {
   return createRouter({
     history: createMemoryHistory(),

@@ -46,6 +46,56 @@ Every route registered in `web/src/router/index.js`. Status reflects whether the
 - `requiresAdmin` → redirects to `getHomeRoute(authStore)` if role is not `admin` or `super_admin`.
 - `requiresSuperAdmin` → redirects to `getHomeRoute(authStore)` if role is not `super_admin`.
 
+**Layout assignment** (`route.meta.layout`):
+- `meta.layout = 'public'` → renders inside `PublicLayout` (centered, marketing-friendly, no app shell).
+- `meta.layout = 'authenticated'` → renders inside `AuthenticatedLayout` (persistent sidebar + topbar + full-width workspace).
+- The layout component is chosen in `App.vue` via `route.meta.layout` and stays mounted across route changes so the shell persists while only the workspace content swaps.
+
+---
+
+## Layout Architecture
+
+The application uses a two-layout system introduced in the full-width SaaS shell migration.
+
+### PublicLayout (`web/src/layouts/PublicLayout.vue`)
+- Thin, non-imposing wrapper for unauthenticated pages.
+- No sidebar, no topbar — public pages manage their own bespoke centered layouts.
+- Used by: Home, Login, Register, ForgotPassword, ResetPassword, Partner, ValidateCertificate, CourseDetail, CourseCatalog, Forbidden (403), NotFound (404).
+
+### AuthenticatedLayout / AppShell (`web/src/layouts/AuthenticatedLayout.vue`)
+- Persistent SaaS application shell for all authenticated screens.
+- Structure: fixed sidebar (left, 256px) + sticky topbar + full-width workspace (right, `md:ml-64`).
+- The workspace uses `w-full` with standard padding (`px-4 sm:px-6 lg:px-8 py-8`) — NO root `max-w-7xl` centered container.
+- Controlled-width content (forms, settings, reading panels) may still use inner `max-w-*` utilities within the workspace.
+- The sidebar is persistent on desktop (`md:translate-x-0`) and a slide-in drawer on mobile (`-translate-x-full` when closed).
+- Mobile drawer: backdrop click closes, Escape key closes, route change closes, body scroll locked while open.
+- Used by: Dashboard, Courses, CourseLearn, CourseLessons, CourseProgress, Classes, Students, Enrollments, Payments, Certificates, WhiteLabelSettings, SuperAdmin, DemoPayment.
+
+### AppSidebar (`web/src/components/AppSidebar.vue`)
+- Role-aware navigation tree driven by `useNavConfig()` composable.
+- Branding header with logo/name link to role home route.
+- Flat links (Dashboard, Catálogo, etc.) + collapsible groups (Gestão, Certificados, Personalização).
+- Groups auto-expand when they contain the active route.
+- Active route marked with `aria-current="page"`.
+- User info + logout button at the bottom.
+- Emits `close` on nav link click (closes mobile drawer).
+
+### AppTopbar (`web/src/components/AppTopbar.vue`)
+- Sticky top bar with tenant context, user context, and logout.
+- Mobile hamburger toggle (`mobile-menu-toggle`) with `aria-expanded` and `aria-controls`.
+- Role label display (Administrador / Aluno / Super Administrador).
+
+### AppPageHeader (`web/src/components/AppPageHeader.vue`)
+- Reusable authenticated page header with title, description, and actions slot.
+- Standardizes the workspace hierarchy across all management screens.
+
+### useNavConfig (`web/src/composables/useNavConfig.js`)
+- Single source of truth for the sidebar navigation tree.
+- Returns `{ flat, groups }` structure based on the current user's role.
+- STUDENT: Dashboard, Catálogo, Certificados (flat only).
+- ADMIN: Dashboard (flat) + Gestão (Cursos, Turmas, Alunos, Matrículas, Pagamentos) + Certificados + Personalização (White Label).
+- SUPER_ADMIN: Gestão Global (flat only).
+
 ---
 
 ## Interaction Inventory
@@ -286,7 +336,9 @@ Every button, link, form submit, and interactive element in every view. Status i
 | PUBLIC | `/403` | Forbidden | "Voltar ao início" link | `getHomeRoute(authStore)` | WORKING | all-views.spec.js |
 | PUBLIC | `/:pathMatch(.*)*` | NotFound | "Voltar ao início" link | `getHomeRoute(authStore)` | WORKING | NotFound.spec.js |
 
-### AppNavbar.vue (global navigation)
+### AppNavbar.vue (legacy — still used by public CourseDetail page)
+
+> **Architecture change:** Authenticated routes no longer use `AppNavbar`. Global navigation for authenticated screens is now handled by `AppSidebar` + `AppTopbar` inside the `AuthenticatedLayout` (AppShell). `AppNavbar` remains in use only by `CourseDetail.vue` (a public route). The `AppNavbar.spec.js` unit tests still validate the component in isolation.
 
 | ROLE | ROUTE | SCREEN | VISIBLE ACTION | HANDLER / DESTINATION | STATUS | TEST |
 |------|-------|--------|----------------|----------------------|--------|------|
@@ -311,6 +363,34 @@ Every button, link, form submit, and interactive element in every view. Status i
 | PUBLIC | * | Navbar | "Login" link | `/login` | WORKING | AppNavbar.spec.js |
 | PUBLIC | * | Navbar | "Cadastre-se" button | `/register` | WORKING | AppNavbar.spec.js |
 | ALL | * | Navbar | Mobile hamburger toggle | `mobileMenuOpen = !mobileMenuOpen` | WORKING | AppNavbar.spec.js |
+
+### AppSidebar.vue (authenticated application shell navigation)
+
+| ROLE | ROUTE | SCREEN | VISIBLE ACTION | HANDLER / DESTINATION | STATUS | TEST |
+|------|-------|--------|----------------|----------------------|--------|------|
+| ALL | auth | Sidebar | Logo link | `getHomeRoute(authStore)` | WORKING | AppSidebar.spec.js |
+| STUDENT | auth | Sidebar | "Dashboard" flat link | `/dashboard` | WORKING | AppSidebar.spec.js |
+| STUDENT | auth | Sidebar | "Catálogo" flat link | `/cursos` | WORKING | AppSidebar.spec.js |
+| STUDENT | auth | Sidebar | "Certificados" flat link | `/certificates` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Dashboard" flat link | `/dashboard` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Gestão" collapsible group | Click → `toggleGroup()` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Cursos" group item | `/courses` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Turmas" group item | `/classes` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Alunos" group item | `/students` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Matrículas" group item | `/enrollments` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Pagamentos" group item | `/payments` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Certificados" group item | `/certificates` | WORKING | AppSidebar.spec.js |
+| ADMIN | auth | Sidebar | "Personalização" group → "White Label" | `/settings/white-label` | WORKING | AppSidebar.spec.js |
+| SUPER_ADMIN | auth | Sidebar | "Gestão Global" flat link | `/super-admin` | WORKING | AppSidebar.spec.js |
+| AUTH | auth | Sidebar | "Sair" logout button | `authStore.logout()` → `/login` | WORKING | AppSidebar.spec.js |
+| AUTH | auth | Sidebar | Mobile drawer backdrop click | Closes drawer | WORKING | ui-ux-hardening.spec.js |
+
+### AppTopbar.vue (authenticated application shell top bar)
+
+| ROLE | ROUTE | SCREEN | VISIBLE ACTION | HANDLER / DESTINATION | STATUS | TEST |
+|------|-------|--------|----------------|----------------------|--------|------|
+| AUTH | auth | Topbar | Mobile hamburger toggle | Emits `toggle-drawer` | WORKING | AppTopbar.spec.js |
+| AUTH | auth | Topbar | "Sair" logout button | `authStore.logout()` → `/login` | WORKING | AppTopbar.spec.js |
 
 ### Removed interactions
 
@@ -452,7 +532,7 @@ For each view, which states are implemented.
 
 | Feature | Implementation | Breakpoints |
 |---------|---------------|-------------|
-| Mobile hamburger menu | `AppNavbar.vue` — hamburger button visible on `md:hidden`, desktop nav hidden on `hidden md:flex`. Mobile menu panel toggles `mobileMenuOpen`. Auto-closes on route change via `watch(() => route.path)`. | `<768px` (md breakpoint): hamburger; `≥768px`: desktop nav |
+| Mobile hamburger menu | `AppTopbar.vue` — hamburger button visible on `md:hidden`, triggers sidebar drawer. `AppSidebar.vue` — drawer slides in/out via `translate-x`, backdrop click closes, Escape closes, route change closes, body scroll locked while open. | `<768px` (md breakpoint): hamburger + drawer; `≥768px`: persistent sidebar |
 | Home.vue header nav | Inline flex nav, no hamburger — links may wrap on very small screens. Not ideal for <360px but functional. | No explicit breakpoint |
 | Dashboard stats grid | `grid grid-cols-1 md:grid-cols-4` | `<768px`: 1 column; `≥768px`: 4 columns |
 | Dashboard content grid | `grid grid-cols-1 md:grid-cols-3` | `<768px`: 1 column; `≥768px`: 3 columns |
@@ -470,7 +550,7 @@ For each view, which states are implemented.
 | SuperAdmin tables | `overflow-hidden` on container, `min-w-full` on table | Table may overflow on very small screens (no `overflow-x-auto` wrapper) |
 | Forms (Courses, Classes, Students, etc.) | `grid grid-cols-1 md:grid-cols-2` | `<768px`: 1 col; `≥768px`: 2 cols |
 | WhiteLabelSettings color inputs | `grid grid-cols-1 sm:grid-cols-3` | `<640px`: 1 col; `≥640px`: 3 cols |
-| Container max-width | `max-w-7xl mx-auto` with `px-4 sm:px-6 lg:px-8` | Responsive padding |
+| Container max-width | Authenticated workspace: `w-full` with `px-4 sm:px-6 lg:px-8` (full-width, no root max-w). Public pages: `max-w-7xl mx-auto` with `px-4 sm:px-6 lg:px-8`. Controlled-width content (forms, settings) uses inner `max-w-*` utilities. | Responsive padding |
 | AppModal | `max-h-[90vh] overflow-y-auto`, `p-4` on overlay | Scrolls within viewport on small screens |
 
 **Known responsive gaps:**
@@ -483,7 +563,7 @@ For each view, which states are implemented.
 
 | Category | Implementation | Files |
 |----------|---------------|-------|
-| `aria-expanded` on dropdowns | ✅ AppNavbar desktop dropdown buttons: `:aria-expanded="openDropdown === group.label"` + `:aria-controls="'dropdown-' + group.testid"`. Mobile hamburger: `:aria-expanded="mobileMenuOpen"` + `aria-controls="mobile-menu-panel"`. | AppNavbar.vue:45-46, 113-114 |
+| `aria-expanded` on dropdowns | ✅ AppNavbar desktop dropdown buttons: `:aria-expanded="openDropdown === group.label"` + `:aria-controls="'dropdown-' + group.testid"`. Mobile hamburger: `:aria-expanded="mobileMenuOpen"` + `aria-controls="mobile-menu-panel"`. AppSidebar collapsible groups: `:aria-expanded` toggles on click + `:aria-controls`. AppTopbar hamburger: `:aria-expanded` + `aria-controls="app-sidebar"` + `aria-label`. | AppNavbar.vue:45-46, 113-114, AppSidebar.vue, AppTopbar.vue |
 | `aria-label` on icon buttons | ✅ AppModal close button: `:aria-label="'Fechar: ' + title"`. Toast dismiss: `aria-label="Fechar notificação"`. AppAlert close: `aria-label="Fechar alerta"`. AppNavbar hamburger: `aria-label="Menu"`. CourseLessons move up/down: `:aria-label="Mover aula ${title} para cima/baixo"`. | AppModal.vue:36, Toast.vue:29, AppAlert.vue:29, AppNavbar.vue:115, CourseLessons.vue:143,151 |
 | `role="dialog"` on modals | ✅ AppModal overlay: `role="dialog"` + `aria-modal="true"` + `:aria-labelledby="titleId"`. Dialog content: `role="document"`. | AppModal.vue:9-11,23 |
 | `role="alert"` on toasts | ✅ Toast component: `role="alert"`. AppAlert component: `role="alert"`. | Toast.vue:8, AppAlert.vue:6 |
@@ -499,12 +579,13 @@ For each view, which states are implemented.
 | `target="_blank"` with `rel="noopener"` | ✅ Classes EAD link: `target="_blank" rel="noopener noreferrer"`. | Classes.vue:132 |
 | Video player accessibility | HTML5 `<video controls>` — native keyboard accessible. YouTube/Vimeo iframes have `allowfullscreen`. No custom captions/track elements. | CourseLearn.vue:78-108 |
 | Color contrast | Primary color is tenant-configurable via CSS variables. Default `#0056b3` on white meets WCAG AA for normal text. | tenant.js, tailwind config |
+| `aria-current="page"` on active nav | ✅ AppSidebar: active route link gets `aria-current="page"`. | AppSidebar.vue |
 
 **Known accessibility gaps:**
 - CourseLearn lesson sidebar buttons lack `aria-current` for the selected lesson.
 - SuperAdmin "Renovar" button has no confirmation dialog (direct action).
 - Toast notifications do not move focus — screen readers will announce via `role="alert"` but keyboard users may not discover them.
-- No skip-to-content link on any page.
+- No skip-to-content link on any page. The authenticated layout uses `data-testid="app-workspace"` as a semantic landmark but does not yet have a skip link.
 - Tables (Students, Enrollments, Payments, CourseProgress, SuperAdmin) lack `<caption>` elements.
 
 ---

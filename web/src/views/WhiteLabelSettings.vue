@@ -1,8 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 class="text-2xl font-bold text-secondary-900 mb-6">White Label — Configurações</h1>
+  <div>
+    <div class="max-w-3xl mx-auto">
+      <AppPageHeader title="White Label — Configurações" description="Personalize a identidade da plataforma." />
 
       <AppAlert v-if="error" type="error" closable @close="error = ''">{{ error }}</AppAlert>
       <AppAlert v-if="success" type="success" closable @close="success = false">Branding atualizado com sucesso!</AppAlert>
@@ -134,7 +133,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import AppNavbar from '../components/AppNavbar.vue'
+import AppPageHeader from '../components/AppPageHeader.vue'
 import AppAlert from '../components/AppAlert.vue'
 import { useTenantStore } from '../stores/tenant'
 import { updateTenantBranding } from '../api/tenant'

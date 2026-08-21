@@ -1,7 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-
+  <div>
     <div v-if="notEnrolled" class="max-w-3xl mx-auto px-4 py-16 text-center">
       <h1 class="text-2xl font-bold text-secondary-900 mb-4">Acesso restrito</h1>
       <p class="text-gray-600 mb-6">Você não está matriculado neste curso. Matricule-se para assistir às aulas.</p>
@@ -10,7 +8,7 @@
       </AppLink>
     </div>
 
-    <div v-else class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div v-else class="w-full">
       <div class="mb-4">
         <h1 class="text-2xl font-bold text-secondary-900">{{ course.name }}</h1>
         <p class="text-sm text-gray-600">
@@ -141,7 +139,6 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { useToast } from '../composables/useToast'
-import AppNavbar from '../components/AppNavbar.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppLink from '../components/AppLink.vue'

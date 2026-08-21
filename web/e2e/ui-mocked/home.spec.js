@@ -81,7 +81,9 @@ test('fluxo 2: login de estudante redireciona para dashboard', async ({ page }) 
 
   // Após login, redireciona para /dashboard
   await expect(page).toHaveURL(/\/dashboard/)
-  await expect(page.locator('text=Student Test')).toBeVisible()
+  // The user name appears in the sidebar, topbar, and profile card —
+  // scope to the workspace to confirm the dashboard rendered for this user
+  await expect(page.locator('[data-testid="app-workspace"]')).toContainText('Student Test')
 })
 
 test('fluxo 3: detalhe do curso mostra "Acessar curso" para matrícula concluída', async ({ page }) => {

@@ -1,5 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+  <div>
+    <div class="flex items-center justify-center min-h-[60vh]">
     <div class="max-w-md w-full bg-white rounded-lg shadow-lg border border-gray-200 p-8">
       <div v-if="loading" class="text-center text-gray-500">Carregando...</div>
       <div v-else-if="error" class="text-center text-red-600">{{ error }}</div>
@@ -65,6 +66,7 @@
           </button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

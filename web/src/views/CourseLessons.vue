@@ -1,22 +1,15 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-secondary-900">Conteúdo do Curso</h1>
-          <p class="text-sm text-gray-600">{{ course.name }}</p>
-        </div>
-        <div class="flex gap-2">
-          <AppButton @click="goToProgress" class="bg-gray-600 text-white" data-testid="go-to-progress-btn">
-            Progresso dos Alunos
-          </AppButton>
-          <AppButton @click="showForm = true" class="bg-primary-600 text-white" data-testid="new-lesson-btn">
-            + Nova Aula
-          </AppButton>
-        </div>
-      </div>
+  <div>
+    <AppPageHeader title="Conteúdo do Curso" :description="course.name">
+      <template #actions>
+        <AppButton @click="goToProgress" class="bg-gray-600 text-white" data-testid="go-to-progress-btn">
+          Progresso dos Alunos
+        </AppButton>
+        <AppButton @click="showForm = true" class="bg-primary-600 text-white" data-testid="new-lesson-btn">
+          + Nova Aula
+        </AppButton>
+      </template>
+    </AppPageHeader>
 
       <!-- Formulário -->
       <AppCard v-if="showForm" class="mb-8">
@@ -183,7 +176,6 @@
           </div>
         </div>
       </div>
-    </div>
 
     <!-- Video Upload Modal -->
     <AppModal v-model="videoModal.visible" :title="`Enviar Vídeo — ${videoModal.lessonTitle}`" size="md" :closable="!videoModal.uploading" :close-on-backdrop="!videoModal.uploading" @close="closeVideoModal">
@@ -312,7 +304,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '../composables/useToast'
 import api from '../api/client'
-import AppNavbar from '../components/AppNavbar.vue'
+import AppPageHeader from '../components/AppPageHeader.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'

@@ -206,10 +206,11 @@ test.describe('Admin navigation', () => {
     await expect(page.locator('[data-testid="nav-group-management"]')).toBeVisible()
   })
 
-  test('Gestão dropdown opens on hover and shows admin links', async ({ page }) => {
+  test('Gestão group expands on click and shows admin links', async ({ page }) => {
     await page.goto('/dashboard')
-    await page.hover('[data-testid="nav-group-management"]')
-    await expect(page.locator('[data-testid="dropdown-panel-management"]')).toBeVisible()
+    // Group is collapsed by default when the active route is not inside it
+    await page.click('[data-testid="nav-group-management"]')
+    await expect(page.locator('[data-testid="nav-group-panel-management"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-link-courses"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-link-classes"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-link-students"]')).toBeVisible()
@@ -217,9 +218,9 @@ test.describe('Admin navigation', () => {
     await expect(page.locator('[data-testid="nav-link-payments"]')).toBeVisible()
   })
 
-  test('Cursos in dropdown navigates to /courses', async ({ page }) => {
+  test('Cursos in group navigates to /courses', async ({ page }) => {
     await page.goto('/dashboard')
-    await page.hover('[data-testid="nav-group-management"]')
+    await page.click('[data-testid="nav-group-management"]')
     await expect(page.locator('[data-testid="nav-link-courses"]')).toBeVisible()
     await page.click('[data-testid="nav-link-courses"]')
     await expect(page).toHaveURL(/\/courses/)
@@ -295,7 +296,7 @@ test.describe('Responsive — no horizontal overflow', () => {
     })
   }
 
-  test('mobile menu opens and closes on small viewport', async ({ page }) => {
+  test('mobile drawer opens and closes on small viewport', async ({ page }) => {
     await mockTenantBranding(page)
     await mockAuth(page, 'student')
     await setAuth(page, 'student')
@@ -304,12 +305,12 @@ test.describe('Responsive — no horizontal overflow', () => {
     await page.goto('/dashboard')
     // Hamburger should be visible
     await expect(page.locator('[data-testid="mobile-menu-toggle"]')).toBeVisible()
-    // Open menu
+    // Open drawer
     await page.click('[data-testid="mobile-menu-toggle"]')
-    await expect(page.locator('[data-testid="mobile-menu-panel"]')).toBeVisible()
-    // Click a link — menu should close
-    await page.click('[data-testid="mobile-nav-link-catalog"]')
-    await expect(page.locator('[data-testid="mobile-menu-panel"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="app-drawer-backdrop"]')).toBeVisible()
+    // Click a nav link — drawer should close
+    await page.click('[data-testid="nav-link-catalog"]')
+    await expect(page.locator('[data-testid="app-drawer-backdrop"]')).toHaveCount(0)
   })
 })
 
@@ -331,7 +332,7 @@ test.describe('Accessibility', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 
-  test('dropdown button has aria-expanded that changes on hover', async ({ page }) => {
+  test('sidebar group button has aria-expanded that changes on click', async ({ page }) => {
     await mockTenantBranding(page)
     await mockAuth(page, 'admin')
     await setAuth(page, 'admin')
@@ -345,7 +346,7 @@ test.describe('Accessibility', () => {
     await page.goto('/dashboard')
     const group = page.locator('[data-testid="nav-group-management"]')
     await expect(group).toHaveAttribute('aria-expanded', 'false')
-    await group.hover()
+    await group.click()
     await expect(group).toHaveAttribute('aria-expanded', 'true')
   })
 })
@@ -476,5 +477,121 @@ test.describe('Back/Forward/Refresh', () => {
     await expect(page).toHaveURL(/\/dashboard/)
     await page.goForward()
     await expect(page).toHaveURL(/\/cursos/)
+  })
+})
+
+// ============================================================
+// 10. APPLICATION SHELL — persistent sidebar + topbar + full-width workspace
+// ============================================================
+
+test.describe('Application shell', () => {
+  test('authenticated page renders sidebar, topbar and workspace markers', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await mockEmptyList(page, '/api/v1/enrollments/me')
+    await page.goto('/dashboard')
+    await expect(page.locator('[data-testid="app-shell"]')).toBeVisible()
+    await expect(page.locator('[data-testid="app-sidebar"]')).toBeVisible()
+    await expect(page.locator('[data-testid="app-topbar"]')).toBeVisible()
+    await expect(page.locator('[data-testid="app-workspace"]')).toBeVisible()
+  })
+
+  test('workspace is full-width — no root max-w-7xl centered container on dashboard', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await mockEmptyList(page, '/api/v1/enrollments/me')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard')
+    const workspace = page.locator('[data-testid="app-workspace"]')
+    await expect(workspace).toBeVisible()
+    // The workspace must not be centered or width-capped at the root level
+    const classes = await workspace.getAttribute('class')
+    expect(classes).not.toContain('max-w-7xl')
+    expect(classes).not.toContain('mx-auto')
+    expect(classes).toContain('w-full')
+  })
+
+  test('sidebar persists across authenticated route changes', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'admin')
+    await setAuth(page, 'admin')
+    await mockEmptyList(page, '/api/v1/courses')
+    await mockEmptyList(page, '/api/v1/classes')
+    await mockEmptyList(page, '/api/v1/students')
+    await mockEmptyList(page, '/api/v1/enrollments')
+    await mockEmptyList(page, '/api/v1/payments')
+    await mockEmptyList(page, '/api/v1/certificates')
+    await page.goto('/dashboard')
+    await expect(page.locator('[data-testid="app-sidebar"]')).toBeVisible()
+    // Navigate to courses via sidebar group
+    await page.click('[data-testid="nav-group-management"]')
+    await page.click('[data-testid="nav-link-courses"]')
+    await expect(page).toHaveURL(/\/courses/)
+    // Sidebar is still there — shell is persistent
+    await expect(page.locator('[data-testid="app-sidebar"]')).toBeVisible()
+    await expect(page.locator('[data-testid="app-topbar"]')).toBeVisible()
+  })
+
+  test('public page does NOT render the app shell', async ({ page }) => {
+    await mockTenantBranding(page)
+    await page.route(`${API_BASE}/api/v1/courses`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) })
+    )
+    await page.goto('/')
+    await expect(page.locator('[data-testid="app-shell"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="app-sidebar"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="app-topbar"]')).toHaveCount(0)
+  })
+
+  test('sidebar logo navigates to role home', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await mockEmptyList(page, '/api/v1/enrollments/me')
+    await page.goto('/dashboard')
+    await page.click('[data-testid="navbar-logo"]')
+    await expect(page).toHaveURL(/\/dashboard/)
+  })
+
+  test('sidebar logout clears auth and redirects to login', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await mockEmptyList(page, '/api/v1/enrollments/me')
+    await page.goto('/dashboard')
+    await page.click('[data-testid="nav-logout"]')
+    await expect(page).toHaveURL(/\/login/)
+  })
+
+  test('mobile drawer closes on Escape key', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'student')
+    await setAuth(page, 'student')
+    await mockEmptyList(page, '/api/v1/enrollments/me')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/dashboard')
+    await page.click('[data-testid="mobile-menu-toggle"]')
+    await expect(page.locator('[data-testid="app-drawer-backdrop"]')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('[data-testid="app-drawer-backdrop"]')).toHaveCount(0)
+  })
+
+  test('authenticated page has no horizontal overflow at desktop width', async ({ page }) => {
+    await mockTenantBranding(page)
+    await mockAuth(page, 'admin')
+    await setAuth(page, 'admin')
+    await mockEmptyList(page, '/api/v1/courses')
+    await mockEmptyList(page, '/api/v1/classes')
+    await mockEmptyList(page, '/api/v1/students')
+    await mockEmptyList(page, '/api/v1/enrollments')
+    await mockEmptyList(page, '/api/v1/payments')
+    await mockEmptyList(page, '/api/v1/certificates')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard')
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
   })
 })

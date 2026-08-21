@@ -1,10 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-8">
-        <h1 class="text-3xl font-bold text-secondary-900">Cursos</h1>
+  <div>
+    <AppPageHeader title="Cursos" description="Gerencie o catálogo de cursos.">
+      <template #actions>
         <AppButton
           v-if="isAdmin"
           @click="showForm = true"
@@ -13,7 +10,8 @@
         >
           + Novo Curso
         </AppButton>
-      </div>
+      </template>
+    </AppPageHeader>
 
       <!-- Formulário de Curso -->
       <AppCard v-if="showForm" class="mb-8">
@@ -155,7 +153,6 @@
           </div>
         </AppCard>
       </div>
-    </div>
 
     <!-- Delete confirmation -->
     <ConfirmDialog
@@ -178,7 +175,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/useToast'
 import api from '../api/client'
-import AppNavbar from '../components/AppNavbar.vue'
+import AppPageHeader from '../components/AppPageHeader.vue'
 import AppCard from '../components/AppCard.vue'
 import AppButton from '../components/AppButton.vue'
 import AppInput from '../components/AppInput.vue'

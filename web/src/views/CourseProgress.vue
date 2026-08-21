@@ -1,17 +1,12 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-secondary-900">Progresso dos Alunos</h1>
-          <p class="text-sm text-gray-600">{{ course.name }}</p>
-        </div>
+  <div>
+    <AppPageHeader title="Progresso dos Alunos" :description="course.name">
+      <template #actions>
         <AppButton @click="goBack" class="bg-gray-600 text-white" data-testid="back-to-lessons-btn">
           Voltar para Aulas
         </AppButton>
-      </div>
+      </template>
+    </AppPageHeader>
 
       <!-- Loading -->
       <LoadingState v-if="loading" message="Carregando progresso..." />
@@ -71,7 +66,6 @@
           </tbody>
         </table>
       </div>
-    </div>
   </div>
 </template>
 
@@ -79,7 +73,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api/client'
-import AppNavbar from '../components/AppNavbar.vue'
+import AppPageHeader from '../components/AppPageHeader.vue'
 import AppButton from '../components/AppButton.vue'
 import AppAlert from '../components/AppAlert.vue'
 import EmptyState from '../components/EmptyState.vue'

@@ -8,10 +8,6 @@ vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn() },
 }))
 
-vi.mock('../../components/AppNavbar.vue', () => ({
-  default: { template: '<div class="navbar-mock"></div>' },
-}))
-
 import api from '../../api/client'
 
 const setupRouter = () => {
