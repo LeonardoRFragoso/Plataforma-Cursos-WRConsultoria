@@ -7,10 +7,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.utils import utc_now
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
-
-
-def _random_cpf() -> str:
-    return f"{uuid.uuid4().int % 10**11:011d}"
+from tests.conftest import make_valid_cpf
 
 
 async def _create_test_enrollment(client, admin_headers):
@@ -53,7 +50,7 @@ async def _create_test_enrollment(client, admin_headers):
     class_id = class_response.json()["id"]
 
     email = f"student_pay_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = _random_cpf()
+    cpf = make_valid_cpf()
     student = await client.post(
         "/api/v1/students/",
         json={
@@ -177,7 +174,7 @@ async def _seed_course_class_student(client, admin_headers, *, course_price=500.
     class_id = class_response.json()["id"]
 
     email = f"student_auth_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = _random_cpf()
+    cpf = make_valid_cpf()
     student = await client.post(
         "/api/v1/students/",
         json={

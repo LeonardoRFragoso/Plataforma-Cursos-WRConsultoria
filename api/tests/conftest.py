@@ -76,6 +76,13 @@ async def setup_db():
         END $$;
         """))
         await conn.run_sync(Base.metadata.create_all)
+        # Apply the email normalization migration index manually (the test DB
+        # uses create_all, not alembic upgrade, so we create the index here
+        # to match the production migration state).
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_user_tenant_email_lower "
+            "ON users (tenant_id, lower(email))"
+        ))
     await _insert_master_tenant()
     yield
     async with engine.begin() as conn:
@@ -170,7 +177,7 @@ def test_user_data():
 async def student_user(client, admin_headers):
     """Cria um aluno em uma turma e faz login, retornando headers e student_id."""
     email = f"student_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = make_valid_cpf()
 
     today = utc_now().date()
     course = await client.post(

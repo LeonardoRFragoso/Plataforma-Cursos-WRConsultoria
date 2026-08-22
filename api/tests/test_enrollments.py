@@ -2,10 +2,7 @@ import uuid
 from datetime import timedelta
 
 from app.core.utils import utc_now
-
-
-def _random_cpf() -> str:
-    return f"{uuid.uuid4().int % 10**11:011d}"
+from tests.conftest import make_valid_cpf
 
 
 def _random_email() -> str:
@@ -54,7 +51,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
 
     # 4. Criar aluno
     email = _random_email()
-    cpf = _random_cpf()
+    cpf = make_valid_cpf()
     student_data = {
         "email": email,
         "full_name": "Aluno Teste",

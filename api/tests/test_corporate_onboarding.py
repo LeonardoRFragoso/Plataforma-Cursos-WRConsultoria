@@ -17,6 +17,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.constants import WR_TENANT_ID
+from tests.conftest import make_valid_cpf
 
 
 async def _create_company(client: AsyncClient, headers: dict, name: str = "Empresa Teste LTDA") -> str:
@@ -81,7 +82,7 @@ async def _create_employee(client: AsyncClient, headers: dict, company_id: str, 
         f"/api/v1/companies/{company_id}/employees",
         json={
             "full_name": f"{name} {uuid.uuid4().hex[:4]}",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
             "email": f"func_{uuid.uuid4().hex[:8]}@empresa.com",
         },
         headers=headers,
@@ -167,7 +168,7 @@ class TestCorporateStudentCreation:
             json={
                 "full_name": "João Silva",
                 "email": f"joao_{uuid.uuid4().hex[:8]}@empresa.com",
-                "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+                "cpf": make_valid_cpf(),
                 "company_id": company_id,
             },
             headers=admin_headers,
@@ -184,7 +185,7 @@ class TestCorporateStudentCreation:
             json={
                 "full_name": "Maria Souza",
                 "email": f"maria_{uuid.uuid4().hex[:8]}@gmail.com",
-                "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+                "cpf": make_valid_cpf(),
             },
             headers=admin_headers,
         )
@@ -200,7 +201,7 @@ class TestCorporateStudentCreation:
             json={
                 "full_name": "Teste",
                 "email": f"test_{uuid.uuid4().hex[:8]}@test.com",
-                "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+                "cpf": make_valid_cpf(),
                 "company_id": str(uuid.uuid4()),
             },
             headers=admin_headers,
@@ -237,7 +238,7 @@ class TestBulkEmployeeImport:
 
         csv_content = "full_name,cpf,email,phone\n"
         for i in range(5):
-            csv_content += f"Funcionário {i},{uuid.uuid4().int % 10**11:011d},func{i}_{uuid.uuid4().hex[:8]}@empresa.com,11999999999\n"
+            csv_content += f"Funcionário {i},{make_valid_cpf()},func{i}_{uuid.uuid4().hex[:8]}@empresa.com,11999999999\n"
 
         files = {"file": ("employees.csv", csv_content.encode("utf-8"), "text/csv")}
         response = await client.post(
@@ -250,13 +251,15 @@ class TestBulkEmployeeImport:
         assert data["created"] == 5
         assert data["existing"] == 0
         assert data["invalid"] == 0
-        assert len(data["activation_tokens"]) == 5
+        # Production contract: raw activation tokens are NEVER returned.
+        # The response reports delivery status only.
+        assert "activation_tokens" not in data
 
     @pytest.mark.asyncio
     async def test_csv_import_detects_duplicates(self, client, admin_headers):
         company_id = await _create_company(client, admin_headers)
 
-        cpf = f"{uuid.uuid4().int % 10**11:011d}"
+        cpf = make_valid_cpf()
         email = f"dup_{uuid.uuid4().hex[:8]}@empresa.com"
 
         csv_content = f"full_name,cpf,email\nFunc 1,{cpf},{email}\n"
@@ -409,7 +412,7 @@ class TestEnrollmentSource:
             json={
                 "full_name": "Aluno B2C",
                 "email": f"b2c_{uuid.uuid4().hex[:8]}@gmail.com",
-                "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+                "cpf": make_valid_cpf(),
                 "password": "senha123",
                 "class_id": class_id,
             },

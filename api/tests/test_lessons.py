@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from app.core.storage import settings as storage_settings
 from app.core.utils import utc_now
+from tests.conftest import make_valid_cpf
 
 
 async def _create_course(client, admin_headers):
@@ -60,7 +61,7 @@ async def _create_student(client, admin_headers, class_id=None):
         responsible_admin_id = await _get_admin_id(client, admin_headers)
         class_id = await _create_class(client, admin_headers, course_id, responsible_admin_id)
     email = f"student_lsn_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = make_valid_cpf()
     response = await client.post(
         "/api/v1/students/",
         json={

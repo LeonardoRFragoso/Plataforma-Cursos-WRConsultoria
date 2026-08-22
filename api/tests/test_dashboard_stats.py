@@ -22,6 +22,7 @@ from app.models.course import Course, CourseModality, CourseType
 from app.models.student import Student
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
+from tests.conftest import make_valid_cpf
 
 
 async def _seed_alfa_tenant():
@@ -135,7 +136,7 @@ async def test_dashboard_stats_reflect_created_data(client, admin_headers):
     # Create a student (this also creates a PENDENTE enrollment via the
     # student creation flow which enrolls the student in the class).
     email = f"dashstudent_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = make_valid_cpf()
     student_resp = await client.post(
         "/api/v1/students/",
         json={

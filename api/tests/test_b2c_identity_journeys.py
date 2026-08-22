@@ -38,6 +38,7 @@ from sqlalchemy import select, text
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.core.normalization import (
+    is_cpf_format,
     is_valid_cpf,
     normalize_cpf,
     validate_cpf,
@@ -480,8 +481,45 @@ class TestCpfValidation:
     def test_normalize_cpf_strips_punctuation(self):
         assert normalize_cpf("529.982.247-25") == "52998224725"
 
-    def test_normalize_cpf_strips_spaces(self):
-        assert normalize_cpf(" 529 982 247 25 ") == "52998224725"
+    def test_normalize_cpf_strips_surrounding_whitespace(self):
+        assert normalize_cpf("  52998224725  ") == "52998224725"
+        assert normalize_cpf("  529.982.247-25  ") == "52998224725"
+
+    def test_normalize_cpf_rejects_internal_spaces(self):
+        """Internal spaces are NOT a valid CPF format."""
+        with pytest.raises(ValueError):
+            normalize_cpf(" 529 982 247 25 ")
+
+    def test_normalize_cpf_rejects_arbitrary_garbage(self):
+        """Strings with letters/symbols mixed in are NOT valid CPF format."""
+        with pytest.raises(ValueError):
+            normalize_cpf("abc52998224725xyz")
+        with pytest.raises(ValueError):
+            normalize_cpf("52998224725xyz")
+        with pytest.raises(ValueError):
+            normalize_cpf("529/982/247-25")
+        with pytest.raises(ValueError):
+            normalize_cpf("+52998224725")
+        with pytest.raises(ValueError):
+            normalize_cpf("CPF:52998224725")
+
+    def test_is_cpf_format_rejects_arbitrary_garbage(self):
+        """is_cpf_format must NOT classify arbitrary 11-digit-containing strings as CPF."""
+        assert is_cpf_format("abc52998224725xyz") is False
+        assert is_cpf_format("52998224725xyz") is False
+        assert is_cpf_format("529/982/247-25") is False
+        assert is_cpf_format("+52998224725") is False
+        assert is_cpf_format("CPF:52998224725") is False
+
+    def test_is_cpf_format_accepts_canonical_forms(self):
+        assert is_cpf_format("52998224725") is True
+        assert is_cpf_format("529.982.247-25") is True
+        assert is_cpf_format("  52998224725  ") is True
+
+    def test_validate_cpf_rejects_arbitrary_garbage(self):
+        """validate_cpf must reject non-canonical formats."""
+        with pytest.raises(ValueError):
+            validate_cpf("abc52998224725xyz")
 
     def test_generated_test_cpf_is_valid(self):
         """The make_valid_cpf helper must produce valid CPFs."""
