@@ -362,6 +362,21 @@ async def super_activate_custom_domain(
 # Tenant secrets — revelação de valor plano (SUPER_ADMIN)
 # ------------------------------------------------------------------
 
+# Keys that are write-only: they can be configured, replaced, deleted,
+# and validated, but NEVER revealed in plaintext after storage.
+# This protects financial/operational credentials from exposure even
+# to SUPER_ADMIN via the API.
+_PROTECTED_SECRET_KEYS = frozenset(
+    {
+        "asaas_api_key",
+        "asaas_webhook_token",
+        "mercado_pago_access_token",
+        "smtp_password",
+        "storage_secret_key",
+    }
+)
+
+
 @router.get(
     "/tenants/{tenant_id}/secrets/{secret_id}/reveal",
     response_model=TenantSecretReveal,
@@ -372,11 +387,24 @@ async def super_reveal_tenant_secret(
     db: AsyncSession = Depends(get_db_privileged),
     current_user: dict = Depends(get_current_super_admin),
 ):
-    """Revela o valor plano de um secret de tenant (SUPER_ADMIN)."""
+    """Revela o valor plano de um secret de tenant (SUPER_ADMIN).
+
+    Protected financial/operational keys are write-only and cannot be
+    revealed. They can be configured, replaced, deleted, and validated,
+    but the plaintext value is never exposed via the API.
+    """
     secret = await db.get(TenantSecret, secret_id)
     if not secret or secret.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found"
+        )
+    if secret.key in _PROTECTED_SECRET_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Secret '{secret.key}' is write-only and cannot be revealed. "
+                "Use replace or delete instead."
+            ),
         )
     try:
         value = decrypt(secret.encrypted_value)

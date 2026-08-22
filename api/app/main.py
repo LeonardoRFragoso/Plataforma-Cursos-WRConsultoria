@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.api.routes import (
+    asaas_integration,
     auth,
     certificates,
     classes,
@@ -238,6 +239,11 @@ app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["ce
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
+app.include_router(
+    asaas_integration.router,
+    prefix="/api/v1/integrations/asaas",
+    tags=["asaas-integration"],
+)
 
 @app.get("/")
 async def root():
