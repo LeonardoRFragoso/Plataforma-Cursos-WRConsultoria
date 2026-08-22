@@ -105,8 +105,10 @@
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Matrícula</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Valor</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Método</th>
+              <th class="px-4 py-2 text-left font-semibold text-gray-700">Provider</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Status</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Data</th>
+              <th class="px-4 py-2 text-left font-semibold text-gray-700">Pago em</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-700">Ações</th>
             </tr>
           </thead>
@@ -115,12 +117,14 @@
               <td class="px-4 py-2">{{ getStudentCpfByPayment(payment) }}</td>
               <td class="px-4 py-2">R$ {{ formatPrice(payment.amount) }}</td>
               <td class="px-4 py-2">{{ formatMethod(payment.method) }}</td>
+              <td class="px-4 py-2 text-xs">{{ formatProvider(payment.provider) }}</td>
               <td class="px-4 py-2">
                 <span :class="['px-2 py-1 rounded text-xs font-semibold', getStatusColor(payment.status)]">
                   {{ formatStatus(payment.status) }}
                 </span>
               </td>
               <td class="px-4 py-2">{{ formatDate(payment.created_at) }}</td>
+              <td class="px-4 py-2 text-xs">{{ payment.paid_at ? formatDate(payment.paid_at) : '—' }}</td>
               <td class="px-4 py-2 space-x-2">
                 <AppButton @click="editPayment(payment)" class="bg-blue-600 text-white text-xs px-2 py-1" data-testid="edit-payment-btn">Editar</AppButton>
                 <AppButton @click="confirmDelete(payment)" class="bg-red-600 text-white text-xs px-2 py-1" data-testid="delete-payment-btn">Deletar</AppButton>
@@ -201,9 +205,18 @@ const formatMethod = (method) => {
   const map = {
     'CARTAO': 'Cartão',
     'BOLETO': 'Boleto',
-    'PIX': 'PIX'
+    'PIX': 'PIX',
+    'UNDEFINED': 'A definir',
   }
   return map[method] || method
+}
+
+const formatProvider = (provider) => {
+  const map = {
+    'MERCADO_PAGO': 'Mercado Pago',
+    'ASAAS': 'Asaas',
+  }
+  return map[provider] || provider || '—'
 }
 
 const formatStatus = (status) => {

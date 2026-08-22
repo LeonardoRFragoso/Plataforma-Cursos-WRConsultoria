@@ -168,6 +168,12 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
   },
   {
+    path: '/settings/financial',
+    name: 'FinancialSettings',
+    component: () => import('../views/FinancialSettings.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
+  },
+  {
     path: '/super-admin',
     name: 'SuperAdmin',
     component: () => import('../views/SuperAdmin.vue'),
