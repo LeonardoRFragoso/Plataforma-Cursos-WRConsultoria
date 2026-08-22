@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.payment import PaymentMethod, PaymentStatus
+from app.models.payment import PaymentMethod, PaymentProvider, PaymentStatus
 
 
 class PaymentBase(BaseModel):
@@ -44,6 +44,9 @@ class PaymentUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     id: UUID
     status: PaymentStatus
+    provider: PaymentProvider = PaymentProvider.MERCADO_PAGO
+    provider_payment_id: str | None = None
+    checkout_url: str | None = None
     mercado_pago_id: str | None = None
     paid_at: datetime | None = None
     created_at: datetime
@@ -55,3 +58,15 @@ class PaymentWebhookRequest(BaseModel):
     id: str
     status: str
     external_reference: str | None = None
+
+
+class AsaasWebhookEvent(BaseModel):
+    """Payload de um webhook do Asaas.
+
+    O Asaas envia ``{"id", "event", "payment": {"id": ...}}``. O campo
+    ``payment`` pode conter o objeto completo ou apenas o id.
+    """
+
+    id: str
+    event: str
+    payment: dict | None = None

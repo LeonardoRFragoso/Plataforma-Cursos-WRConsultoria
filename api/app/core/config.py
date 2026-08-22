@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
     MERCADO_PAGO_MOCK_MODE: bool = False
+
+    # Asaas gateway — per-tenant API keys live in TenantSecret.
+    # ASAAS_MOCK_MODE makes AsaasProvider return deterministic fakes
+    # without touching the network (tests/staging only).
+    ASAAS_MOCK_MODE: bool = False
     
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

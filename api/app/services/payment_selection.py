@@ -24,13 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.payment import Payment, PaymentStatus
 
 
-def _selection_statement(enrollment_id):
+def _selection_statement(enrollment_id, tenant_id=None):
     """Build the deterministic selection statement for an enrollment.
 
     Exposed as a function so tests can inspect the ordering without
     executing it, and so the ordering is defined in exactly one place.
     """
-    return (
+    stmt = (
         select(Payment)
         .where(Payment.enrollment_id == enrollment_id)
         .order_by(
@@ -42,18 +42,22 @@ def _selection_statement(enrollment_id):
             Payment.id,
         )
     )
+    if tenant_id is not None:
+        stmt = stmt.where(Payment.tenant_id == tenant_id)
+    return stmt
 
 
 async def select_payment_for_enrollment(
     db: AsyncSession,
     enrollment_id,
+    tenant_id=None,
 ) -> Payment | None:
     """Return the deterministic best payment for an enrollment, or None.
 
     This is the production selector. It performs NO mutation and is
     safe to call from any read context (seed, reconciliation, tests).
     """
-    result = await db.execute(_selection_statement(enrollment_id))
+    result = await db.execute(_selection_statement(enrollment_id, tenant_id))
     payments = result.scalars().all()
     return payments[0] if payments else None
 
@@ -78,7 +82,7 @@ async def get_or_create_payment(
     from app.core.utils import utc_now
     from app.models.payment import PaymentMethod
 
-    selected = await select_payment_for_enrollment(db, enrollment_id)
+    selected = await select_payment_for_enrollment(db, enrollment_id, tenant_id)
     if selected is not None:
         return selected, False
 

@@ -17,6 +17,7 @@ from app.services.secret_crypto import decrypt
 
 # Chaves canônicas de secrets de tenant.
 MERCADO_PAGO_ACCESS_TOKEN_KEY = "mercado_pago_access_token"
+ASAAS_API_KEY_KEY = "asaas_api_key"
 
 
 async def get_tenant_secret(
@@ -54,6 +55,14 @@ async def get_mercado_pago_access_token(
     return await get_tenant_secret(
         db, tenant_id, MERCADO_PAGO_ACCESS_TOKEN_KEY
     )
+
+
+async def get_asaas_api_key(
+    db: AsyncSession,
+    tenant_id: UUID,
+) -> str | None:
+    """Atalho para obter a API key do Asaas do tenant."""
+    return await get_tenant_secret(db, tenant_id, ASAAS_API_KEY_KEY)
 
 
 async def set_tenant_secret(

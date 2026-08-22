@@ -7,7 +7,14 @@ from app.models.course import Course, CourseModality
 from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
 from app.models.one_time_token import OneTimeToken
-from app.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.models.payment import (
+    Payment,
+    PaymentCustomer,
+    PaymentMethod,
+    PaymentProvider,
+    PaymentStatus,
+    PaymentWebhookEvent,
+)
 from app.models.plan import BillingCycle, Plan
 from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
@@ -36,8 +43,11 @@ __all__ = [
     "PartnerLead",
     "PartnerLeadStatus",
     "Payment",
+    "PaymentCustomer",
     "PaymentMethod",
+    "PaymentProvider",
     "PaymentStatus",
+    "PaymentWebhookEvent",
     "Plan",
     "Student",
     "SubscriptionStatus",
