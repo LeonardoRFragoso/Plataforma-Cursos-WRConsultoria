@@ -277,6 +277,10 @@ jobs:
             -e ALLOWED_HOSTS="$ALLOWED_HOSTS" \
             -e CORS_ORIGINS="$CORS_ORIGINS" \
             -e MERCADO_PAGO_MOCK_MODE=false \
+            -e ASAAS_MOCK_MODE=false \
+            -e EMAIL_MOCK_MODE=false \
+            -e EMAIL_ENABLED=false \
+            -e ASAAS_WEBHOOK_BASE_URL=https://api.release-test.example \
             -e RATE_LIMIT_ENABLED=true \
             -e DOCS_ENABLED=false \
             -p 18001:8000 \

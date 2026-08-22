@@ -277,21 +277,35 @@ async def mercado_pago_webhook(
         )
 
     try:
-        enrollment_id = UUID(request.external_reference)
+        external_ref_uuid = UUID(request.external_reference)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid external reference",
         )
 
+    # Look up Payment by external_reference.
+    # New format: external_reference = str(payment_id) → look up by Payment.id
+    # Old format: external_reference = str(enrollment_id) → look up by enrollment_id
     stmt = (
         select(Payment, Tenant)
         .join(Tenant, Payment.tenant_id == Tenant.id)
-        .where(Payment.enrollment_id == enrollment_id)
+        .where(Payment.id == external_ref_uuid)
         .order_by(Payment.created_at.desc())
     )
     result = await db.execute(stmt.limit(1))
     row = result.first()
+
+    if not row:
+        # Fallback: try looking up by enrollment_id (backward compat)
+        stmt = (
+            select(Payment, Tenant)
+            .join(Tenant, Payment.tenant_id == Tenant.id)
+            .where(Payment.enrollment_id == external_ref_uuid)
+            .order_by(Payment.created_at.desc())
+        )
+        result = await db.execute(stmt.limit(1))
+        row = result.first()
 
     if not row:
         raise HTTPException(
@@ -299,7 +313,7 @@ async def mercado_pago_webhook(
             detail="Payment not found",
         )
 
-    _payment, tenant = row
+    payment, tenant = row
     # Access token do Mercado Pago lido do TenantSecret criptografado.
     # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
     # mantido apenas para janela de migração pós-deploy).
@@ -346,10 +360,11 @@ async def mercado_pago_webhook(
         )
 
     payment, enrollment = row
-    if payment.enrollment_id != enrollment_id:
+    # Verify the payment matches the one we found earlier
+    if payment.id != external_ref_uuid and payment.enrollment_id != external_ref_uuid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Enrollment mismatch",
+            detail="Payment mismatch",
         )
 
     status_map = {
