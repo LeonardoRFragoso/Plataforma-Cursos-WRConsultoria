@@ -39,18 +39,24 @@ def upgrade() -> None:
         "EXCEPTION WHEN OTHERS THEN NULL; END $$"
     )
 
-    # 2. Create paymentprovider enum.
-    paymentprovider = sa.Enum(
-        'MERCADO_PAGO', 'ASAAS', name='paymentprovider'
+    # 2. Create paymentprovider enum (checkfirst doesn't work reliably
+    # with asyncpg, so use DO $$ block).
+    op.execute(
+        "DO $$ BEGIN "
+        "CREATE TYPE paymentprovider AS ENUM ('MERCADO_PAGO', 'ASAAS'); "
+        "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
     )
-    paymentprovider.create(bind, checkfirst=True)
 
     # 3. Add provider columns to payments.
+    # Use postgresql.ENUM with create_type=False to avoid duplicate creation.
+    provider_enum = postgresql.ENUM(
+        'MERCADO_PAGO', 'ASAAS', name='paymentprovider', create_type=False
+    )
     op.add_column(
         'payments',
         sa.Column(
             'provider',
-            sa.Enum('MERCADO_PAGO', 'ASAAS', name='paymentprovider'),
+            provider_enum,
             nullable=False,
             server_default='MERCADO_PAGO',
         ),
@@ -88,7 +94,9 @@ def upgrade() -> None:
         ),
         sa.Column(
             'provider',
-            sa.Enum('MERCADO_PAGO', 'ASAAS', name='paymentprovider'),
+            postgresql.ENUM(
+                'MERCADO_PAGO', 'ASAAS', name='paymentprovider', create_type=False
+            ),
             nullable=False,
             server_default='MERCADO_PAGO',
         ),
@@ -140,7 +148,9 @@ def upgrade() -> None:
         ),
         sa.Column(
             'provider',
-            sa.Enum('MERCADO_PAGO', 'ASAAS', name='paymentprovider'),
+            postgresql.ENUM(
+                'MERCADO_PAGO', 'ASAAS', name='paymentprovider', create_type=False
+            ),
             nullable=False,
             server_default='ASAAS',
         ),
@@ -203,6 +213,6 @@ def downgrade() -> None:
     op.drop_column('payments', 'provider_payment_id')
     op.drop_column('payments', 'provider')
 
-    sa.Enum(name='paymentprovider').drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS paymentprovider")
     # NOTE: cannot remove a single value from a postgres enum; leave
     # UNDEFINED in paymentmethod to avoid cascading type rebuilds.
