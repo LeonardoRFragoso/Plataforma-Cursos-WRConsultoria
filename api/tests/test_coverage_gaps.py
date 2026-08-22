@@ -323,37 +323,117 @@ async def test_webhook_provider_retrieval_failure(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_webhook_customer_mismatch(client, monkeypatch):
-    """Identity verification detects customer mismatch."""
+    """Identity verification detects customer mismatch.
+
+    Creates its own deterministic fixture chain (User → Student → Course →
+    Class → Enrollment → PaymentCustomer → Payment) so it never depends on
+    pre-existing seed data and never skips.
+    """
+    from datetime import timedelta
+
     from app.core.config import settings
+    from app.core.utils import utc_now
+    from app.models.class_model import Class, ClassStatus
+    from app.models.course import Course, CourseModality, CourseType
+    from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
+    from app.models.payment import PaymentCustomer
+    from app.models.student import Student
+
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", False)
 
     await _setup_asaas_tenant()
 
-    # Create payment with enrollment — use existing seeded enrollment
-    from sqlalchemy import select
-
-    from app.models.enrollment import Enrollment
-    from app.models.payment import PaymentCustomer
-
     async with AsyncSessionLocal() as db:
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
-        # Find an existing enrollment in WR tenant
-        enrollment = (await db.execute(
-            select(Enrollment).where(Enrollment.tenant_id == WR_TENANT_ID).limit(1)
-        )).scalar_one_or_none()
-        if not enrollment:
-            pytest.skip("No seeded enrollment found for customer mismatch test")
 
-        # Create PaymentCustomer mapping with different customer ID
+        # 1. Student user
+        stu_user = User(
+            email=f"cm_stu_{uuid.uuid4().hex[:6]}@wr.test",
+            full_name="Customer Mismatch Student",
+            cpf=str(uuid.uuid4().int)[:11],
+            password_hash=hash_password("pass123"),
+            role=UserRole.STUDENT,
+            is_active=True,
+            tenant_id=WR_TENANT_ID,
+        )
+        db.add(stu_user)
+        await db.flush()
+
+        # 2. Student
+        student = Student(
+            user_id=stu_user.id,
+            tenant_id=WR_TENANT_ID,
+            cpf=str(uuid.uuid4().int)[:11],
+            phone="11999999999",
+        )
+        db.add(student)
+        await db.flush()
+
+        # 3. Admin (required as class responsible_admin_id)
+        admin = User(
+            email=f"cm_admin_{uuid.uuid4().hex[:6]}@wr.test",
+            full_name="Customer Mismatch Admin",
+            cpf=str(uuid.uuid4().int)[:11],
+            password_hash=hash_password("pass123"),
+            role=UserRole.ADMIN,
+            is_active=True,
+            tenant_id=WR_TENANT_ID,
+        )
+        db.add(admin)
+        await db.flush()
+
+        # 4. Course
+        course = Course(
+            tenant_id=WR_TENANT_ID,
+            code=f"CM-{uuid.uuid4().hex[:6].upper()}",
+            name="Customer Mismatch Course",
+            category="Test",
+            carga_horaria=8,
+            modality=CourseModality.EAD,
+            tipo_curso=CourseType.FORMACAO,
+            price=299.90,
+            is_active=True,
+        )
+        db.add(course)
+        await db.flush()
+
+        # 5. Class
+        start = utc_now().date() + timedelta(days=1)
+        cls = Class(
+            tenant_id=WR_TENANT_ID,
+            course_id=course.id,
+            responsible_admin_id=admin.id,
+            start_date=start,
+            end_date=start + timedelta(days=30),
+            max_students=20,
+            status=ClassStatus.ABERTA,
+        )
+        db.add(cls)
+        await db.flush()
+
+        # 6. Enrollment
+        enrollment = Enrollment(
+            tenant_id=WR_TENANT_ID,
+            student_id=student.id,
+            class_id=cls.id,
+            price=299.90,
+            status=EnrollmentStatus.PENDENTE,
+            source=EnrollmentSource.INDIVIDUAL,
+        )
+        db.add(enrollment)
+        await db.flush()
+
+        # 7. PaymentCustomer mapping with a known customer ID
         mapping = PaymentCustomer(
             tenant_id=WR_TENANT_ID,
             provider=PaymentProvider.ASAAS,
             provider_customer_id="cus_internal_mapping",
-            student_id=enrollment.student_id,
+            student_id=student.id,
         )
         db.add(mapping)
         await db.flush()
-        # Create payment
+
+        # 8. Payment
         payment = Payment(
             tenant_id=WR_TENANT_ID,
             enrollment_id=enrollment.id,
