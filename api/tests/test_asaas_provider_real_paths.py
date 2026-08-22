@@ -208,7 +208,7 @@ async def test_asaas_get_webhook_real_path():
 
 @pytest.mark.asyncio
 async def test_asaas_update_webhook_real_path():
-    """update_webhook calls the API and returns WebhookConfig."""
+    """update_webhook calls PUT /v3/webhooks/{id} (NOT POST) and returns WebhookConfig."""
     provider = AsaasProvider(api_key="fake_key", mock=False, sandbox=True)
 
     mock_response = MagicMock()
@@ -223,7 +223,7 @@ async def test_asaas_update_webhook_real_path():
     }
     mock_response.text = "{}"
 
-    with patch("httpx.AsyncClient.request", return_value=mock_response):
+    with patch("httpx.AsyncClient.request", return_value=mock_response) as mock_req:
         result = await provider.update_webhook(
             webhook_id="wh_upd_123",
             name="Updated",
@@ -234,6 +234,12 @@ async def test_asaas_update_webhook_real_path():
 
     assert result.id == "wh_upd_123"
     assert result.enabled is True
+
+    # P0 regression: update_webhook MUST use PUT, not POST
+    call_args = mock_req.call_args
+    assert call_args.kwargs.get("method") == "PUT" or call_args.args[0] == "PUT"
+    url = call_args.kwargs.get("url", "") or (call_args.args[1] if len(call_args.args) > 1 else "")
+    assert "/v3/webhooks/wh_upd_123" in url
 
 
 @pytest.mark.asyncio
@@ -283,3 +289,121 @@ async def test_asaas_request_network_error_raises_sanitized():
 
     assert "connection refused" not in str(exc_info.value)
     assert exc_info.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_reconcile_webhook_existing_uses_put():
+    """reconcile_webhook uses PUT to update an existing webhook (not POST)."""
+    provider = AsaasProvider(api_key="fake_key", mock=False, sandbox=True)
+
+    # list_webhooks returns one matching webhook
+    list_response = MagicMock()
+    list_response.status_code = 200
+    list_response.json.return_value = {
+        "data": [
+            {
+                "id": "wh_existing_123",
+                "name": "WR Cursos Payments - wr",
+                "url": "https://old.test/webhook",
+                "enabled": False,
+                "interrupted": True,
+                "event": {"paymentReceived": False},
+            }
+        ],
+        "totalCount": 1,
+    }
+    list_response.text = "{}"
+
+    # update response
+    update_response = MagicMock()
+    update_response.status_code = 200
+    update_response.json.return_value = {
+        "id": "wh_existing_123",
+        "name": "WR Cursos Payments - wr",
+        "url": "https://new.test/webhook",
+        "enabled": True,
+        "interrupted": False,
+        "event": {"paymentReceived": True},
+    }
+    update_response.text = "{}"
+
+    call_count = [0]
+
+    def mock_request_side_effect(*args, **kwargs):
+        call_count[0] += 1
+        # First call is list_webhooks (GET /v3/webhooks)
+        if call_count[0] == 1:
+            return list_response
+        # Second call is update_webhook (must be PUT)
+        return update_response
+
+    with patch("httpx.AsyncClient.request", side_effect=mock_request_side_effect) as mock_req:
+        result = await provider.reconcile_webhook(
+            webhook_name="WR Cursos Payments - wr",
+            webhook_url="https://new.test/webhook",
+            auth_token="x" * 43,
+        )
+
+    assert result.id == "wh_existing_123"
+    assert result.enabled is True
+
+    # Verify the second call (update) used PUT, not POST
+    calls = mock_req.call_args_list
+    assert len(calls) == 2
+    update_call = calls[1]
+    update_method = update_call.kwargs.get("method") or (update_call.args[0] if update_call.args else None)
+    assert update_method == "PUT", f"reconcile_webhook update must use PUT, got {update_method}"
+    update_url = update_call.kwargs.get("url", "") or (update_call.args[1] if len(update_call.args) > 1 else "")
+    assert "/v3/webhooks/wh_existing_123" in update_url
+
+
+@pytest.mark.asyncio
+async def test_reconcile_webhook_new_uses_post():
+    """reconcile_webhook uses POST to create a new webhook when none exists."""
+    provider = AsaasProvider(api_key="fake_key", mock=False, sandbox=True)
+
+    # list_webhooks returns empty
+    list_response = MagicMock()
+    list_response.status_code = 200
+    list_response.json.return_value = {"data": [], "totalCount": 0}
+    list_response.text = "{}"
+
+    # create response
+    create_response = MagicMock()
+    create_response.status_code = 200
+    create_response.json.return_value = {
+        "id": "wh_new_456",
+        "name": "WR Cursos Payments - wr",
+        "url": "https://new.test/webhook",
+        "enabled": True,
+        "interrupted": False,
+        "event": {"paymentReceived": True},
+    }
+    create_response.text = "{}"
+
+    call_count = [0]
+
+    def mock_request_side_effect(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return list_response
+        return create_response
+
+    with patch("httpx.AsyncClient.request", side_effect=mock_request_side_effect) as mock_req:
+        result = await provider.reconcile_webhook(
+            webhook_name="WR Cursos Payments - wr",
+            webhook_url="https://new.test/webhook",
+            auth_token="x" * 43,
+        )
+
+    assert result.id == "wh_new_456"
+    assert result.enabled is True
+
+    # Verify the second call (create) used POST
+    calls = mock_req.call_args_list
+    assert len(calls) == 2
+    create_call = calls[1]
+    create_method = create_call.kwargs.get("method") or (create_call.args[0] if create_call.args else None)
+    assert create_method == "POST", f"reconcile_webhook create must use POST, got {create_method}"
+    create_url = create_call.kwargs.get("url", "") or (create_call.args[1] if len(create_call.args) > 1 else "")
+    assert create_url.endswith("/v3/webhooks")

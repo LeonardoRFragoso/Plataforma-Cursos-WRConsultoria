@@ -365,3 +365,127 @@ async def test_webhook_identity_verification_success(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["state"] == "PROCESSED"
     assert resp.json()["payment_status"] == "APROVADO"
+
+
+@pytest.mark.asyncio
+async def test_pix_ordinary_flow_unlocks_on_payment_received(client, monkeypatch):
+    """Regression: standard PIX purchase unlocks on PAYMENT_RECEIVED (no synthetic CONFIRMED).
+
+    Asaas canonical PIX flow:
+        PAYMENT_CREATED → PAYMENT_RECEIVED
+
+    Access must be released from PAYMENT_RECEIVED. We must NOT require
+    a synthetic PAYMENT_CONFIRMED event for ordinary PIX.
+    """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", False)
+
+    await _create_admin("asaas_pix_flow@wr.test", WR_TENANT_ID)
+    await _setup_asaas_tenant()
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        payment = Payment(
+            tenant_id=WR_TENANT_ID,
+            amount=150.0,
+            status=PaymentStatus.PROCESSANDO,
+            method=PaymentMethod.PIX,
+            provider=PaymentProvider.ASAAS,
+            provider_payment_id="pay_pix_ordinary",
+            checkout_url="https://asaas.test/checkout",
+        )
+        db.add(payment)
+        await db.commit()
+        payment_id = payment.id
+
+    from app.services.asaas_provider import AsaasProvider
+    from app.services.payment_provider_base import PaymentInfoResult
+
+    # Mock get_payment_info to return PIX + RECEIVED status
+    mock_info = PaymentInfoResult(
+        provider_payment_id="pay_pix_ordinary",
+        status="RECEIVED",
+        amount=150.0,
+        billing_type="PIX",
+        customer_id="cus_test",
+        external_reference=str(payment_id),
+    )
+
+    with patch.object(AsaasProvider, "get_payment_info", return_value=mock_info):
+        resp = await client.post(
+            "/api/v1/integrations/asaas/webhook/wr",
+            json={
+                "id": f"evt_pix_recv_{uuid.uuid4().hex[:8]}",
+                "event": "PAYMENT_RECEIVED",
+                "payment": {"id": "pay_pix_ordinary"},
+            },
+            headers={"asaas-access-token": "x" * 43},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "PROCESSED"
+    assert resp.json()["payment_status"] == "APROVADO"
+
+    # Verify payment was actually approved in the DB
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        p = await db.get(Payment, payment_id)
+        assert p.status == PaymentStatus.APROVADO
+
+
+@pytest.mark.asyncio
+async def test_pix_synthetic_confirmed_without_received_is_suspicious(client, monkeypatch):
+    """Regression: a synthetic PAYMENT_CONFIRMED for PIX where status is not CONFIRMED/RECEIVED is rejected.
+
+    Standard PIX never sends PAYMENT_CONFIRMED — it goes directly to PAYMENT_RECEIVED.
+    A PAYMENT_CONFIRMED for PIX where the API shows neither CONFIRMED nor RECEIVED
+    is suspicious and must be rejected by identity verification.
+    """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", False)
+
+    await _create_admin("asaas_pix_synth@wr.test", WR_TENANT_ID)
+    await _setup_asaas_tenant()
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        payment = Payment(
+            tenant_id=WR_TENANT_ID,
+            amount=150.0,
+            status=PaymentStatus.PROCESSANDO,
+            method=PaymentMethod.PIX,
+            provider=PaymentProvider.ASAAS,
+            provider_payment_id="pay_pix_synth",
+            checkout_url="https://asaas.test/checkout",
+        )
+        db.add(payment)
+        await db.commit()
+        payment_id = payment.id
+
+    from app.services.asaas_provider import AsaasProvider
+    from app.services.payment_provider_base import PaymentInfoResult
+
+    # Mock get_payment_info: PIX but status is still PENDING (not CONFIRMED/RECEIVED)
+    mock_info = PaymentInfoResult(
+        provider_payment_id="pay_pix_synth",
+        status="PENDING",
+        amount=150.0,
+        billing_type="PIX",
+        customer_id="cus_test",
+        external_reference=str(payment_id),
+    )
+
+    with patch.object(AsaasProvider, "get_payment_info", return_value=mock_info):
+        resp = await client.post(
+            "/api/v1/integrations/asaas/webhook/wr",
+            json={
+                "id": f"evt_pix_synth_{uuid.uuid4().hex[:8]}",
+                "event": "PAYMENT_CONFIRMED",
+                "payment": {"id": "pay_pix_synth"},
+            },
+            headers={"asaas-access-token": "x" * 43},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "FAILED"
+    assert resp.json()["reason"] == "pix_status_inconsistent"

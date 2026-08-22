@@ -444,7 +444,7 @@ class AsaasProvider:
             payload["events"] = events
         payload["sendType"] = "SEQUENTIALLY"
 
-        result = await self._request("POST", f"/v3/webhooks/{webhook_id}", json=payload)
+        result = await self._request("PUT", f"/v3/webhooks/{webhook_id}", json=payload)
         return WebhookConfig(
             id=result.get("id", webhook_id),
             name=result.get("name", name or ""),
@@ -590,7 +590,7 @@ class AsaasProvider:
                 "interrupted": False,
                 "events": (json or {}).get("events", []),
             }
-        if method == "POST" and path.startswith("/v3/webhooks/"):
+        if method == "PUT" and path.startswith("/v3/webhooks/"):
             return {
                 "id": path.split("/")[-1],
                 "name": (json or {}).get("name", ""),
