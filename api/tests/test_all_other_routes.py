@@ -8,6 +8,7 @@ from app.core.utils import utc_now
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
 from app.services.mercado_pago_service import MercadoPagoService
+from tests.conftest import make_valid_cpf
 
 COMPANY_PAYLOAD = {
     "legal_name": "Empresa Teste LTDA",
@@ -72,7 +73,7 @@ async def _create_student(client, admin_headers):
         "email": f"student_{uuid.uuid4().hex[:8]}@example.com",
         "full_name": "Aluno Teste",
         "password": "student123",
-        "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+        "cpf": make_valid_cpf(),
         "phone": "(11) 99999-9999",
         "company": "Empresa Teste",
         "address": "Rua do Aluno, 123",
@@ -114,7 +115,7 @@ class TestAuth:
             "email": f"user_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         response = await client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 200
@@ -125,7 +126,7 @@ class TestAuth:
             "email": f"user_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         response = await client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 200
@@ -136,7 +137,7 @@ class TestAuth:
             "email": "duplicate@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post("/api/v1/auth/register", json=payload)
@@ -147,7 +148,7 @@ class TestAuth:
             "email": "login@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -158,7 +159,7 @@ class TestAuth:
         assert "access_token" in response.json()
 
     async def test_login_with_cpf(self, client):
-        cpf = f"{uuid.uuid4().int % 10**11:011d}"
+        cpf = make_valid_cpf()
         payload = {
             "email": f"login_cpf_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Usuário Teste",
@@ -184,7 +185,7 @@ class TestAuth:
             "email": "wrongpass@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         await client.post("/api/v1/auth/register", json=payload)
         response = await client.post(
@@ -199,7 +200,7 @@ class TestAuth:
             "email": "inactive@example.com",
             "full_name": "Usuário Inativo",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         await client.post("/api/v1/auth/register", json=payload)
         async with AsyncSessionLocal() as session:
@@ -218,7 +219,7 @@ class TestAuth:
             "email": "refresh@example.com",
             "full_name": "Usuário Teste",
             "password": "senha123",
-            "cpf": f"{uuid.uuid4().int % 10**11:011d}",
+            "cpf": make_valid_cpf(),
         }
         await client.post("/api/v1/auth/register", json=payload)
         login = await client.post(
@@ -373,7 +374,7 @@ class TestStudents:
         course_id = await _create_course(client, admin_headers)
         admin_id = await _admin_id(client, admin_headers)
         class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        cpf = f"{uuid.uuid4().int % 10**11:011d}"
+        cpf = make_valid_cpf()
         payload = {
             "email": f"student1_{uuid.uuid4().hex[:8]}@example.com",
             "full_name": "Aluno 1",
