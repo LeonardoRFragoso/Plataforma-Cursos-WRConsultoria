@@ -1,0 +1,195 @@
+"""Email delivery service.
+
+Sends transactional emails via SMTP (password reset, account activation).
+Tenant-aware: uses tenant branding/name in the email template.
+
+Requirements:
+- Tenant-aware frontend link (uses FRONTEND_URL or tenant custom domain)
+- Tenant-aware branding/name
+- HTML + text fallback
+- SMTP timeout
+- Sanitized exceptions (no credentials in logs)
+- Production tokens never returned through HTTP
+- Automated tests mock email sending (EMAIL_MOCK_MODE=true)
+- CI sends no real email (EMAIL_MOCK_MODE defaults to true)
+"""
+
+from __future__ import annotations
+
+import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Any
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class EmailServiceError(Exception):
+    """Sanitized email error — never contains SMTP credentials."""
+
+
+class EmailService:
+    """SMTP-based email service with mock mode for tests/CI."""
+
+    def __init__(
+        self,
+        smtp_server: str | None = None,
+        smtp_port: int | None = None,
+        smtp_user: str | None = None,
+        smtp_password: str | None = None,
+        mock: bool | None = None,
+    ) -> None:
+        self._smtp_server = smtp_server or settings.SMTP_SERVER
+        self._smtp_port = smtp_port or settings.SMTP_PORT
+        self._smtp_user = smtp_user or settings.SMTP_USER
+        self._smtp_password = smtp_password or settings.SMTP_PASSWORD
+        self._mock = mock if mock is not None else getattr(settings, "EMAIL_MOCK_MODE", True)
+        self._sent: list[dict[str, Any]] = []  # For test inspection
+
+    async def send_email(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html_body: str,
+        text_body: str | None = None,
+        from_name: str | None = None,
+    ) -> bool:
+        """Send an email. Returns True if sent (or mocked).
+
+        Raises EmailServiceError on SMTP failure (sanitized — no
+        credentials in the error message).
+        """
+        if self._mock:
+            self._sent.append({
+                "to": to,
+                "subject": subject,
+                "html_body": html_body,
+                "text_body": text_body,
+                "mock": True,
+            })
+            logger.info("Email mock sent to %s: %s", to, subject)
+            return True
+
+        if not self._smtp_user or not self._smtp_password:
+            logger.warning("SMTP not configured — email to %s not sent", to)
+            return False
+
+        from_addr = f"{from_name or 'Plataforma'} <{self._smtp_user}>"
+        msg = MIMEMultipart("alternative")
+        msg["From"] = from_addr
+        msg["To"] = to
+        msg["Subject"] = subject
+
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+
+        try:
+            with smtplib.SMTP(self._smtp_server, self._smtp_port, timeout=30) as server:
+                server.starttls()
+                server.login(self._smtp_user, self._smtp_password)
+                server.sendmail(self._smtp_user, [to], msg.as_string())
+            logger.info("Email sent to %s: %s", to, subject)
+            return True
+        except smtplib.SMTPException as exc:
+            # Sanitize: never include credentials in the error
+            raise EmailServiceError(f"Failed to send email to {to}") from exc
+        except Exception as exc:
+            raise EmailServiceError(f"Failed to send email to {to}") from exc
+
+    async def send_password_reset(
+        self,
+        *,
+        to: str,
+        reset_token: str,
+        frontend_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Send a password reset email with a tenant-aware link."""
+        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+        subject = f"Redefinição de senha — {tenant_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{tenant_name}</h2>
+            <p>Você solicitou a redefinição de sua senha.</p>
+            <p>Clique no link abaixo para redefinir sua senha:</p>
+            <p><a href="{reset_link}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">Redefinir senha</a></p>
+            <p>Se você não solicitou esta redefinição, ignore este email.</p>
+            <p style="color: #999; font-size: 12px;">Este link expira em 1 hora.</p>
+        </body>
+        </html>
+        """
+        text = f"""
+{tenant_name}
+
+Você solicitou a redefinição de sua senha.
+Acesse o link para redefinir: {reset_link}
+
+Se você não solicitou esta redefinição, ignore este email.
+Este link expira em 1 hora.
+        """
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_account_activation(
+        self,
+        *,
+        to: str,
+        activation_token: str,
+        frontend_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Send an account activation email with a tenant-aware link."""
+        activation_link = f"{frontend_url}/activate?token={activation_token}"
+        subject = f"Ative sua conta — {tenant_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{tenant_name}</h2>
+            <p>Bem-vindo! Sua conta foi criada.</p>
+            <p>Clique no link abaixo para ativar sua conta:</p>
+            <p><a href="{activation_link}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Ativar conta</a></p>
+            <p style="color: #999; font-size: 12px;">Se você não criou esta conta, ignore este email.</p>
+        </body>
+        </html>
+        """
+        text = f"""
+{tenant_name}
+
+Bem-vindo! Sua conta foi criada.
+Acesse o link para ativar: {activation_link}
+
+Se você não criou esta conta, ignore este email.
+        """
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    @property
+    def sent_emails(self) -> list[dict[str, Any]]:
+        """List of sent emails (for test inspection in mock mode)."""
+        return self._sent
+
+
+# Singleton instance (mock by default)
+_email_service: EmailService | None = None
+
+
+def get_email_service() -> EmailService:
+    """Get or create the singleton EmailService instance."""
+    global _email_service
+    if _email_service is None:
+        _email_service = EmailService()
+    return _email_service
+
+
+def reset_email_service() -> None:
+    """Reset the singleton (for tests)."""
+    global _email_service
+    _email_service = None

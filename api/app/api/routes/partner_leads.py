@@ -5,11 +5,13 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db, get_db_privileged
 from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
 from app.models.user import User, UserRole
+from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
 
 router = APIRouter()
@@ -117,6 +119,19 @@ async def approve_partner_lead(
     )
 
     await db.commit()
+
+    # Send activation email (mock mode in dev/test/CI — no real email sent)
+    try:
+        email_service = get_email_service()
+        await email_service.send_account_activation(
+            to=admin_user.email,
+            activation_token=activation_token,
+            frontend_url=settings.FRONTEND_URL,
+            tenant_name=tenant.name,
+        )
+    except EmailServiceError:
+        pass  # Don't fail the signup if email fails
+
     return {
         "tenant_id": tenant.id,
         "admin_user_id": admin_user.id,

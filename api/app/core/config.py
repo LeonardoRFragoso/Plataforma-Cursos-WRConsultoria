@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+    # Mock mode: emails are not sent, just logged and stored for inspection.
+    # Defaults to True for safety — production must explicitly set to False.
+    EMAIL_MOCK_MODE: bool = True
     
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: list[str] = [
