@@ -866,7 +866,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
@@ -953,7 +953,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // Login through the real UI
     await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
-    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('input[type="password"]').fill(ALFA_STUDENT_PASSWORD)
     await page.locator('button[type="submit"]').click()
     await page.waitForTimeout(3000)
 
@@ -1056,7 +1056,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
@@ -1120,7 +1120,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     await page.waitForTimeout(2000)
 
     await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
-    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('input[type="password"]').fill(ALFA_STUDENT_PASSWORD)
     await page.locator('button[type="submit"]').click()
     await page.waitForTimeout(3000)
 
@@ -1198,7 +1198,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
@@ -1260,7 +1260,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
       return
     }
 
-    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', 'test-alfa-student-pass', 'alfa', ALFA_ORIGIN)
+    const { access_token: aluno2Token } = await loginViaAPI('aluno2@alfa.demo', ALFA_STUDENT_PASSWORD, 'alfa', ALFA_ORIGIN)
     expect(aluno2Token).toBeTruthy()
 
     const { access_token: alfaAdminToken } = await loginViaAPI(ALFA_ADMIN_EMAIL, ALFA_ADMIN_PASSWORD, 'alfa', ALFA_ORIGIN)
@@ -1326,7 +1326,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
 
     // Login through the real UI
     await page.locator('input[type="text"]').fill('aluno2@alfa.demo')
-    await page.locator('input[type="password"]').fill('test-alfa-student-pass')
+    await page.locator('input[type="password"]').fill(ALFA_STUDENT_PASSWORD)
     await page.locator('button[type="submit"]').click()
     await page.waitForTimeout(3000)
 
