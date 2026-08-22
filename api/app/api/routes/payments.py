@@ -11,7 +11,7 @@ from app.core.security import get_current_admin, get_current_tenant_id, get_curr
 from app.models.class_model import Class
 from app.models.course import Course
 from app.models.enrollment import Enrollment
-from app.models.payment import Payment, PaymentStatus
+from app.models.payment import Payment, PaymentProvider, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -23,6 +23,11 @@ from app.schemas.payment import (
     PaymentWebhookRequest,
 )
 from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
+from app.services.payment_customer_sync import get_or_create_student_customer
+from app.services.payment_provider_base import (
+    PaymentProviderError,
+    resolve_provider,
+)
 from app.services.payment_reconciliation import reconcile_payment_status
 from app.services.tenant_secret_service import get_mercado_pago_access_token
 
@@ -389,12 +394,21 @@ async def delete_payment(
 
 
 @router.post("/{payment_id}/checkout")
-async def create_mercado_pago_checkout(
+async def create_checkout(
     payment_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    """Create or reuse a provider checkout for a payment.
+
+    Uses the provider abstraction to support Mercado Pago and Asaas.
+    Idempotency: if the payment already has a provider_payment_id and
+    checkout_url, and the payment is still in a pending/processing state,
+    the existing checkout_url is returned without creating a new external
+    charge. This prevents duplicate charges from double-clicks, refreshes,
+    or retries.
+    """
     tenant_id = current_tenant_id.get()
     if tenant_id is None:
         tenant_id = getattr(request.state, "tenant_id", None)
@@ -424,7 +438,7 @@ async def create_mercado_pago_checkout(
             detail="Payment not found",
         )
 
-    payment, enrollment, _student, user, _class, course = row
+    payment, enrollment, student, user, _class, course = row
 
     is_owner = str(user.id) == current_user["user_id"]
     is_admin = current_user.get("role") in ("admin", "super_admin")
@@ -434,45 +448,99 @@ async def create_mercado_pago_checkout(
             detail="Cannot checkout a payment that does not belong to you",
         )
 
-    access_token = None
-    # Access token do Mercado Pago lido do TenantSecret criptografado.
-    # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
-    # mantido apenas para janela de migração pós-deploy).
-    access_token = await get_mercado_pago_access_token(db, tenant_id)
-    if not access_token:
-        tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-        tenant = tenant_result.scalar_one_or_none()
-        if tenant and tenant.settings:
-            access_token = tenant.settings.get("mp_access_token")
+    # ── Idempotency: reuse existing external charge if still active ──
+    if (
+        payment.provider_payment_id
+        and payment.checkout_url
+        and payment.status in (PaymentStatus.PENDENTE, PaymentStatus.PROCESSANDO)
+    ):
+        return {
+            "checkout_url": payment.checkout_url,
+            "preference_id": payment.provider_payment_id,
+            "reused": True,
+        }
 
+    # ── Resolve tenant settings for provider selection ──
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    tenant_settings = (tenant.settings if tenant else None) or {}
+
+    # ── Resolve the active provider for this tenant ──
     try:
-        preference = await MercadoPagoService.create_preference(
-            enrollment_id=str(enrollment.id),
-            amount=payment.amount,
-            student_email=user.email,
-            course_name=course.name,
-            access_token=access_token,
-        )
-    except Exception as exc:
+        provider = await resolve_provider(db, tenant_id, tenant_settings)
+    except PaymentProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
 
-    payment.mercado_pago_id = preference.get("id")
+    provider_name = provider.provider
+
+    # ── For Asaas: ensure customer exists ──
+    customer_id = None
+    if provider_name == PaymentProvider.ASAAS:
+        try:
+            customer_id = await get_or_create_student_customer(
+                db,
+                provider,
+                tenant_id=tenant_id,
+                student_id=student.id,
+                provider_name=provider_name,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+    # ── Create the checkout/charge at the provider ──
+    try:
+        checkout = await provider.create_checkout(
+            enrollment_id=enrollment.id,
+            amount=payment.amount,
+            student_email=user.email,
+            student_name=user.full_name,
+            course_name=course.name,
+            method=payment.method,
+            customer_id=customer_id,
+        )
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    # ── Persist provider fields on the payment ──
+    payment.provider = provider_name
+    payment.provider_payment_id = checkout.provider_payment_id
+    payment.checkout_url = checkout.checkout_url
+    # Legacy compatibility: also set mercado_pago_id for MP
+    if provider_name == PaymentProvider.MERCADO_PAGO:
+        payment.mercado_pago_id = checkout.provider_payment_id
     payment.status = PaymentStatus.PROCESSANDO
     await db.commit()
 
-    # In mock mode (non-production), return a RELATIVE URL so the browser
-    # stays on whichever tenant frontend it is currently using. This avoids
-    # redirecting an Alfa purchase to the WR frontend when FRONTEND_URL
-    # points to WR. The browser's window.location.origin determines the
-    # tenant frontend automatically.
-    if settings.MERCADO_PAGO_MOCK_MODE and settings.ENVIRONMENT.lower() != "production":
+    # ── Mock mode: return relative URL for demo flow ──
+    if (
+        provider_name == PaymentProvider.MERCADO_PAGO
+        and settings.MERCADO_PAGO_MOCK_MODE
+        and settings.ENVIRONMENT.lower() != "production"
+    ):
         checkout_url = f"/demo/payment/{payment_id}"
-        return {"checkout_url": checkout_url, "preference_id": preference.get("id")}
+        return {"checkout_url": checkout_url, "preference_id": checkout.provider_payment_id}
 
-    return {"checkout_url": preference.get("init_point"), "preference_id": preference.get("id")}
+    if (
+        provider_name == PaymentProvider.ASAAS
+        and getattr(settings, "ASAAS_MOCK_MODE", False)
+        and settings.ENVIRONMENT.lower() != "production"
+    ):
+        checkout_url = f"/demo/payment/{payment_id}"
+        return {"checkout_url": checkout_url, "preference_id": checkout.provider_payment_id}
+
+    return {
+        "checkout_url": checkout.checkout_url,
+        "preference_id": checkout.provider_payment_id,
+    }
 
 
 # ------------------------------------------------------------------

@@ -267,8 +267,10 @@ async def test_checkout_uses_server_price(client, admin_headers, monkeypatch):
             captured["amount"] = kwargs.get("amount", args[1] if len(args) > 1 else None)
             return {"id": "PREF-SERVER-PRICE", "init_point": "https://mp.init"}
 
+    # Monkeypatch the MercadoPagoService in the provider module (where
+    # MercadoPagoProvider imports it), not in the route module.
     monkeypatch.setattr(
-        "app.api.routes.payments.MercadoPagoService",
+        "app.services.mercado_pago_provider.MercadoPagoService",
         FakePreference,
     )
 
