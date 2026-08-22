@@ -26,6 +26,7 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
 )
+from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
 
 
@@ -381,9 +382,19 @@ async def forgot_password(
     if _can_return_token():
         return {"reset_token": raw}
 
-    # Staging/production: generic response, no token leakage.
-    # If SMTP is configured, an email would be sent here.
+    # Staging/production: send email with reset link, return generic response.
     # If SMTP is not configured, no email is sent but the token is NOT exposed.
+    try:
+        email_service = get_email_service()
+        await email_service.send_password_reset(
+            to=user.email,
+            reset_token=raw,
+            frontend_url=settings.FRONTEND_URL,
+            tenant_name="Plataforma",
+        )
+    except EmailServiceError:
+        pass  # Don't leak email errors to the client
+
     return dict(_GENERIC_RESET_RESPONSE)
 
 

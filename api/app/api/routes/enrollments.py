@@ -80,8 +80,12 @@ async def list_my_enrollments(
     if current_user.get("role") != "student":
         return []
 
+    tenant_id = get_current_tenant_id()
     user_id = UUID(current_user["user_id"])
-    stmt = select(Student).where(Student.user_id == user_id)
+    stmt = select(Student).where(
+        Student.user_id == user_id,
+        Student.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     student = result.scalar_one_or_none()
     if not student:
@@ -91,7 +95,10 @@ async def list_my_enrollments(
         select(Enrollment, Class, Course)
         .join(Class, Enrollment.class_id == Class.id)
         .join(Course, Class.course_id == Course.id)
-        .where(Enrollment.student_id == student.id)
+        .where(
+            Enrollment.student_id == student.id,
+            Enrollment.tenant_id == tenant_id,
+        )
     )
     result = await db.execute(stmt)
     rows = result.all()
@@ -240,7 +247,10 @@ async def purchase_enrollment(
             detail="Student profile not found",
         )
 
-    stmt = select(Course).where(Course.id == data.course_id)
+    stmt = select(Course).where(
+        Course.id == data.course_id,
+        Course.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     course = result.scalar_one_or_none()
     if not course:
@@ -260,6 +270,7 @@ async def purchase_enrollment(
         .join(Class, Enrollment.class_id == Class.id)
         .where(
             Enrollment.student_id == student.id,
+            Enrollment.tenant_id == tenant_id,
             Class.course_id == course.id,
         )
     )
@@ -269,7 +280,10 @@ async def purchase_enrollment(
         payment = (
             await db.execute(
                 select(Payment)
-                .where(Payment.enrollment_id == enrollment.id)
+                .where(
+                    Payment.enrollment_id == enrollment.id,
+                    Payment.tenant_id == tenant_id,
+                )
                 .order_by(Payment.created_at.desc())
             )
         ).scalar_one_or_none()
@@ -314,6 +328,7 @@ async def purchase_enrollment(
         select(Class)
         .where(
             Class.course_id == course.id,
+            Class.tenant_id == tenant_id,
             Class.status == ClassStatus.ABERTA,
         )
         .order_by(Class.start_date.asc())

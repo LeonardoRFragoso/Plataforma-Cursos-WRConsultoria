@@ -29,6 +29,10 @@ def prod_settings(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.CORS_ORIGINS", ["https://app.example.com"])
     monkeypatch.setattr("app.core.config.settings.RATE_LIMIT_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", False)
+    monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
+    monkeypatch.setattr("app.core.config.settings.EMAIL_MOCK_MODE", False)
+    monkeypatch.setattr("app.core.config.settings.EMAIL_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "https://api.example.com")
     monkeypatch.delenv("E2E_TEST_MODE", raising=False)
 
 

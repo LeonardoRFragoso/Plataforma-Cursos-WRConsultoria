@@ -10,9 +10,9 @@ import { useAuthStore } from '../stores/auth'
  *
  *   ADMIN:
  *     Dashboard
- *     Gestão        → Cursos, Turmas, Alunos, Matrículas, Pagamentos
+ *     Gestão        → Cursos, Turmas, Empresas, Alunos, Matrículas, Pagamentos
  *     Certificados  → Certificados
- *     Personalização→ White Label
+ *     Configurações → White Label, Financeiro
  *
  *   STUDENT:
  *     Dashboard
@@ -65,10 +65,11 @@ export function useNavConfig() {
             ],
           },
           {
-            label: 'Personalização',
+            label: 'Configurações',
             testid: 'customization',
             items: [
               { to: '/settings/white-label', label: 'White Label', testid: 'white-label' },
+              { to: '/settings/financial', label: 'Financeiro', testid: 'financial-settings' },
             ],
           },
         ],

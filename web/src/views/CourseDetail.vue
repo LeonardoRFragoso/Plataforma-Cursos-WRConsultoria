@@ -101,6 +101,10 @@
                     {{ purchaseError }}
                   </p>
 
+                  <p v-if="course.price > 0 && !courseEnrollment" class="text-xs text-gray-400 mt-3 text-center">
+                    Pagamento seguro via Pix, boleto ou cartão
+                  </p>
+
                   <p v-if="!authStore.isAuthenticated" class="text-sm text-gray-500 mt-4 text-center">
                     Já tem conta?
                     <router-link :to="loginWithRedirect" class="text-primary-600 hover:underline">Entre</router-link>
@@ -169,7 +173,7 @@ async function startPurchase() {
   purchasing.value = true
 
   try {
-    const { data } = await purchaseCourse(course.value.id, 'BOLETO')
+    const { data } = await purchaseCourse(course.value.id, 'UNDEFINED')
     const paymentId = data.payment.id
     const checkout = await createCheckout(paymentId)
     window.location.href = checkout.data.checkout_url

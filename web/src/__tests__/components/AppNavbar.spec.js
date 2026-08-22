@@ -102,7 +102,7 @@ describe('AppNavbar', () => {
     expect(routes.length).toBe(uniqueRoutes.size)
   })
 
-  it('shows admin nav with Dashboard flat + Gestão/Certificados/Personalização dropdown groups', async () => {
+  it('shows admin nav with Dashboard flat + Gestão/Certificados/Configurações dropdown groups', async () => {
     const auth = useAuthStore()
     auth.token = 'tok'
     auth.userRole = 'admin'

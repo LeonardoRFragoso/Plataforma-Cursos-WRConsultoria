@@ -1,7 +1,15 @@
 import uuid
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -15,10 +23,18 @@ class PaymentStatus(str, PyEnum):
     RECUSADO = "RECUSADO"
     REEMBOLSADO = "REEMBOLSADO"
 
+
 class PaymentMethod(str, PyEnum):
     CARTAO = "CARTAO"
     BOLETO = "BOLETO"
     PIX = "PIX"
+    UNDEFINED = "UNDEFINED"
+
+
+class PaymentProvider(str, PyEnum):
+    MERCADO_PAGO = "MERCADO_PAGO"
+    ASAAS = "ASAAS"
+
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -27,7 +43,6 @@ class Payment(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        
         nullable=False,
         index=True,
     )
@@ -36,8 +51,84 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDENTE, nullable=False)
     method = Column(Enum(PaymentMethod), nullable=False)
+    # Generic provider fields (MERCADO_PAGO, ASAAS).
+    provider = Column(
+        Enum(PaymentProvider),
+        default=PaymentProvider.MERCADO_PAGO,
+        nullable=False,
+    )
+    provider_payment_id = Column(String, nullable=True)
+    checkout_url = Column(String, nullable=True)
+    # Legacy Mercado Pago field. Kept for migration/lookup.
     mercado_pago_id = Column(String, nullable=True, unique=True)
     installments = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class PaymentCustomer(Base):
+    __tablename__ = "payment_customers"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "student_id",
+            "provider",
+            name="uq_payment_customer_student_provider",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "company_id",
+            "provider",
+            name="uq_payment_customer_company_provider",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    provider = Column(
+        Enum(PaymentProvider),
+        default=PaymentProvider.MERCADO_PAGO,
+        nullable=False,
+    )
+    provider_customer_id = Column(String, nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class PaymentWebhookEvent(Base):
+    __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "provider",
+            "provider_event_id",
+            name="uq_payment_webhook_event_provider",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    provider = Column(
+        Enum(PaymentProvider),
+        default=PaymentProvider.ASAAS,
+        nullable=False,
+    )
+    provider_event_id = Column(String, nullable=False)
+    event_type = Column(String, nullable=True)
+    provider_payment_id = Column(String, nullable=True)
+    payload = Column(String, nullable=True)
+    processed_at = Column(DateTime, default=utc_now, nullable=False)
+    result = Column(String, nullable=True)

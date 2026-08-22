@@ -58,6 +58,36 @@ def validate_mercado_pago_mock_mode() -> list[str]:
     return issues
 
 
+def validate_asaas_mock_mode() -> list[str]:
+    """Verifica se ASAAS_MOCK_MODE não está ativo em produção."""
+    issues = []
+    if getattr(settings, "ASAAS_MOCK_MODE", False):
+        issues.append("ASAAS_MOCK_MODE must be false in production")
+    return issues
+
+
+def validate_email_mock_mode() -> list[str]:
+    """Verifica se EMAIL_MOCK_MODE não está ativo em produção quando email está habilitado."""
+    issues = []
+    if getattr(settings, "EMAIL_ENABLED", True) and getattr(settings, "EMAIL_MOCK_MODE", True):
+        issues.append(
+            "EMAIL_MOCK_MODE must be false in production when EMAIL_ENABLED is true "
+            "(or set EMAIL_ENABLED=false to explicitly disable email delivery)"
+        )
+    return issues
+
+
+def validate_asaas_webhook_base_url() -> list[str]:
+    """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção."""
+    issues = []
+    if not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
+        issues.append(
+            "ASAAS_WEBHOOK_BASE_URL is empty — must be set in production "
+            "for Asaas webhook registration"
+        )
+    return issues
+
+
 def validate_e2e_test_mode() -> list[str]:
     """Verifica se E2E_TEST_MODE não está ativo em produção."""
     issues = []
@@ -92,6 +122,9 @@ def validate_secrets() -> list[str]:
         + validate_allowed_hosts()
         + validate_tenant_secret_encryption_key()
         + validate_mercado_pago_mock_mode()
+        + validate_asaas_mock_mode()
+        + validate_email_mock_mode()
+        + validate_asaas_webhook_base_url()
         + validate_e2e_test_mode()
         + validate_cors_origins()
         + validate_rate_limit_enabled()

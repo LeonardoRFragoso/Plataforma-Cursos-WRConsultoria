@@ -227,10 +227,11 @@ test.describe('full-stack storefront smoke', () => {
     // 8. Call the real webhook to simulate MP approval
     //    The webhook calls get_payment_info (mocked MP) → returns approved
     //    The webhook then sets Payment APROVADO + Enrollment CONFIRMADA
+    //    external_reference is now the payment UUID (not enrollment_id)
     const webhookRes = await apiPost('/api/v1/payments/webhook/mercado-pago', {
-      id: `mock-mp-payment-${enrollmentId}`,
+      id: `mock-mp-payment-${paymentId}`,
       status: 'approved',
-      external_reference: enrollmentId,
+      external_reference: paymentId,
     })
     expect(webhookRes.status, `Webhook: ${JSON.stringify(webhookRes.data)}`).toBe(200)
     expect(webhookRes.data.status).toBe('ok')

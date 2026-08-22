@@ -5,12 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.context import current_tenant_id
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_user
+from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.models.class_model import Class
+from app.models.company import Company
 from app.models.course import Course
 from app.models.enrollment import Enrollment
-from app.models.payment import Payment, PaymentStatus
+from app.models.payment import Payment, PaymentProvider, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -22,6 +24,14 @@ from app.schemas.payment import (
     PaymentWebhookRequest,
 )
 from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
+from app.services.payment_customer_sync import (
+    get_or_create_company_customer,
+    get_or_create_student_customer,
+)
+from app.services.payment_provider_base import (
+    PaymentProviderError,
+    resolve_provider,
+)
 from app.services.payment_reconciliation import reconcile_payment_status
 from app.services.tenant_secret_service import get_mercado_pago_access_token
 
@@ -42,7 +52,7 @@ def _demo_payment_guard():
         )
 
 
-async def _load_payment_with_context(db: AsyncSession, payment_id: UUID):
+async def _load_payment_with_context(db: AsyncSession, payment_id: UUID, tenant_id: UUID):
     """Load payment with enrollment, student, user, class, course.
 
     Returns (payment, enrollment, student, user, class_obj, course) or None.
@@ -54,7 +64,10 @@ async def _load_payment_with_context(db: AsyncSession, payment_id: UUID):
         .join(User, Student.user_id == User.id)
         .join(Class, Enrollment.class_id == Class.id)
         .join(Course, Class.course_id == Course.id)
-        .where(Payment.id == payment_id)
+        .where(
+            Payment.id == payment_id,
+            Payment.tenant_id == tenant_id,
+        )
     )
     result = await db.execute(stmt)
     row = result.first()
@@ -100,7 +113,11 @@ async def create_payment(
     O cliente nunca é autoridade do preço.
     """
     is_admin = current_user.get("role") in ("admin", "super_admin")
-    stmt = select(Enrollment).where(Enrollment.id == payment_data.enrollment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Enrollment).where(
+        Enrollment.id == payment_data.enrollment_id,
+        Enrollment.tenant_id == tenant_id,
+    )
     if not is_admin:
         stmt = stmt.join(Student).where(Student.user_id == UUID(current_user["user_id"]))
 
@@ -114,6 +131,7 @@ async def create_payment(
         )
 
     payment = Payment(
+        tenant_id=tenant_id,
         enrollment_id=enrollment.id,
         amount=enrollment.price,
         method=payment_data.method,
@@ -140,14 +158,16 @@ async def create_payment_admin(
     Reservada para fluxos auditáveis (ex.: pagamento consolidado em lote).
     Requer papel admin/super_admin.
     """
+    tenant_id = get_current_tenant_id()
     enrollment = await db.get(Enrollment, payment_data.enrollment_id)
-    if not enrollment:
+    if not enrollment or enrollment.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
 
     payment = Payment(
+        tenant_id=tenant_id,
         enrollment_id=enrollment.id,
         amount=payment_data.amount,
         method=payment_data.method,
@@ -165,7 +185,8 @@ async def list_payments(
     skip: int = 0,
     limit: int = 100,
 ):
-    stmt = select(Payment).offset(skip).limit(limit)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Payment).where(Payment.tenant_id == tenant_id).offset(skip).limit(limit)
     result = await db.execute(stmt)
     payments = result.scalars().all()
     return payments
@@ -176,17 +197,44 @@ async def get_payment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = select(Payment).where(Payment.id == payment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Payment).where(
+        Payment.id == payment_id,
+        Payment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     payment = result.scalar_one_or_none()
-    
+
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
-    
-    return payment
+
+    is_admin = current_user.get("role") in ("admin", "super_admin")
+    if is_admin:
+        return payment
+
+    # Student: only own payments (via enrollment->student->user)
+    if payment.enrollment_id:
+        ownership_stmt = (
+            select(Payment)
+            .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .where(
+                Payment.id == payment_id,
+                Payment.tenant_id == tenant_id,
+                User.id == UUID(current_user["user_id"]),
+            )
+        )
+        if (await db.execute(ownership_stmt)).scalar_one_or_none():
+            return payment
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized to access this payment",
+    )
 
 @router.put("/{payment_id}", response_model=PaymentResponse)
 async def update_payment(
@@ -195,7 +243,11 @@ async def update_payment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Payment).where(Payment.id == payment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Payment).where(
+        Payment.id == payment_id,
+        Payment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     payment = result.scalar_one_or_none()
     
@@ -225,21 +277,35 @@ async def mercado_pago_webhook(
         )
 
     try:
-        enrollment_id = UUID(request.external_reference)
+        external_ref_uuid = UUID(request.external_reference)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid external reference",
         )
 
+    # Look up Payment by external_reference.
+    # New format: external_reference = str(payment_id) → look up by Payment.id
+    # Old format: external_reference = str(enrollment_id) → look up by enrollment_id
     stmt = (
         select(Payment, Tenant)
         .join(Tenant, Payment.tenant_id == Tenant.id)
-        .where(Payment.enrollment_id == enrollment_id)
+        .where(Payment.id == external_ref_uuid)
         .order_by(Payment.created_at.desc())
     )
     result = await db.execute(stmt.limit(1))
     row = result.first()
+
+    if not row:
+        # Fallback: try looking up by enrollment_id (backward compat)
+        stmt = (
+            select(Payment, Tenant)
+            .join(Tenant, Payment.tenant_id == Tenant.id)
+            .where(Payment.enrollment_id == external_ref_uuid)
+            .order_by(Payment.created_at.desc())
+        )
+        result = await db.execute(stmt.limit(1))
+        row = result.first()
 
     if not row:
         raise HTTPException(
@@ -247,7 +313,7 @@ async def mercado_pago_webhook(
             detail="Payment not found",
         )
 
-    _payment, tenant = row
+    payment, tenant = row
     # Access token do Mercado Pago lido do TenantSecret criptografado.
     # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
     # mantido apenas para janela de migração pós-deploy).
@@ -294,10 +360,11 @@ async def mercado_pago_webhook(
         )
 
     payment, enrollment = row
-    if payment.enrollment_id != enrollment_id:
+    # Verify the payment matches the one we found earlier
+    if payment.id != external_ref_uuid and payment.enrollment_id != external_ref_uuid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Enrollment mismatch",
+            detail="Payment mismatch",
         )
 
     status_map = {
@@ -327,7 +394,11 @@ async def delete_payment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    stmt = select(Payment).where(Payment.id == payment_id)
+    tenant_id = get_current_tenant_id()
+    stmt = select(Payment).where(
+        Payment.id == payment_id,
+        Payment.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     payment = result.scalar_one_or_none()
     
@@ -342,81 +413,205 @@ async def delete_payment(
 
 
 @router.post("/{payment_id}/checkout")
-async def create_mercado_pago_checkout(
+async def create_checkout(
     payment_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    stmt = (
-        select(Payment, Enrollment, Student, User, Class, Course)
-        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
-        .join(Student, Enrollment.student_id == Student.id)
-        .join(User, Student.user_id == User.id)
-        .join(Class, Enrollment.class_id == Class.id)
-        .join(Course, Class.course_id == Course.id)
-        .where(Payment.id == payment_id)
-    )
-    result = await db.execute(stmt)
-    row = result.first()
+    """Create or reuse a provider checkout for a payment.
 
-    if not row:
+    Uses the provider abstraction to support Mercado Pago and Asaas.
+    Handles both individual payments (enrollment_id set) and
+    consolidated company payments (company_id set, enrollment_id=None).
+
+    Idempotency: if the payment already has a provider_payment_id and
+    checkout_url, and the payment is still in a pending/processing state,
+    the existing checkout_url is returned without creating a new external
+    charge. This prevents duplicate charges from double-clicks, refreshes,
+    or retries.
+    """
+    tenant_id = current_tenant_id.get()
+    if tenant_id is None:
+        tenant_id = getattr(request.state, "tenant_id", None)
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant not resolved",
+        )
+
+    # Load the payment first (tenant-scoped)
+    payment = await db.get(Payment, payment_id)
+    if not payment or payment.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
 
-    payment, enrollment, _student, user, _class, course = row
+    # ── Determine payment type: individual (enrollment) or company ──
+    is_company_payment = payment.company_id is not None and payment.enrollment_id is None
 
-    is_owner = str(user.id) == current_user["user_id"]
-    is_admin = current_user.get("role") in ("admin", "super_admin")
-    if not (is_owner or is_admin):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot checkout a payment that does not belong to you",
+    if is_company_payment:
+        # Company consolidated payment — load company + class/course
+        company = await db.get(Company, payment.company_id)
+        if not company or company.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found",
+            )
+
+        # Company payments are admin-only (no student owner)
+        is_admin = current_user.get("role") in ("admin", "super_admin")
+        if not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Company payments can only be checked out by admins",
+            )
+
+        # Resolve course name from the batch (if available) or use company name
+        course_name = f"Treinamento Corporativo - {company.legal_name}"
+        customer_email = company.rh_email or f"company-{company.id}@noreply.local"
+        customer_name = company.legal_name
+    else:
+        # Individual payment — load enrollment/student/user/class/course
+        stmt = (
+            select(Payment, Enrollment, Student, User, Class, Course)
+            .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .where(
+                Payment.id == payment_id,
+                Payment.tenant_id == tenant_id,
+            )
         )
+        result = await db.execute(stmt)
+        row = result.first()
 
-    tenant_id = getattr(request.state, "tenant_id", None)
-    access_token = None
-    if tenant_id:
-        # Access token do Mercado Pago lido do TenantSecret criptografado.
-        # Fallback legado: tenant.settings["mp_access_token"] (descontinuado,
-        # mantido apenas para janela de migração pós-deploy).
-        access_token = await get_mercado_pago_access_token(db, tenant_id)
-        if not access_token:
-            tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-            tenant = tenant_result.scalar_one_or_none()
-            if tenant and tenant.settings:
-                access_token = tenant.settings.get("mp_access_token")
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment not found",
+            )
 
+        _, _enrollment, student, user, _class, course = row
+        payment = row[0]  # use the loaded payment from the join
+
+        is_owner = str(user.id) == current_user["user_id"]
+        is_admin = current_user.get("role") in ("admin", "super_admin")
+        if not (is_owner or is_admin):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot checkout a payment that does not belong to you",
+            )
+
+        course_name = course.name
+        customer_email = user.email
+        customer_name = user.full_name
+
+    # ── Idempotency: reuse existing external charge if still active ──
+    if (
+        payment.provider_payment_id
+        and payment.checkout_url
+        and payment.status in (PaymentStatus.PENDENTE, PaymentStatus.PROCESSANDO)
+    ):
+        return {
+            "checkout_url": payment.checkout_url,
+            "preference_id": payment.provider_payment_id,
+            "reused": True,
+        }
+
+    # ── Resolve tenant settings for provider selection ──
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    tenant_settings = (tenant.settings if tenant else None) or {}
+
+    # ── Resolve the active provider for this tenant ──
     try:
-        preference = await MercadoPagoService.create_preference(
-            enrollment_id=str(enrollment.id),
-            amount=payment.amount,
-            student_email=user.email,
-            course_name=course.name,
-            access_token=access_token,
-        )
-    except Exception as exc:
+        provider = await resolve_provider(db, tenant_id, tenant_settings)
+    except PaymentProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail=exc.safe_message,
         ) from exc
 
-    payment.mercado_pago_id = preference.get("id")
+    provider_name = provider.provider
+
+    # ── For Asaas: ensure customer exists ──
+    customer_id = None
+    if provider_name == PaymentProvider.ASAAS:
+        try:
+            if is_company_payment:
+                customer_id = await get_or_create_company_customer(
+                    db,
+                    provider,
+                    tenant_id=tenant_id,
+                    company_id=payment.company_id,
+                    provider_name=provider_name,
+                )
+            else:
+                customer_id = await get_or_create_student_customer(
+                    db,
+                    provider,
+                    tenant_id=tenant_id,
+                    student_id=student.id,
+                    provider_name=provider_name,
+                )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+    # ── Create the checkout/charge at the provider ──
+    try:
+        checkout = await provider.create_checkout(
+            payment_id=payment.id,
+            amount=payment.amount,
+            student_email=customer_email,
+            student_name=customer_name,
+            course_name=course_name,
+            method=payment.method,
+            customer_id=customer_id,
+        )
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=exc.safe_message,
+        ) from exc
+
+    # ── Persist provider fields on the payment ──
+    payment.provider = provider_name
+    payment.provider_payment_id = checkout.provider_payment_id
+    payment.checkout_url = checkout.checkout_url
+    # Legacy compatibility: also set mercado_pago_id for MP
+    if provider_name == PaymentProvider.MERCADO_PAGO:
+        payment.mercado_pago_id = checkout.provider_payment_id
     payment.status = PaymentStatus.PROCESSANDO
     await db.commit()
 
-    # In mock mode (non-production), return a RELATIVE URL so the browser
-    # stays on whichever tenant frontend it is currently using. This avoids
-    # redirecting an Alfa purchase to the WR frontend when FRONTEND_URL
-    # points to WR. The browser's window.location.origin determines the
-    # tenant frontend automatically.
-    if settings.MERCADO_PAGO_MOCK_MODE and settings.ENVIRONMENT.lower() != "production":
+    # ── Mock mode: return relative URL for demo flow ──
+    if (
+        provider_name == PaymentProvider.MERCADO_PAGO
+        and settings.MERCADO_PAGO_MOCK_MODE
+        and settings.ENVIRONMENT.lower() != "production"
+    ):
         checkout_url = f"/demo/payment/{payment_id}"
-        return {"checkout_url": checkout_url, "preference_id": preference.get("id")}
+        return {"checkout_url": checkout_url, "preference_id": checkout.provider_payment_id}
 
-    return {"checkout_url": preference.get("init_point"), "preference_id": preference.get("id")}
+    if (
+        provider_name == PaymentProvider.ASAAS
+        and getattr(settings, "ASAAS_MOCK_MODE", False)
+        and settings.ENVIRONMENT.lower() != "production"
+    ):
+        checkout_url = f"/demo/payment/{payment_id}"
+        return {"checkout_url": checkout_url, "preference_id": checkout.provider_payment_id}
+
+    return {
+        "checkout_url": checkout.checkout_url,
+        "preference_id": checkout.provider_payment_id,
+    }
 
 
 # ------------------------------------------------------------------
@@ -433,7 +628,8 @@ async def demo_payment_status(
     """Retorna detalhes do pagamento para a tela de simulação demo."""
     _demo_payment_guard()
 
-    row = await _load_payment_with_context(db, payment_id)
+    tenant_id = get_current_tenant_id()
+    row = await _load_payment_with_context(db, payment_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Payment not found")
 
@@ -460,7 +656,8 @@ async def demo_payment_approve(
     """Simula pagamento aprovado usando a reconciliação compartilhada."""
     _demo_payment_guard()
 
-    row = await _load_payment_with_context(db, payment_id)
+    tenant_id = get_current_tenant_id()
+    row = await _load_payment_with_context(db, payment_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Payment not found")
 
@@ -481,7 +678,8 @@ async def demo_payment_reject(
     """Simula pagamento rejeitado usando a reconciliação compartilhada."""
     _demo_payment_guard()
 
-    row = await _load_payment_with_context(db, payment_id)
+    tenant_id = get_current_tenant_id()
+    row = await _load_payment_with_context(db, payment_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Payment not found")
 
@@ -502,7 +700,8 @@ async def demo_payment_pending(
     """Simula pagamento pendente usando a reconciliação compartilhada."""
     _demo_payment_guard()
 
-    row = await _load_payment_with_context(db, payment_id)
+    tenant_id = get_current_tenant_id()
+    row = await _load_payment_with_context(db, payment_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Payment not found")
 

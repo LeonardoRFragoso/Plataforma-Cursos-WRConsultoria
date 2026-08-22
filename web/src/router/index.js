@@ -168,6 +168,12 @@ export const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
   },
   {
+    path: '/settings/financial',
+    name: 'FinancialSettings',
+    component: () => import('../views/FinancialSettings.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' },
+  },
+  {
     path: '/super-admin',
     name: 'SuperAdmin',
     component: () => import('../views/SuperAdmin.vue'),
@@ -177,6 +183,12 @@ export const routes = [
     path: '/demo/payment/:paymentId',
     name: 'DemoPayment',
     component: () => import('../views/DemoPayment.vue'),
+    meta: { requiresAuth: true, layout: 'authenticated' },
+  },
+  {
+    path: '/payment/return/:paymentId',
+    name: 'PaymentReturn',
+    component: () => import('../views/PaymentReturn.vue'),
     meta: { requiresAuth: true, layout: 'authenticated' },
   },
 ]

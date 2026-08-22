@@ -214,17 +214,17 @@ async def test_checkout_uses_tenant_secret_for_mp_access_token():
         return {"id": "pref-123", "init_point": "https://mp.test/checkout"}
 
     with patch(
-        "app.api.routes.payments.MercadoPagoService.create_preference",
+        "app.services.mercado_pago_provider.MercadoPagoService.create_preference",
         new=mock_create_preference
     ):
-        from app.api.routes.payments import create_mercado_pago_checkout
+        from app.api.routes.payments import create_checkout
 
         class FakeRequest:
             state = type("State", (), {"tenant_id": WR_TENANT_ID})()
 
         async with AsyncSessionLocal() as db:
             db.info["tenant_id"] = WR_TENANT_ID
-            result = await create_mercado_pago_checkout(
+            result = await create_checkout(
                 payment_id,
                 FakeRequest(),
                 db,
@@ -273,17 +273,17 @@ async def test_checkout_falls_back_to_legacy_settings_when_no_secret():
         return {"id": "pref-456", "init_point": "https://mp.test/checkout2"}
 
     with patch(
-        "app.api.routes.payments.MercadoPagoService.create_preference",
+        "app.services.mercado_pago_provider.MercadoPagoService.create_preference",
         new=mock_create_preference
     ):
-        from app.api.routes.payments import create_mercado_pago_checkout
+        from app.api.routes.payments import create_checkout
 
         class FakeRequest:
             state = type("State", (), {"tenant_id": WR_TENANT_ID})()
 
         async with AsyncSessionLocal() as db:
             db.info["tenant_id"] = WR_TENANT_ID
-            await create_mercado_pago_checkout(
+            await create_checkout(
                 payment_id,
                 FakeRequest(),
                 db,
