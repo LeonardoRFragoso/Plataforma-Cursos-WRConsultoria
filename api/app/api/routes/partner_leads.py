@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db, get_db_privileged
+from app.core.normalization import normalize_email
 from app.core.security import get_current_super_admin
 from app.core.utils import utc_now
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
@@ -15,6 +16,19 @@ from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
 
 router = APIRouter()
+
+# Environments where raw one-time tokens may be returned in responses.
+# Only local development and automated test environments.
+_LOCAL_TOKEN_RETURN_ENVS = frozenset({"development", "dev", "test", "testing"})
+
+
+def _current_env() -> str:
+    return getattr(settings, "ENVIRONMENT", "").lower()
+
+
+def _can_return_token() -> bool:
+    """Only local dev/test environments may return raw one-time tokens."""
+    return _current_env() in _LOCAL_TOKEN_RETURN_ENVS
 
 
 class PartnerLeadCreate(BaseModel):
@@ -105,7 +119,7 @@ async def approve_partner_lead(
     lead.approved_by = UUID(current_user["user_id"])
 
     admin_user = User(
-        email=lead.contact_email,
+        email=normalize_email(lead.contact_email),
         full_name=lead.contact_name,
         role=UserRole.ADMIN,
         tenant_id=tenant.id,
@@ -121,6 +135,7 @@ async def approve_partner_lead(
     await db.commit()
 
     # Send activation email (mock mode in dev/test/CI — no real email sent)
+    activation_email_sent = False
     try:
         email_service = get_email_service()
         await email_service.send_account_activation(
@@ -129,11 +144,17 @@ async def approve_partner_lead(
             frontend_url=settings.FRONTEND_URL,
             tenant_name=tenant.name,
         )
+        activation_email_sent = True
     except EmailServiceError:
         pass  # Don't fail the signup if email fails
+
+    # In production/staging: NEVER expose raw activation token.
+    # In dev/test: return raw token for automated tests.
+    returned_token = activation_token if _can_return_token() else None
 
     return {
         "tenant_id": tenant.id,
         "admin_user_id": admin_user.id,
-        "activation_token": activation_token,
+        "activation_token": returned_token,
+        "activation_email_sent": activation_email_sent,
     }
