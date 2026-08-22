@@ -88,7 +88,15 @@
       </div>
 
       <div v-if="success" class="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm" data-testid="register-success">
-        Cadastro realizado com sucesso! Faça login para continuar.
+        {{ successMessage }}
+      </div>
+
+      <div v-if="success && manualLoginAvailable" class="mt-4 text-center">
+        <p class="text-sm text-gray-600">
+          <router-link :to="{ path: '/login', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="text-primary-600 hover:text-primary-700 font-semibold" data-testid="register-manual-login-link">
+            Entrar manualmente
+          </router-link>
+        </p>
       </div>
 
       <div class="mt-6 text-center">
@@ -122,6 +130,8 @@ const confirmPassword = ref('')
 const loading = ref(false)
 const error = ref('')
 const success = ref(false)
+const successMessage = ref('')
+const manualLoginAvailable = ref(false)
 
 const passwordError = computed(() => {
   if (confirmPassword.value && password.value !== confirmPassword.value) {
@@ -139,17 +149,35 @@ const handleRegister = async () => {
   loading.value = true
   error.value = ''
   success.value = false
+  manualLoginAvailable.value = false
 
   try {
+    // 1. Create the account with the user's chosen password.
     await authStore.register(email.value, fullName.value, password.value, cpf.value)
-    success.value = true
-    setTimeout(() => {
-      // New students register as 'student' role → use safe redirect resolver
+
+    // 2. Auto-login using the credentials just provided through the normal
+    //    authentication path. We do NOT duplicate JWT logic in the frontend.
+    try {
+      await authStore.login(email.value, password.value)
+      // 3. Redirect to the safe intended route (e.g. the course the visitor
+      //    came from). New students register as 'student' role.
       const redirect = resolveSafeRedirect(route.query.redirect, 'student')
-      router.push({ path: '/login', query: { redirect } })
-    }, 2000)
+      router.push(redirect)
+      return
+    } catch (loginErr) {
+      // Auto-login failed unexpectedly. The account was created successfully,
+      // so the user can log in manually. Leave a clear safe message.
+      success.value = true
+      successMessage.value = 'Cadastro realizado! Não foi possível entrar automaticamente. Faça login para continuar.'
+      manualLoginAvailable.value = true
+    }
   } catch (err) {
-    error.value = 'Erro ao cadastrar. Tente novamente.'
+    const detail = err.response?.data?.detail
+    if (detail) {
+      error.value = detail
+    } else {
+      error.value = 'Erro ao cadastrar. Tente novamente.'
+    }
   } finally {
     loading.value = false
   }

@@ -6,7 +6,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.normalization import normalize_cpf, normalize_email, validate_cpf
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user, hash_password
 from app.models.attendance import Attendance
 from app.models.certificate import Certificate
@@ -19,14 +21,30 @@ from app.models.payment import Payment
 from app.models.student import Student
 from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentResponse, StudentUpdate
+from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
 
 router = APIRouter()
 
+# Environments where raw one-time tokens may be returned in responses.
+# Only local development and automated test environments.
+_LOCAL_TOKEN_RETURN_ENVS = frozenset({"development", "dev", "test", "testing"})
+
+
+def _current_env() -> str:
+    return getattr(settings, "ENVIRONMENT", "").lower()
+
+
+def _can_return_token() -> bool:
+    """Only local dev/test environments may return raw one-time tokens."""
+    return _current_env() in _LOCAL_TOKEN_RETURN_ENVS
+
 
 def _clean_cpf(cpf: str) -> str:
-    """Remove formatação do CPF."""
-    return cpf.replace('.', '').replace('-', '').strip()
+    """Remove formatação do CPF usando o helper centralizado de normalização."""
+    if not cpf:
+        return ""
+    return normalize_cpf(cpf)
 
 
 @router.post("/", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
@@ -48,7 +66,17 @@ async def create_student(
     and an activation token is generated so the student can set their own.
     """
     tenant_id = get_current_tenant_id()
-    raw_cpf = _clean_cpf(student_data.cpf)
+
+    # Strict CPF validation when CPF is provided
+    raw_cpf = ""
+    if student_data.cpf:
+        try:
+            raw_cpf = validate_cpf(student_data.cpf)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CPF inválido",
+            )
 
     # Validate company_id belongs to tenant if provided
     if student_data.company_id:
@@ -78,9 +106,10 @@ async def create_student(
             )
 
     # Check duplicate email (tenant-scoped)
+    normalized_student_email = normalize_email(str(student_data.email))
     stmt = select(User).where(
         User.tenant_id == tenant_id,
-        User.email == str(student_data.email),
+        User.email == normalized_student_email,
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
@@ -141,7 +170,7 @@ async def create_student(
     try:
         user = User(
             tenant_id=tenant_id,
-            email=str(student_data.email),
+            email=normalized_student_email,
             cpf=raw_cpf or None,
             full_name=student_data.full_name,
             password_hash=hash_password(temp_password) if temp_password else None,
@@ -194,11 +223,28 @@ async def create_student(
             db.add(enrollment)
 
         # Generate activation token if no password was set
+        activation_token_value = None
         if not has_password and not temp_password:
             raw_token, _ = await OneTimeTokenService.create(
                 db, str(user.id), "activation", ttl_hours=168,
             )
-            student.activation_token = raw_token
+            # Only expose raw token in dev/test environments.
+            # In production/staging, the token is sent via email and
+            # NEVER appears in the HTTP response.
+            if _can_return_token():
+                activation_token_value = raw_token
+            else:
+                try:
+                    email_service = get_email_service()
+                    await email_service.send_account_activation(
+                        to=user.email,
+                        activation_token=raw_token,
+                        frontend_url=settings.FRONTEND_URL,
+                        tenant_name="Plataforma",
+                    )
+                except EmailServiceError:
+                    pass
+            student.activation_token = activation_token_value
 
         await db.commit()
         await db.refresh(student)

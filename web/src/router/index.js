@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getHomeRoute } from '../utils/homeRoute'
+import { isSafeInternalRedirect } from '../utils/safeRedirect'
 
 export const routes = [
   // ──────────────────────────────────────────────────────────────
@@ -208,7 +209,11 @@ export async function navigationGuard(to) {
   const userRole = authStore.userRole?.toLowerCase()
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    return { path: '/login' }
+    // Preserve the intended internal destination so login/register can
+    // redirect back to it. Only allow safe internal paths to prevent
+    // open-redirect attacks.
+    const redirect = isSafeInternalRedirect(to.fullPath) ? to.fullPath : null
+    return { path: '/login', query: redirect ? { redirect } : {} }
   }
 
   if (to.meta.requiresAdmin && userRole !== 'admin' && userRole !== 'super_admin') {

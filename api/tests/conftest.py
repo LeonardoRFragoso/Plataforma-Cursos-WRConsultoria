@@ -11,11 +11,30 @@ settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/w
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal, Base, engine
+from app.core.normalization import _compute_check_digit
 from app.core.security import hash_password
 from app.core.utils import utc_now
 from app.main import app
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
+
+
+def make_valid_cpf(seed: int | None = None) -> str:
+    """Generate a mathematically valid 11-digit CPF for tests.
+
+    Uses the same check-digit algorithm as app.core.normalization so the
+    generated CPF always passes validate_cpf(). Avoids all-equal-digit
+    sequences which are invalid even when check digits match.
+    """
+    rng = uuid.uuid4().int if seed is None else seed
+    base = f"{rng % 10**9:09d}"
+    # Avoid all-equal-digit bases (e.g. seed=0 → 000000000) which produce
+    # invalid repeated CPFs like 00000000000.
+    if len(set(base)) == 1:
+        base = base[:-1] + ("1" if base[-1] != "1" else "2")
+    first = _compute_check_digit(base, (10, 9, 8, 7, 6, 5, 4, 3, 2))
+    second = _compute_check_digit(base + str(first), (11, 10, 9, 8, 7, 6, 5, 4, 3, 2))
+    return f"{base}{first}{second}"
 
 
 async def _insert_master_tenant():
@@ -57,6 +76,13 @@ async def setup_db():
         END $$;
         """))
         await conn.run_sync(Base.metadata.create_all)
+        # Apply the email normalization migration index manually (the test DB
+        # uses create_all, not alembic upgrade, so we create the index here
+        # to match the production migration state).
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_user_tenant_email_lower "
+            "ON users (tenant_id, lower(email))"
+        ))
     await _insert_master_tenant()
     yield
     async with engine.begin() as conn:
@@ -143,7 +169,7 @@ def test_user_data():
         "email": "test@example.com",
         "full_name": "Test User",
         "password": "testpassword123",
-        "cpf": "52988744005",
+        "cpf": "52998224725",
     }
 
 
@@ -151,7 +177,7 @@ def test_user_data():
 async def student_user(client, admin_headers):
     """Cria um aluno em uma turma e faz login, retornando headers e student_id."""
     email = f"student_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = make_valid_cpf()
 
     today = utc_now().date()
     course = await client.post(

@@ -28,6 +28,20 @@ describe('Navigation guards', () => {
     expect(router.currentRoute.value.path).toBe('/login')
   })
 
+  it('preserva intended path em redirect query ao exigir auth sem token', async () => {
+    await router.push('/certificates')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.query.redirect).toBe('/certificates')
+  })
+
+  it('preserva intended fullPath com params em redirect query', async () => {
+    await router.push('/courses/course-123/learn')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.query.redirect).toBe('/courses/course-123/learn')
+  })
+
   it('redireciona aluno para /dashboard ao acessar rota admin', async () => {
     const auth = useAuthStore()
     auth.token = 'fake-token'

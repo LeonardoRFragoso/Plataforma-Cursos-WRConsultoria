@@ -89,7 +89,6 @@ describe('CourseDetail View - acesso ao curso', () => {
     // Não inicia nova compra automaticamente
     expect(wrapper.text()).not.toContain('Comprar novamente')
   })
-
   it('mostra "Acessar curso" para matrícula CONCLUIDA (não "Comprar novamente")', async () => {
     const wrapper = await mountDetail([
       { id: 'e1', course_id: 'course-1', status: 'CONCLUIDA' },
@@ -114,5 +113,65 @@ describe('CourseDetail View - acesso ao curso', () => {
     ])
     expect(wrapper.text()).toContain('Comprar novamente')
     expect(wrapper.find('a[href="/courses/course-1/learn"]').exists()).toBe(false)
+  })
+})
+
+describe('CourseDetail View - CTAs anônimos preservam redirect', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.token = null
+    auth.userRole = null
+    auth.initialized = true
+    vi.clearAllMocks()
+  })
+
+  async function mountAnonymous() {
+    const router = buildRouter()
+    await router.push('/courses/course-1')
+    await router.isReady()
+
+    api.get.mockImplementation((url) => {
+      if (url.includes('/enrollments/me')) return Promise.resolve({ data: [] })
+      if (url.includes('/courses/')) return Promise.resolve({ data: COURSE })
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = mount(CourseDetail, { global: { plugins: [router] } })
+    await flushPromises()
+    return { wrapper, router }
+  }
+
+  it('"Entrar para comprar" preserva caminho do curso', async () => {
+    const { wrapper, router } = await mountAnonymous()
+
+    const buttons = wrapper.findAll('button')
+    const buyButton = buttons.find((b) => b.text().includes('Entrar para comprar'))
+    expect(buyButton).toBeDefined()
+
+    await buyButton.trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.query.redirect).toBe('/courses/course-1')
+  })
+
+  it('link "Entre" preserva redirect do curso', async () => {
+    const { wrapper } = await mountAnonymous()
+
+    // Check the computed property that drives the router-link :to binding
+    expect(wrapper.vm.loginWithRedirect).toEqual({
+      path: '/login',
+      query: { redirect: '/courses/course-1' },
+    })
+  })
+
+  it('link "cadastre-se" preserva redirect do curso', async () => {
+    const { wrapper } = await mountAnonymous()
+
+    expect(wrapper.vm.registerWithRedirect).toEqual({
+      path: '/register',
+      query: { redirect: '/courses/course-1' },
+    })
   })
 })

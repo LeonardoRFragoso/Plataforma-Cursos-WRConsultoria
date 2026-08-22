@@ -36,6 +36,7 @@ from app.services.payment_selection import (
     get_or_create_payment,
     select_payment_for_enrollment,
 )
+from tests.conftest import make_valid_cpf
 
 
 async def _create_test_enrollment(client, admin_headers):
@@ -86,7 +87,7 @@ async def _create_test_enrollment(client, admin_headers):
 
     # Create student with class_id (this also enrolls them)
     email = f"paystudent_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = make_valid_cpf()
     student_resp = await client.post(
         "/api/v1/students/",
         json={

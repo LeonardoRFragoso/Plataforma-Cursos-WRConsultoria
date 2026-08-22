@@ -14,6 +14,7 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.student import Student
 from app.models.user import User, UserRole
+from tests.conftest import make_valid_cpf
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ async def _seed_base(session):
     admin = User(
         email=f"admin_{uuid.uuid4().hex[:8]}@example.com",
         full_name="Admin",
-        cpf=f"{uuid.uuid4().int % 10**11:011d}",
+        cpf=make_valid_cpf(),
         password_hash="x",
         role=UserRole.ADMIN,
         is_active=True,
@@ -71,7 +72,7 @@ async def _seed_base(session):
 
 async def _make_student(session, class_obj, email=None, cpf=None):
     email = email or f"student_{uuid.uuid4().hex[:8]}@example.com"
-    cpf = cpf or f"{uuid.uuid4().int % 10**11:011d}"
+    cpf = cpf or make_valid_cpf()
     user = User(
         email=email,
         full_name="Aluno",

@@ -1,8 +1,29 @@
 # 📊 Roadmap de Implementação — WR Plataforma de Cursos
 
-> Atualizado em 22/08/2026 — reconciliação pós-PR #19 (Asaas Production Payments mergeado em `main`).
+> Atualizado em 22/08/2026 — reconciliação pós-PR #19 (Asaas Production Payments mergeado em `main`)
+> e alinhamento com `docs/PRE_LAUNCH_STRATEGY.md` (decisão owner: PRE-LAUNCH/HOMOLOGAÇÃO).
 >
 > Este documento substitui o roadmap inicial, que já não refletia o estado real da plataforma. O foco atual deixou de ser apenas CRUD e passou a cobrir produção financeira, jornadas B2C/B2B, operação white-label, experiência de produto, segurança e escala.
+>
+> **Importante:** A decisão oficial do owner (registrada em `docs/PRE_LAUNCH_STRATEGY.md`)
+> classifica o ambiente atual como **PRE-LAUNCH / HOMOLOGAÇÃO**. A ativação real do Asaas
+> foi adiada para o Official Launch Gate e **não bloqueia** o desenvolvimento de Business Journeys.
+
+---
+
+## Classificação atual do ambiente
+
+| Conceito | Estado |
+|----------|--------|
+| **Ambiente atual** | PRE-LAUNCH / HOMOLOGAÇÃO |
+| **WR frontend** | Vercel / `wr-cursos-demo` |
+| **Alfa frontend** | Vercel / `alfa-academy-demo` (white-label demo) |
+| **Backend** | Railway / `wr-api-production.up.railway.app` |
+| **Asaas code** | IMPLEMENTED / MERGED (PR #19) |
+| **Real Asaas activation** | DEFERRED TO OFFICIAL LAUNCH GATE |
+| **Business Journeys** | CURRENT DEVELOPMENT MACRO-PHASE |
+| **Official domain** | NOT DEFINED YET |
+| **Content readiness** | PENDING CEO CONTENT / MATERIALS |
 
 ---
 
@@ -22,9 +43,8 @@
 | **Database — Alembic** | Single head `a1b3c4d5e6f7` |
 | **GitHub Actions** | Desativado intencionalmente pelo owner (controle de custo) |
 | **Deploy verificado** | ❌ Não verificado nesta fase |
-| **Asaas conta real conectada** | ❌ Não conectada ainda |
-| **Próximo gate operacional** | Deploy + conexão segura da chave Asaas |
-| **Próxima macrofase dev** | Business Journeys & Contracting Hardening |
+| **Asaas conta real conectada** | ❌ Não conectada ainda (deferida para Launch Gate) |
+| **Próxima macrofase dev** | Business Journeys & Contracting Hardening (em andamento) |
 
 ---
 
@@ -166,11 +186,16 @@
 
 ---
 
-# 🟡 Production Activation — Asaas
+# 🟡 Production Activation — Asaas (DEFERRED TO OFFICIAL LAUNCH GATE)
 
-> **Status:** 🟡 PENDING EXTERNAL/OPERATIONAL
+> **Status:** 🟡 DEFERRED TO OFFICIAL LAUNCH GATE
 >
-> Checkpoint obrigatório antes de Business Journeys. Nenhum código adicional necessário — é ativação operacional.
+> A ativação operacional do Asaas foi oficialmente adiada para o Official Launch Gate
+> por decisão do owner (ver `docs/PRE_LAUNCH_STRATEGY.md`). O código Asaas já está
+> mergeado e testável com mocks/fakes. **Nenhum bloqueio para Business Journeys.**
+>
+> Durante PRE-LAUNCH: não inserir chave Asaas real, não criar cobranças reais,
+> não executar PIX/boleto/cartão/refund/transfer reais. Testes de pagamento usam mocks/fakes.
 
 ## Sequência requerida
 
@@ -196,11 +221,11 @@
 
 # 🔥 Próxima macrofase dev — Business Journeys & Contracting Hardening
 
-> **Status:** 🟠 ROADMAP
+> **Status:** 🟠 ROADMAP (em andamento — PR #21: B2C identity and entry journey hardening)
 >
 > Objetivo: provar que pessoas e empresas conseguem chegar à plataforma, contratar, pagar, receber acesso e recuperar sua conta sem intervenção manual.
 >
-> Iniciar somente após ativação operacional do Asaas.
+> **Pode iniciar imediatamente em PRE-LAUNCH** usando mocks/fakes. Não requer ativação real do Asaas.
 
 ## P0 — Jornada B2C completa
 
@@ -583,13 +608,17 @@ Partner lead
 # 🗺️ Ordem recomendada de execução
 
 1. ✅ **Asaas Production Payments (#19)** — código mergeado em `main`.
-2. 🟡 **Production Activation — Asaas** — deploy + migration + conexão segura da chave + validação operacional (gate externo/owner).
-3. 🟠 **Business Journeys & Contracting Hardening** — P0/P1 B2C, multi-tenant identity, B2B e white-label lifecycle.
-4. 🟠 **Fechar regras comerciais pendentes** — reembolso, corporate billing, fiscal/LGPD.
-5. 🟠 **Product Experience & White-Label Studio 2.0** — 8 PRs sequenciais (após business hardening).
-6. 🟠 **Growth / SEO / Conversion** — aquisição e recuperação de abandono.
-7. 🟠 **Escala operacional** — reconciliação, auditoria, alertas, relatórios avançados e automações.
-8. 🟠 **NR EAD Compliance & Trusted Certificates** — ver `docs/NR_EAD_COMPLIANCE_ROADMAP.md`.
+2. � **PRE-LAUNCH / HOMOLOGAÇÃO** — Vercel + Railway atuais (decisão owner).
+3. 🟠 **Business Journeys & Contracting Hardening** — P0/P1 B2C, multi-tenant identity, B2B e white-label lifecycle (em andamento).
+4. 🟠 **Regras comerciais/fiscais/LGPD e lifecycle financeiro** — reembolso, corporate billing, fiscal/LGPD.
+5. 🟠 **NR EAD Compliance & Trusted Certificates** — ver `docs/NR_EAD_COMPLIANCE_ROADMAP.md`.
+6. 🟠 **Product Experience & White-Label Studio 2.0** — 8 PRs sequenciais (após business hardening).
+7. 🟠 **Content Readiness + carga dos cursos reais + homologação CEO.**
+8. 🟠 **Growth / SEO / Conversion** — aquisição e recuperação de abandono.
+9. ⚪ **Domínio oficial definido/registrado.**
+10. 🟡 **Official Launch Gate** — infraestrutura final + Asaas real + smoke/E2E controlado.
+11. 🟡 **Real Asaas activation** — inserção da chave de produção pelo owner via UI segura.
+12. ✅ **Lançamento comercial oficial**, após autorização do owner.
 
 ---
 

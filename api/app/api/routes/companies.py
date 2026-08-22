@@ -8,7 +8,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.normalization import normalize_email, validate_cpf
 from app.core.security import get_current_admin, get_current_tenant_id
 from app.models.certificate import Certificate
 from app.models.company import Company
@@ -17,19 +19,28 @@ from app.models.student import Student
 from app.models.user import User, UserRole
 from app.schemas.company import CompanyCreate, CompanyResponse, CompanyUpdate
 from app.schemas.student import StudentResponse
+from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
 
 router = APIRouter()
+
+# Environments where raw one-time tokens may be returned in responses.
+# Only local development and automated test environments.
+_LOCAL_TOKEN_RETURN_ENVS = frozenset({"development", "dev", "test", "testing"})
+
+
+def _current_env() -> str:
+    return getattr(settings, "ENVIRONMENT", "").lower()
+
+
+def _can_return_token() -> bool:
+    """Only local dev/test environments may return raw one-time tokens."""
+    return _current_env() in _LOCAL_TOKEN_RETURN_ENVS
 
 
 def _clean_cnpj(cnpj: str) -> str:
     """Remove formatação do CNPJ."""
     return cnpj.replace('.', '').replace('-', '').replace('/', '').strip()
-
-
-def _clean_cpf(cpf: str) -> str:
-    """Remove formatação do CPF."""
-    return cpf.replace('.', '').replace('-', '').strip()
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +304,8 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeCreateResponse(BaseModel):
     student: StudentResponse
-    activation_token: str | None = None
+    activation_token: str | None = None  # ONLY populated in dev/test envs
+    activation_email_sent: bool = False
 
 
 @router.post("/{company_id}/employees", response_model=EmployeeCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -307,6 +319,10 @@ async def add_employee(
 
     The user is created without a password. An activation token is generated
     so the employee can set their own password via the activation flow.
+
+    In production/staging, the raw activation token is NEVER returned in the
+    HTTP response. The token is sent to the employee via email. In local
+    dev/test environments, the raw token is returned for automated tests.
     """
     tenant_id = get_current_tenant_id()
 
@@ -320,7 +336,16 @@ async def add_employee(
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
 
-    raw_cpf = _clean_cpf(employee_data.cpf)
+    # Strict CPF validation — rejects invalid formats and check digits.
+    try:
+        raw_cpf = validate_cpf(employee_data.cpf)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CPF inválido",
+        )
+
+    normalized_employee_email = normalize_email(employee_data.email)
 
     # Check duplicate CPF (tenant-scoped)
     stmt = select(User).where(
@@ -330,10 +355,10 @@ async def add_employee(
     if (await db.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CPF already registered")
 
-    # Check duplicate email (tenant-scoped)
+    # Check duplicate email (tenant-scoped, case-insensitive via normalization)
     stmt = select(User).where(
         User.tenant_id == tenant_id,
-        User.email == str(employee_data.email),
+        User.email == normalized_employee_email,
     )
     if (await db.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
@@ -343,7 +368,7 @@ async def add_employee(
     # sets the password hash and flips is_active to True atomically.
     user = User(
         tenant_id=tenant_id,
-        email=str(employee_data.email),
+        email=normalized_employee_email,
         cpf=raw_cpf,
         full_name=employee_data.full_name,
         password_hash=None,
@@ -373,9 +398,29 @@ async def add_employee(
     await db.refresh(student)
     await db.refresh(student, ["user"])
 
+    # In production/staging: send activation email, NEVER expose raw token.
+    # In dev/test: return raw token for automated tests.
+    activation_email_sent = False
+    returned_token = None
+    if _can_return_token():
+        returned_token = raw_token
+    else:
+        try:
+            email_service = get_email_service()
+            await email_service.send_account_activation(
+                to=user.email,
+                activation_token=raw_token,
+                frontend_url=settings.FRONTEND_URL,
+                tenant_name="Plataforma",
+            )
+            activation_email_sent = True
+        except EmailServiceError:
+            pass  # Don't fail the operation if email fails
+
     return EmployeeCreateResponse(
         student=StudentResponse.model_validate(student),
-        activation_token=raw_token,
+        activation_token=returned_token,
+        activation_email_sent=activation_email_sent,
     )
 
 
@@ -398,7 +443,7 @@ class ImportSummary(BaseModel):
     invalid: int
     failed: int
     results: list[ImportRowResult]
-    activation_tokens: list[dict]  # [{student_id, full_name, token}]
+    activation_emails_sent: int = 0
 
 
 @router.post("/{company_id}/employees/import", response_model=ImportSummary)
@@ -411,6 +456,10 @@ async def import_employees_csv(
     """Bulk import employees from CSV.
 
     Expected columns: full_name, cpf, email, phone (optional)
+
+    In production/staging, raw activation tokens are NEVER returned. The
+    response reports delivery status only. In dev/test, tokens are sent via
+    email (or silently skipped if SMTP is not configured).
     """
     tenant_id = get_current_tenant_id()
 
@@ -441,23 +490,46 @@ async def import_employees_csv(
     invalid = 0
     failed = 0
     results: list[ImportRowResult] = []
-    activation_tokens: list[dict] = []
+    activation_emails_sent = 0
+
+    can_return_token = _can_return_token()
+    email_service = get_email_service() if not can_return_token else None
 
     for i, row in enumerate(reader, start=2):  # row 1 is header
         full_name = (row.get("full_name") or "").strip()
         cpf_raw = (row.get("cpf") or "").strip()
-        email = (row.get("email") or "").strip()
+        email_raw = (row.get("email") or "").strip()
         phone = (row.get("phone") or "").strip() or None
 
-        if not full_name or not cpf_raw or not email:
+        if not full_name or not cpf_raw or not email_raw:
             invalid += 1
             results.append(ImportRowResult(
-                row=i, full_name=full_name or "(empty)", cpf=cpf_raw, email=email,
+                row=i, full_name=full_name or "(empty)", cpf=cpf_raw, email=email_raw,
                 status="invalid", error="Missing required field",
             ))
             continue
 
-        cpf = _clean_cpf(cpf_raw)
+        # Strict CPF validation
+        try:
+            cpf = validate_cpf(cpf_raw)
+        except ValueError:
+            invalid += 1
+            results.append(ImportRowResult(
+                row=i, full_name=full_name, cpf=cpf_raw, email=email_raw,
+                status="invalid", error="CPF inválido",
+            ))
+            continue
+
+        # Normalize email
+        try:
+            email = normalize_email(email_raw)
+        except ValueError:
+            invalid += 1
+            results.append(ImportRowResult(
+                row=i, full_name=full_name, cpf=cpf_raw, email=email_raw,
+                status="invalid", error="Email inválido",
+            ))
+            continue
 
         # Check duplicate CPF (tenant-scoped)
         dup_cpf = (
@@ -476,7 +548,7 @@ async def import_employees_csv(
             ))
             continue
 
-        # Check duplicate email (tenant-scoped)
+        # Check duplicate email (tenant-scoped, case-insensitive via normalization)
         dup_email = (
             await db.execute(
                 select(User).where(
@@ -521,16 +593,24 @@ async def import_employees_csv(
                 db, str(user.id), "activation", ttl_hours=168,
             )
 
+            # In production/staging: send activation email, NEVER expose token.
+            if not can_return_token and email_service:
+                try:
+                    await email_service.send_account_activation(
+                        to=user.email,
+                        activation_token=raw_token,
+                        frontend_url=settings.FRONTEND_URL,
+                        tenant_name="Plataforma",
+                    )
+                    activation_emails_sent += 1
+                except EmailServiceError:
+                    pass  # Don't fail the import if email fails
+
             created += 1
             results.append(ImportRowResult(
                 row=i, full_name=full_name, cpf=cpf_raw, email=email,
                 status="created",
             ))
-            activation_tokens.append({
-                "student_id": str(student.id),
-                "full_name": full_name,
-                "token": raw_token,
-            })
         except Exception as e:  # noqa: BLE001
             failed += 1
             results.append(ImportRowResult(
@@ -546,5 +626,5 @@ async def import_employees_csv(
         invalid=invalid,
         failed=failed,
         results=results,
-        activation_tokens=activation_tokens,
+        activation_emails_sent=activation_emails_sent,
     )
