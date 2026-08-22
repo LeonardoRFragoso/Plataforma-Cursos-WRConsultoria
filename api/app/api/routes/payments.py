@@ -9,6 +9,7 @@ from app.core.context import current_tenant_id
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.models.class_model import Class
+from app.models.company import Company
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment, PaymentProvider, PaymentStatus
@@ -23,7 +24,10 @@ from app.schemas.payment import (
     PaymentWebhookRequest,
 )
 from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
-from app.services.payment_customer_sync import get_or_create_student_customer
+from app.services.payment_customer_sync import (
+    get_or_create_company_customer,
+    get_or_create_student_customer,
+)
 from app.services.payment_provider_base import (
     PaymentProviderError,
     resolve_provider,
@@ -403,6 +407,9 @@ async def create_checkout(
     """Create or reuse a provider checkout for a payment.
 
     Uses the provider abstraction to support Mercado Pago and Asaas.
+    Handles both individual payments (enrollment_id set) and
+    consolidated company payments (company_id set, enrollment_id=None).
+
     Idempotency: if the payment already has a provider_payment_id and
     checkout_url, and the payment is still in a pending/processing state,
     the existing checkout_url is returned without creating a new external
@@ -417,36 +424,76 @@ async def create_checkout(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant not resolved",
         )
-    stmt = (
-        select(Payment, Enrollment, Student, User, Class, Course)
-        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
-        .join(Student, Enrollment.student_id == Student.id)
-        .join(User, Student.user_id == User.id)
-        .join(Class, Enrollment.class_id == Class.id)
-        .join(Course, Class.course_id == Course.id)
-        .where(
-            Payment.id == payment_id,
-            Payment.tenant_id == tenant_id,
-        )
-    )
-    result = await db.execute(stmt)
-    row = result.first()
 
-    if not row:
+    # Load the payment first (tenant-scoped)
+    payment = await db.get(Payment, payment_id)
+    if not payment or payment.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
 
-    payment, enrollment, student, user, _class, course = row
+    # ── Determine payment type: individual (enrollment) or company ──
+    is_company_payment = payment.company_id is not None and payment.enrollment_id is None
 
-    is_owner = str(user.id) == current_user["user_id"]
-    is_admin = current_user.get("role") in ("admin", "super_admin")
-    if not (is_owner or is_admin):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot checkout a payment that does not belong to you",
+    if is_company_payment:
+        # Company consolidated payment — load company + class/course
+        company = await db.get(Company, payment.company_id)
+        if not company or company.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found",
+            )
+
+        # Company payments are admin-only (no student owner)
+        is_admin = current_user.get("role") in ("admin", "super_admin")
+        if not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Company payments can only be checked out by admins",
+            )
+
+        # Resolve course name from the batch (if available) or use company name
+        course_name = f"Treinamento Corporativo - {company.legal_name}"
+        customer_email = company.rh_email or f"company-{company.id}@noreply.local"
+        customer_name = company.legal_name
+    else:
+        # Individual payment — load enrollment/student/user/class/course
+        stmt = (
+            select(Payment, Enrollment, Student, User, Class, Course)
+            .join(Enrollment, Payment.enrollment_id == Enrollment.id)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .where(
+                Payment.id == payment_id,
+                Payment.tenant_id == tenant_id,
+            )
         )
+        result = await db.execute(stmt)
+        row = result.first()
+
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment not found",
+            )
+
+        _, _enrollment, student, user, _class, course = row
+        payment = row[0]  # use the loaded payment from the join
+
+        is_owner = str(user.id) == current_user["user_id"]
+        is_admin = current_user.get("role") in ("admin", "super_admin")
+        if not (is_owner or is_admin):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot checkout a payment that does not belong to you",
+            )
+
+        course_name = course.name
+        customer_email = user.email
+        customer_name = user.full_name
 
     # ── Idempotency: reuse existing external charge if still active ──
     if (
@@ -471,7 +518,7 @@ async def create_checkout(
     except PaymentProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail=exc.safe_message,
         ) from exc
 
     provider_name = provider.provider
@@ -480,13 +527,22 @@ async def create_checkout(
     customer_id = None
     if provider_name == PaymentProvider.ASAAS:
         try:
-            customer_id = await get_or_create_student_customer(
-                db,
-                provider,
-                tenant_id=tenant_id,
-                student_id=student.id,
-                provider_name=provider_name,
-            )
+            if is_company_payment:
+                customer_id = await get_or_create_company_customer(
+                    db,
+                    provider,
+                    tenant_id=tenant_id,
+                    company_id=payment.company_id,
+                    provider_name=provider_name,
+                )
+            else:
+                customer_id = await get_or_create_student_customer(
+                    db,
+                    provider,
+                    tenant_id=tenant_id,
+                    student_id=student.id,
+                    provider_name=provider_name,
+                )
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -496,18 +552,18 @@ async def create_checkout(
     # ── Create the checkout/charge at the provider ──
     try:
         checkout = await provider.create_checkout(
-            enrollment_id=enrollment.id,
+            payment_id=payment.id,
             amount=payment.amount,
-            student_email=user.email,
-            student_name=user.full_name,
-            course_name=course.name,
+            student_email=customer_email,
+            student_name=customer_name,
+            course_name=course_name,
             method=payment.method,
             customer_id=customer_id,
         )
     except PaymentProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail=exc.safe_message,
         ) from exc
 
     # ── Persist provider fields on the payment ──

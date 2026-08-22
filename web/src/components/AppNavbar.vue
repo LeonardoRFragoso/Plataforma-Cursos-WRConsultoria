@@ -264,7 +264,7 @@ const navConfig = computed(() => {
           ],
         },
         {
-          label: 'Personalização',
+          label: 'Configurações',
           testid: 'customization',
           items: [
             { to: '/settings/white-label', label: 'White Label', testid: 'white-label' },

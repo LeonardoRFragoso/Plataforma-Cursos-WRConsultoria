@@ -31,7 +31,7 @@ class MercadoPagoProvider:
     async def create_checkout(
         self,
         *,
-        enrollment_id: UUID,
+        payment_id: UUID,
         amount: float,
         student_email: str,
         student_name: str | None,
@@ -39,17 +39,22 @@ class MercadoPagoProvider:
         method: PaymentMethod,
         installments: int | None = None,
         customer_id: str | None = None,
+        # Legacy compat — accepted but ignored
+        enrollment_id: UUID | None = None,
     ) -> CheckoutResult:
         try:
             preference = await MercadoPagoService.create_preference(
-                enrollment_id=str(enrollment_id),
+                enrollment_id=str(payment_id),
                 amount=amount,
                 student_email=student_email,
                 course_name=course_name,
                 access_token=self._access_token,
             )
         except MercadoPagoError as exc:
-            raise PaymentProviderError(str(exc)) from exc
+            raise PaymentProviderError(
+                "Mercado Pago checkout failed",
+                provider_error_code="mp_checkout_error",
+            ) from exc
 
         return CheckoutResult(
             provider_payment_id=preference.get("id", ""),

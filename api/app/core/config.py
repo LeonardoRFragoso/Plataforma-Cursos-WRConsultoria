@@ -72,7 +72,11 @@ class Settings(BaseSettings):
     # ASAAS_MOCK_MODE makes AsaasProvider return deterministic fakes
     # without touching the network (tests/staging only).
     ASAAS_MOCK_MODE: bool = False
-    
+    # Base URL for the backend's public API. Used to build the Asaas
+    # webhook callback URL: {API_BASE_URL}/api/v1/integrations/asaas/webhook/{slug}
+    # In production this MUST be the publicly reachable URL.
+    ASAAS_WEBHOOK_BASE_URL: str = ""
+
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -80,6 +84,11 @@ class Settings(BaseSettings):
     # Mock mode: emails are not sent, just logged and stored for inspection.
     # Defaults to True for safety — production must explicitly set to False.
     EMAIL_MOCK_MODE: bool = True
+    # Explicit email enable/disable. When False, email-related features
+    # (password reset, activation) are silently skipped. When True +
+    # EMAIL_MOCK_MODE=True, emails are logged but not sent (dev/test).
+    # When True + EMAIL_MOCK_MODE=False, real SMTP is used (production).
+    EMAIL_ENABLED: bool = True
     
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: list[str] = [

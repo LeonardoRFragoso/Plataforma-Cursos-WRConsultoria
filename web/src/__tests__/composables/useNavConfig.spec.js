@@ -21,14 +21,14 @@ describe('useNavConfig', () => {
     expect(new Set(routes).size).toBe(routes.length)
   })
 
-  it('admin gets Dashboard flat + Gestão/Certificados/Personalização groups', () => {
+  it('admin gets Dashboard flat + Gestão/Certificados/Configurações groups', () => {
     const auth = useAuthStore()
     auth.token = 'tok'
     auth.userRole = 'admin'
     const { navItems } = useNavConfig()
     expect(navItems.value.flat.map((l) => l.to)).toEqual(['/dashboard'])
     const labels = navItems.value.groups.map((g) => g.label)
-    expect(labels).toEqual(['Gestão', 'Certificados', 'Personalização'])
+    expect(labels).toEqual(['Gestão', 'Certificados', 'Configurações'])
     const management = navItems.value.groups.find((g) => g.testid === 'management')
     expect(management.items.map((i) => i.to)).toEqual([
       '/courses',
@@ -38,6 +38,29 @@ describe('useNavConfig', () => {
       '/enrollments',
       '/payments',
     ])
+    // Configurações group includes White Label + Financeiro
+    const config = navItems.value.groups.find((g) => g.testid === 'customization')
+    expect(config.items.map((i) => i.to)).toEqual([
+      '/settings/white-label',
+      '/settings/financial',
+    ])
+  })
+
+  it('admin sees Financeiro in Configurações — student does NOT', () => {
+    const auth = useAuthStore()
+    auth.token = 'tok'
+    auth.userRole = 'admin'
+    const { navItems: adminNav } = useNavConfig()
+    const adminConfig = adminNav.value.groups.find((g) => g.testid === 'customization')
+    expect(adminConfig.items.some((i) => i.to === '/settings/financial')).toBe(true)
+
+    auth.userRole = 'student'
+    const { navItems: studentNav } = useNavConfig()
+    const allStudentLinks = [
+      ...studentNav.value.flat.map((l) => l.to),
+      ...studentNav.value.groups.flatMap((g) => g.items.map((i) => i.to)),
+    ]
+    expect(allStudentLinks).not.toContain('/settings/financial')
   })
 
   it('super_admin gets Gestão Global only — no tenant-admin groups', () => {

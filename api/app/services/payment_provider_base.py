@@ -12,6 +12,12 @@ The factory (`resolve_provider`) reads the tenant's configured provider
 from `tenant.settings["payment_provider"]` (defaulting to
 ``MERCADO_PAGO`` for backward compatibility) and instantiates the
 matching service with credentials fetched from `TenantSecret`.
+
+Security:
+- PaymentProviderError carries only sanitized, safe messages.
+- Raw provider response bodies are NEVER exposed to clients.
+- Internal logging may include HTTP status and error codes, but never
+  credentials, API keys, or customer PII.
 """
 
 from __future__ import annotations
@@ -26,7 +32,31 @@ from app.models.payment import PaymentMethod, PaymentProvider
 
 
 class PaymentProviderError(Exception):
-    """Base error raised by any payment provider implementation."""
+    """Sanitized error raised by any payment provider implementation.
+
+    The ``message`` is safe to return to clients — it never contains
+    raw provider response bodies, API keys, or customer data.
+
+    Attributes:
+        status_code: The HTTP status code from the provider (if applicable).
+        provider_error_code: A safe, non-sensitive error code from the provider.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider_error_code: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_error_code = provider_error_code
+
+    @property
+    def safe_message(self) -> str:
+        """Message safe to return to HTTP clients."""
+        return str(self.args[0]) if self.args else "Provider error"
 
 
 @dataclass(frozen=True)
@@ -40,12 +70,18 @@ class CheckoutResult:
 
 @dataclass(frozen=True)
 class PaymentInfoResult:
-    """Normalized result of querying a payment's status from a provider."""
+    """Normalized result of querying a payment's status from a provider.
+
+    Includes externalReference, status, amount, billingType, and customer
+    for webhook identity verification.
+    """
 
     provider_payment_id: str
     external_reference: str
     status: str  # raw provider status string
     amount: float | None = None
+    billing_type: str | None = None
+    customer_id: str | None = None
     raw: dict | None = None
 
 
@@ -55,6 +91,27 @@ class CustomerResult:
 
     provider_customer_id: str
     raw: dict
+
+
+@dataclass(frozen=True)
+class WebhookConfig:
+    """Normalized webhook configuration from the provider."""
+
+    id: str
+    name: str
+    url: str
+    enabled: bool
+    interrupted: bool
+    events: list[str]
+    mock: bool = False
+
+
+@dataclass(frozen=True)
+class WebhookListResult:
+    """Normalized result of listing webhooks from the provider."""
+
+    data: list[dict]
+    mock: bool = False
 
 
 class PaymentProviderInterface(Protocol):
@@ -70,7 +127,7 @@ class PaymentProviderInterface(Protocol):
     async def create_checkout(
         self,
         *,
-        enrollment_id: UUID,
+        payment_id: UUID,
         amount: float,
         student_email: str,
         student_name: str | None,
@@ -78,8 +135,13 @@ class PaymentProviderInterface(Protocol):
         method: PaymentMethod,
         installments: int | None = None,
         customer_id: str | None = None,
+        enrollment_id: UUID | None = None,
     ) -> CheckoutResult:
         """Create a charge/checkout at the provider.
+
+        The ``externalReference`` MUST be set to the internal Payment UUID
+        (``str(payment_id)``) so webhook identity verification can match
+        the charge back to the exact internal Payment.
 
         Returns a normalized CheckoutResult. Raises PaymentProviderError
         on any provider-side failure.
@@ -87,7 +149,11 @@ class PaymentProviderInterface(Protocol):
         ...
 
     async def get_payment_info(self, provider_payment_id: str) -> PaymentInfoResult:
-        """Query the provider for the current status of a payment."""
+        """Query the provider for the current status of a payment.
+
+        Returns externalReference, status, amount, billingType, and customer
+        for webhook identity verification.
+        """
         ...
 
     async def refund_payment(self, provider_payment_id: str) -> dict:
@@ -140,7 +206,9 @@ async def resolve_provider(
         api_key = await get_asaas_api_key(db, tenant_id)
         if not api_key:
             raise PaymentProviderError(
-                "Asaas configured for tenant but no asaas_api_key secret found"
+                "Asaas configured for tenant but no asaas_api_key secret found",
+                status_code=400,
+                provider_error_code="missing_api_key",
             )
         return AsaasProvider(api_key=api_key, sandbox=settings.get("asaas_sandbox", False))
 
@@ -157,5 +225,7 @@ __all__ = [
     "PaymentInfoResult",
     "PaymentProviderError",
     "PaymentProviderInterface",
+    "WebhookConfig",
+    "WebhookListResult",
     "resolve_provider",
 ]

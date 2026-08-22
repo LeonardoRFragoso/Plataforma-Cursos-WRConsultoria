@@ -185,6 +185,12 @@ export const routes = [
     component: () => import('../views/DemoPayment.vue'),
     meta: { requiresAuth: true, layout: 'authenticated' },
   },
+  {
+    path: '/payment/return/:paymentId',
+    name: 'PaymentReturn',
+    component: () => import('../views/PaymentReturn.vue'),
+    meta: { requiresAuth: true, layout: 'authenticated' },
+  },
 ]
 
 const router = createRouter({

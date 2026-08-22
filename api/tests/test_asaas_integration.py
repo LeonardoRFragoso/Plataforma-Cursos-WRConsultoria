@@ -73,6 +73,16 @@ async def test_asaas_status_configured(client):
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
         await set_tenant_secret(db, WR_TENANT_ID, ASAAS_API_KEY_KEY, "fake_key_12345678901234567890")
         await set_tenant_secret(db, WR_TENANT_ID, "asaas_webhook_token", "webhook_tok_123")
+        # Set webhook metadata in tenant settings so webhook_configured=True
+        from sqlalchemy import select
+
+        from app.models.tenant import Tenant
+        tenant = (await db.execute(select(Tenant).where(Tenant.id == WR_TENANT_ID))).scalar_one()
+        ts = dict(tenant.settings or {})
+        ts["asaas_webhook_id"] = "wh_test_123"
+        ts["asaas_webhook_enabled"] = True
+        ts["asaas_webhook_interrupted"] = False
+        tenant.settings = ts
         await db.commit()
 
     resp = await client.get(
@@ -226,8 +236,11 @@ async def test_webhook_wrong_token_rejected(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_correct_token_accepted(client):
+async def test_webhook_correct_token_accepted(client, monkeypatch):
     """Webhook with correct token processes the event."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
+
     token = await _setup_asaas_webhook_tenant()
     _payment_id, provider_pid = await _create_asaas_payment()
 
@@ -246,8 +259,11 @@ async def test_webhook_correct_token_accepted(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_duplicate_event_idempotent(client):
+async def test_webhook_duplicate_event_idempotent(client, monkeypatch):
     """Duplicate webhook event does not re-apply transition."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
+
     token = await _setup_asaas_webhook_tenant()
     _payment_id, provider_pid = await _create_asaas_payment()
 
@@ -288,8 +304,11 @@ async def test_webhook_duplicate_event_idempotent(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_unknown_event_does_not_crash(client):
+async def test_webhook_unknown_event_does_not_crash(client, monkeypatch):
     """Unknown event type is recorded but doesn't crash the webhook."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
+
     token = await _setup_asaas_webhook_tenant()
     _payment_id, provider_pid = await _create_asaas_payment()
 
@@ -307,13 +326,16 @@ async def test_webhook_unknown_event_does_not_crash(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_cross_tenant_denied(client):
+async def test_webhook_cross_tenant_denied(client, monkeypatch):
     """WR webhook token cannot authenticate an Alfa webhook call.
 
     The webhook is sent to /webhook/wr but the payment belongs to Alfa.
     The payment should not be found because we query by the resolved
     tenant (WR), not the payload's tenant.
     """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
+
     from app.models.tenant import Tenant, TenantStatus
 
     # Create Alfa tenant
@@ -360,6 +382,7 @@ async def test_webhook_cross_tenant_denied(client):
     )
     assert resp.status_code == 200
     assert resp.json()["payment_found"] is False
+    assert resp.json()["state"] == "PENDING_MATCH"
 
     # Verify Alfa payment was NOT modified
     async with AsyncSessionLocal() as db:
