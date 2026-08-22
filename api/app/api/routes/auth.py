@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.normalization import (
     is_cpf_format,
     is_email_format,
+    normalize_cpf,
     normalize_email,
     validate_cpf,
 )
@@ -192,8 +193,13 @@ async def login(
     # Tenant-scoped lookup: the database query itself filters by tenant_id,
     # so the same email/CPF can safely exist in WR and Alfa without ambiguity.
     # We never query globally and pick the first result.
+    #
+    # is_cpf_format only accepts canonical CPF shapes (11 digits or
+    # DDD.DDD.DDD-DD). Arbitrary strings containing 11 digits embedded in
+    # other characters are NOT classified as CPF — they fall through to the
+    # email check or are rejected as invalid identifiers.
     if is_cpf_format(credentials.identifier):
-        cpf_digits = "".join(ch for ch in credentials.identifier if ch.isdigit())
+        cpf_digits = normalize_cpf(credentials.identifier)
         stmt = select(User).where(
             User.cpf == cpf_digits,
             User.tenant_id == resolved_tenant_id,

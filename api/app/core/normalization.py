@@ -5,14 +5,26 @@ authentication, registration, password recovery, activation and corporate
 employee creation. Reusing these helpers guarantees that the same person can
 safely exist in multiple tenants (WR + Alfa) without ambiguity, because every
 lookup and duplicate check compares normalized values.
+
+Strict CPF format contract
+--------------------------
+Only two input shapes are accepted as CPF:
+
+1. Exactly 11 digits: ``52998224725``
+2. Canonical formatted CPF: ``529.982.247-25``
+
+Optional surrounding whitespace is stripped. Any other input (letters,
+extra symbols, partial formatting, slashes, plus signs, etc.) is rejected.
+This prevents arbitrary garbage like ``abc52998224725xyz`` from being
+silently reduced to a valid 11-digit CPF.
 """
 
 import re
 
-# CPF: exactly 11 digits after stripping punctuation.
-_CPF_DIGITS_RE = re.compile(r"^\d{11}$")
-# Strip everything that is not a digit.
-_CPF_NON_DIGITS_RE = re.compile(r"[^0-9]")
+# CPF: exactly 11 digits (raw form).
+_CPF_RAW_RE = re.compile(r"^\d{11}$")
+# CPF: canonical formatted form DDD.DDD.DDD-DD
+_CPF_FORMATTED_RE = re.compile(r"^\d{3}\.\d{3}\.\d{3}-\d{2}$")
 # Simple email format check (Pydantic EmailStr handles strict validation).
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
@@ -38,26 +50,46 @@ def normalize_email(email: str) -> str:
 
 
 def normalize_cpf(cpf: str) -> str:
-    """Normalize a CPF: strip punctuation and return digit-only string.
+    """Normalize a CPF to its canonical 11-digit form.
 
-    Returns the 11-digit CPF string (without leading zeros stripped).
+    Accepts only:
+    - Exactly 11 digits (e.g. ``52998224725``)
+    - Canonical formatted CPF (e.g. ``529.982.247-25``)
+
+    Surrounding whitespace is stripped. Any other input raises ValueError.
+
     Does NOT validate check digits — use :func:`validate_cpf` for that.
-    Raises ValueError if the input contains no digits.
     """
     if not cpf or not isinstance(cpf, str):
         raise ValueError("cpf cannot be empty")
-    digits = _CPF_NON_DIGITS_RE.sub("", cpf)
-    if not digits:
-        raise ValueError("cpf must contain digits")
-    return digits
+    stripped = cpf.strip()
+    if not stripped:
+        raise ValueError("cpf cannot be empty")
+    if _CPF_RAW_RE.match(stripped):
+        return stripped
+    if _CPF_FORMATTED_RE.match(stripped):
+        return stripped.replace(".", "").replace("-", "")
+    raise ValueError("cpf must be 11 digits or formatted as DDD.DDD.DDD-DD")
 
 
 def is_cpf_format(identifier: str) -> bool:
-    """True when the identifier looks like a CPF (11 digits after stripping)."""
-    if not identifier:
+    """True when the identifier is a valid CPF *format* (not mathematics).
+
+    Only accepts:
+    - Exactly 11 digits
+    - Canonical formatted CPF ``DDD.DDD.DDD-DD``
+
+    Returns False for arbitrary strings that merely contain 11 digits
+    embedded in other characters (e.g. ``abc52998224725xyz``).
+    """
+    if not identifier or not isinstance(identifier, str):
         return False
-    digits = _CPF_NON_DIGITS_RE.sub("", identifier)
-    return bool(_CPF_DIGITS_RE.match(digits))
+    stripped = identifier.strip()
+    if not stripped:
+        return False
+    if _CPF_RAW_RE.match(stripped):
+        return True
+    return bool(_CPF_FORMATTED_RE.match(stripped))
 
 
 def is_email_format(identifier: str) -> bool:
@@ -79,8 +111,8 @@ def validate_cpf(cpf: str) -> str:
     """Mathematically validate a Brazilian CPF and return the normalized form.
 
     Performs:
-    - punctuation stripping;
-    - exactly 11 digits;
+    - strict format validation (only raw 11 digits or canonical formatted);
+    - exactly 11 digits after normalization;
     - rejection of all-equal-digit sequences (00000000000, 11111111111, ...);
     - validation of both check digits (verifying digits).
 
