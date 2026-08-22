@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.normalization import normalize_cpf, normalize_email
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user, hash_password
 from app.models.attendance import Attendance
 from app.models.certificate import Certificate
@@ -25,8 +26,10 @@ router = APIRouter()
 
 
 def _clean_cpf(cpf: str) -> str:
-    """Remove formatação do CPF."""
-    return cpf.replace('.', '').replace('-', '').strip()
+    """Remove formatação do CPF usando o helper centralizado de normalização."""
+    if not cpf:
+        return ""
+    return normalize_cpf(cpf)
 
 
 @router.post("/", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
@@ -78,9 +81,10 @@ async def create_student(
             )
 
     # Check duplicate email (tenant-scoped)
+    normalized_student_email = normalize_email(str(student_data.email))
     stmt = select(User).where(
         User.tenant_id == tenant_id,
-        User.email == str(student_data.email),
+        User.email == normalized_student_email,
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
@@ -141,7 +145,7 @@ async def create_student(
     try:
         user = User(
             tenant_id=tenant_id,
-            email=str(student_data.email),
+            email=normalized_student_email,
             cpf=raw_cpf or None,
             full_name=student_data.full_name,
             password_hash=hash_password(temp_password) if temp_password else None,

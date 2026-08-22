@@ -1,4 +1,3 @@
-import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -9,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.constants import WR_TENANT_ID
 from app.core.database import get_db
+from app.core.normalization import (
+    is_cpf_format,
+    is_email_format,
+    normalize_email,
+    validate_cpf,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -62,17 +67,6 @@ def _can_return_token() -> bool:
     return _current_env() in _LOCAL_TOKEN_RETURN_ENVS
 
 
-def is_cpf(identifier: str) -> bool:
-    """Verifica se o identificador é um CPF (apenas números, 11 dígitos)"""
-    cpf_pattern = r'^\d{11}$'
-    return bool(re.match(cpf_pattern, identifier.replace('.', '').replace('-', '')))
-
-def is_email(identifier: str) -> bool:
-    """Verifica se o identificador é um e-mail"""
-    email_pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-    return bool(re.match(email_pattern, identifier))
-
-
 def _resolve_request_tenant_id(request: Request) -> UUID:
     """Resolve the tenant_id from the request context set by TenantResolver middleware.
 
@@ -110,9 +104,11 @@ async def register(
     """
     resolved_tenant_id = _resolve_request_tenant_id(request)
 
+    normalized_email = normalize_email(user_data.email)
+
     # Duplicate email check — tenant-scoped (matches uq_user_tenant_email)
     stmt = select(User).where(
-        User.email == user_data.email,
+        User.email == normalized_email,
         User.tenant_id == resolved_tenant_id,
     )
     result = await db.execute(stmt)
@@ -122,11 +118,14 @@ async def register(
             detail="Email already registered",
         )
 
-    cpf = re.sub(r"[^0-9]", "", user_data.cpf)
-    if not is_cpf(cpf):
+    # Mathematical CPF validation — rejects invalid check digits and repeated
+    # sequences before any duplicate check or persistence.
+    try:
+        cpf = validate_cpf(user_data.cpf)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CPF must contain 11 digits",
+            detail="CPF inválido",
         )
 
     # Duplicate CPF check — tenant-scoped (matches uq_user_tenant_cpf)
@@ -143,7 +142,7 @@ async def register(
 
     user = User(
         tenant_id=resolved_tenant_id,
-        email=user_data.email,
+        email=normalized_email,
         cpf=cpf,
         full_name=user_data.full_name,
         password_hash=hash_password(user_data.password),
@@ -190,12 +189,23 @@ async def login(
 
     user = None
 
-    if is_cpf(credentials.identifier):
-        stmt = select(User).where(User.cpf == credentials.identifier)
+    # Tenant-scoped lookup: the database query itself filters by tenant_id,
+    # so the same email/CPF can safely exist in WR and Alfa without ambiguity.
+    # We never query globally and pick the first result.
+    if is_cpf_format(credentials.identifier):
+        cpf_digits = "".join(ch for ch in credentials.identifier if ch.isdigit())
+        stmt = select(User).where(
+            User.cpf == cpf_digits,
+            User.tenant_id == resolved_tenant_id,
+        )
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
-    elif is_email(credentials.identifier):
-        stmt = select(User).where(User.email == credentials.identifier)
+    elif is_email_format(credentials.identifier):
+        normalized_email = normalize_email(credentials.identifier)
+        stmt = select(User).where(
+            User.email == normalized_email,
+            User.tenant_id == resolved_tenant_id,
+        )
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
     else:
@@ -219,6 +229,8 @@ async def login(
     # Tenant boundary enforcement at the application layer.
     # SUPER_ADMIN is bound to WR/master tenant and may only login via WR context.
     # Normal ADMIN/STUDENT must match the resolved request tenant exactly.
+    # Because the query is already tenant-scoped, a cross-tenant user simply
+    # is not found (401). This check is a defense-in-depth guarantee.
     if user.role == UserRole.SUPER_ADMIN:
         if user.tenant_id != WR_TENANT_ID or resolved_tenant_id != WR_TENANT_ID:
             raise HTTPException(
@@ -357,8 +369,10 @@ async def forgot_password(
     """
     resolved_tenant_id = _resolve_request_tenant_id(request)
 
+    normalized_email = normalize_email(payload.email)
+
     stmt = select(User).where(
-        User.email == payload.email,
+        User.email == normalized_email,
         User.tenant_id == resolved_tenant_id,
     )
     result = await db.execute(stmt)
