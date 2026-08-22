@@ -49,14 +49,18 @@
         <div class="text-center">
           <p class="text-sm text-gray-600">
             Não tem conta?
-            <router-link to="/register" class="text-primary-600 hover:text-primary-700 font-semibold" data-testid="login-register-link">
+            <router-link
+              :to="registerLinkTo"
+              class="text-primary-600 hover:text-primary-700 font-semibold"
+              data-testid="login-register-link"
+            >
               Cadastre-se
             </router-link>
           </p>
         </div>
         <div class="border-t border-gray-100 pt-3 text-center">
           <router-link
-            to="/recuperar-senha"
+            :to="forgotPasswordLinkTo"
             class="text-sm text-primary-600 hover:text-primary-700 font-medium"
             data-testid="forgot-password-link"
           >
@@ -69,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { resolveSafeRedirect } from '../utils/safeRedirect'
@@ -83,6 +87,21 @@ const identifier = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+
+// Computed link destinations that preserve the redirect query param.
+const registerLinkTo = computed(() => {
+  const redirect = route.query.redirect
+  return redirect
+    ? { path: '/register', query: { redirect } }
+    : { path: '/register' }
+})
+
+const forgotPasswordLinkTo = computed(() => {
+  const redirect = route.query.redirect
+  return redirect
+    ? { path: '/recuperar-senha', query: { redirect } }
+    : { path: '/recuperar-senha' }
+})
 
 const handleLogin = async () => {
   loading.value = true
