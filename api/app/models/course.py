@@ -13,11 +13,13 @@ class CourseModality(str, PyEnum):
     EAD = "EAD"
     SEMIPRESENCIAL = "SEMIPRESENCIAL"
 
+
 class CourseType(str, PyEnum):
     FORMACAO = "FORMACAO"
     RECICLAGEM = "RECICLAGEM"
     INICIAL = "INICIAL"
     PERIODICO = "PERIODICO"
+
 
 class Course(Base):
     __tablename__ = "courses"
@@ -27,13 +29,7 @@ class Course(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("tenants.id"),
-        
-        nullable=False,
-        index=True,
-    )
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
     code = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
@@ -45,7 +41,7 @@ class Course(Base):
     prerequisites = Column(Text, nullable=True)
     cover_image_url = Column(String, nullable=True)
     cover_image_alt = Column(String, nullable=True)
+    certificate_validity_days = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-

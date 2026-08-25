@@ -1,5 +1,5 @@
 from app.models.attendance import Attendance
-from app.models.certificate import Certificate
+from app.models.certificate import Certificate, CertificateEvent
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
 from app.models.corporate import CorporateInvite, CorporateSeatAllocation, CorporateTrainingRequest
@@ -27,6 +27,7 @@ __all__ = [
     "Attendance",
     "BillingCycle",
     "Certificate",
+    "CertificateEvent",
     "Class",
     "ClassStatus",
     "Company",
