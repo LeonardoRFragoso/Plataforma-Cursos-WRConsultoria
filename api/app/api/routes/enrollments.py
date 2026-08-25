@@ -28,6 +28,7 @@ from app.schemas.payment import PaymentResponse
 
 router = APIRouter()
 
+
 @router.post("/", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_enrollment(
     enrollment_data: EnrollmentCreate,
@@ -54,6 +55,7 @@ async def create_enrollment(
     await db.refresh(enrollment)
     return enrollment
 
+
 @router.get("/", response_model=list[EnrollmentResponse])
 async def list_enrollments(
     db: AsyncSession = Depends(get_db),
@@ -71,6 +73,7 @@ async def list_enrollments(
     result = await db.execute(stmt)
     enrollments = result.scalars().all()
     return enrollments
+
 
 @router.get("/me", response_model=list[MyEnrollmentResponse])
 async def list_my_enrollments(
@@ -144,6 +147,7 @@ async def get_enrollment(
 
     return enrollment
 
+
 @router.put("/{enrollment_id}", response_model=EnrollmentResponse)
 async def update_enrollment(
     enrollment_id: UUID,
@@ -172,6 +176,7 @@ async def update_enrollment(
     await db.commit()
     await db.refresh(enrollment)
     return enrollment
+
 
 @router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_enrollment(
@@ -203,17 +208,22 @@ async def purchase_enrollment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Compra de curso com idempotência no nível do Course.
+    """Purchase a course with course-level and payment-attempt idempotency.
 
-    Regras de idempotência (qualquer turma do mesmo curso):
-    - CONFIRMADA / CONCLUIDA: curso já adquirido -> retorna estado existente,
-      nunca cria nova matrícula/pagamento.
-    - PENDENTE: reutiliza a matrícula/pagamento pendente existente.
-    - CANCELADA: permite nova compra (regra explícita de abandono).
+    Business rules (across every class of the same course):
+    - CONFIRMADA / CONCLUIDA: the course is already acquired; return the
+      existing enrollment and never create another charge.
+    - PENDENTE + paid course: reuse only an active payment attempt
+      (PENDENTE/PROCESSANDO). If the latest attempt is terminal
+      (RECUSADO/REEMBOLSADO), create a new Payment row and preserve the old
+      attempt unchanged for financial history/audit.
+    - Free course (price <= 0): confirm the enrollment directly and never
+      create a Payment or contact a payment provider.
+    - CANCELADA: a new enrollment may be created in another open class.
 
-    Concorrência: trava o registro do Student para serializar compras
-    simultâneas do mesmo aluno e trava a turma ao conferir capacidade,
-    impedindo ultrapassar max_students.
+    Concurrency: the Student row serializes simultaneous purchases by the same
+    user and the Class row is locked while capacity is checked. This protects
+    against double-click/two-tab duplicate purchases at the database boundary.
     """
     if current_user.get("role") != "student":
         raise HTTPException(
@@ -236,9 +246,18 @@ async def purchase_enrollment(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tenant not resolved",
             )
+
     user_id = UUID(current_user["user_id"])
-    # Trava o Student para serializar compras concorrentes do mesmo aluno.
-    stmt = select(Student).where(Student.user_id == user_id).with_for_update()
+
+    # Lock the Student to serialize concurrent purchases from the same account.
+    stmt = (
+        select(Student)
+        .where(
+            Student.user_id == user_id,
+            Student.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
     result = await db.execute(stmt)
     student = result.scalar_one_or_none()
     if not student:
@@ -264,7 +283,9 @@ async def purchase_enrollment(
             detail="Course not available",
         )
 
-    # Idempotência no nível do Course: busca matrícula existente em qualquer turma.
+    is_free_course = float(course.price or 0) <= 0
+
+    # Course-level idempotency: find any enrollment for this student/course.
     existing_stmt = (
         select(Enrollment)
         .join(Class, Enrollment.class_id == Class.id)
@@ -276,54 +297,81 @@ async def purchase_enrollment(
     )
     existing_enrollments = (await db.execute(existing_stmt)).scalars().all()
 
-    async def _resolve_payment(enrollment: Enrollment) -> Payment:
-        payment = (
+    async def _payments_for(enrollment: Enrollment) -> list[Payment]:
+        return (
             await db.execute(
                 select(Payment)
                 .where(
                     Payment.enrollment_id == enrollment.id,
                     Payment.tenant_id == tenant_id,
                 )
-                .order_by(Payment.created_at.desc())
+                .order_by(Payment.created_at.desc(), Payment.id.desc())
             )
-        ).scalar_one_or_none()
-        if not payment:
-            payment = Payment(
-                tenant_id=tenant_id,
-                enrollment_id=enrollment.id,
-                amount=enrollment.price,
-                status=PaymentStatus.PENDENTE,
-                method=data.method,
-            )
-            db.add(payment)
-            await db.commit()
-            await db.refresh(payment)
+        ).scalars().all()
+
+    async def _payment_for_acquired(enrollment: Enrollment) -> Payment | None:
+        """Return evidence of a paid acquisition without creating a charge."""
+        if float(enrollment.price or 0) <= 0:
+            return None
+        payments = await _payments_for(enrollment)
+        approved = next((p for p in payments if p.status == PaymentStatus.APROVADO), None)
+        return approved or (payments[0] if payments else None)
+
+    async def _active_or_new_attempt(enrollment: Enrollment) -> Payment:
+        """Reuse an active attempt; preserve terminal attempts and create a new row."""
+        payments = await _payments_for(enrollment)
+        latest = payments[0] if payments else None
+        if latest and latest.status in (
+            PaymentStatus.PENDENTE,
+            PaymentStatus.PROCESSANDO,
+            PaymentStatus.APROVADO,
+        ):
+            return latest
+
+        payment = Payment(
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            amount=enrollment.price,
+            status=PaymentStatus.PENDENTE,
+            method=data.method,
+        )
+        db.add(payment)
+        await db.commit()
+        await db.refresh(payment)
         return payment
 
-    # Curso já adquirido (CONFIRMADA ou CONCLUIDA): não cria nova compra.
+    # Course already acquired: never create another payment/charge.
     acquired = [
-        e for e in existing_enrollments
+        e
+        for e in existing_enrollments
         if e.status in (EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA)
     ]
     if acquired:
         enrollment = acquired[0]
-        payment = await _resolve_payment(enrollment)
+        payment = await _payment_for_acquired(enrollment)
         return EnrollmentPurchaseResponse(
             enrollment=enrollment,
-            payment=PaymentResponse.model_validate(payment),
+            payment=PaymentResponse.model_validate(payment) if payment else None,
         )
 
-    # PENDENTE: reutiliza matrícula/pagamento pendente existente.
+    # Pending free enrollment (including legacy data): confirm directly.
     pending = [e for e in existing_enrollments if e.status == EnrollmentStatus.PENDENTE]
     if pending:
         enrollment = pending[0]
-        payment = await _resolve_payment(enrollment)
+        if is_free_course:
+            enrollment.price = 0
+            enrollment.status = EnrollmentStatus.CONFIRMADA
+            await db.commit()
+            await db.refresh(enrollment)
+            return EnrollmentPurchaseResponse(enrollment=enrollment, payment=None)
+
+        payment = await _active_or_new_attempt(enrollment)
         return EnrollmentPurchaseResponse(
             enrollment=enrollment,
             payment=PaymentResponse.model_validate(payment),
         )
 
-    # Nenhuma matrícula reutilizável (CANCELADA ou inexistente): nova compra.
+    # No reusable enrollment (only CANCELADA or none): choose an open class.
     stmt = (
         select(Class)
         .where(
@@ -342,30 +390,30 @@ async def purchase_enrollment(
         )
 
     for class_obj in open_classes:
-        # Trava a turma para conferir capacidade de forma segura sob concorrência.
+        # Lock class while checking capacity.
         locked = (
             await db.execute(
-                select(Class).where(Class.id == class_obj.id).with_for_update()
+                select(Class)
+                .where(
+                    Class.id == class_obj.id,
+                    Class.tenant_id == tenant_id,
+                )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if not locked:
             continue
 
-        # Pula turmas onde o aluno já possui matrícula (a constraint única
-        # (tenant, student, class) impede uma segunda; matrículas CANCELADA
-        # aqui já foram tratadas acima e não podem ser reutilizadas na mesma turma).
-        already_in_class = any(
-            e.class_id == class_obj.id for e in existing_enrollments
-        )
+        # A unique (tenant, student, class) constraint prevents a second row in
+        # the same class. A CANCELADA row therefore cannot be silently reused.
+        already_in_class = any(e.class_id == class_obj.id for e in existing_enrollments)
         if already_in_class:
             continue
 
-        count_stmt = (
-            select(func.count(Enrollment.id))
-            .where(
-                Enrollment.class_id == class_obj.id,
-                Enrollment.status != EnrollmentStatus.CANCELADA,
-            )
+        count_stmt = select(func.count(Enrollment.id)).where(
+            Enrollment.class_id == class_obj.id,
+            Enrollment.tenant_id == tenant_id,
+            Enrollment.status != EnrollmentStatus.CANCELADA,
         )
         enrolled = (await db.execute(count_stmt)).scalar_one()
         if enrolled >= class_obj.max_students:
@@ -375,12 +423,22 @@ async def purchase_enrollment(
             tenant_id=tenant_id,
             student_id=student.id,
             class_id=class_obj.id,
-            price=course.price,
-            status=EnrollmentStatus.PENDENTE,
+            price=0 if is_free_course else course.price,
+            status=(
+                EnrollmentStatus.CONFIRMADA
+                if is_free_course
+                else EnrollmentStatus.PENDENTE
+            ),
             source=EnrollmentSource.INDIVIDUAL,
         )
         db.add(enrollment)
         await db.flush()
+
+        # Free courses never create a financial record or contact a provider.
+        if is_free_course:
+            await db.commit()
+            await db.refresh(enrollment)
+            return EnrollmentPurchaseResponse(enrollment=enrollment, payment=None)
 
         payment = Payment(
             tenant_id=tenant_id,
@@ -475,14 +533,11 @@ async def create_bulk_enrollments(
             )
 
     # Check for duplicate enrollments
-    stmt = (
-        select(Enrollment)
-        .where(
-            Enrollment.student_id.in_(data.student_ids),
-            Enrollment.class_id == data.class_id,
-            Enrollment.tenant_id == tenant_id,
-            Enrollment.status != EnrollmentStatus.CANCELADA,
-        )
+    stmt = select(Enrollment).where(
+        Enrollment.student_id.in_(data.student_ids),
+        Enrollment.class_id == data.class_id,
+        Enrollment.tenant_id == tenant_id,
+        Enrollment.status != EnrollmentStatus.CANCELADA,
     )
     existing = (await db.execute(stmt)).scalars().all()
     if existing:
@@ -493,13 +548,10 @@ async def create_bulk_enrollments(
         )
 
     # Check capacity BEFORE any writes (atomic)
-    count_stmt = (
-        select(func.count(Enrollment.id))
-        .where(
-            Enrollment.class_id == data.class_id,
-            Enrollment.tenant_id == tenant_id,
-            Enrollment.status.in_([EnrollmentStatus.PENDENTE, EnrollmentStatus.CONFIRMADA]),
-        )
+    count_stmt = select(func.count(Enrollment.id)).where(
+        Enrollment.class_id == data.class_id,
+        Enrollment.tenant_id == tenant_id,
+        Enrollment.status.in_([EnrollmentStatus.PENDENTE, EnrollmentStatus.CONFIRMADA]),
     )
     current_count = (await db.execute(count_stmt)).scalar_one()
     available = class_obj.max_students - current_count
