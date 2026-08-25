@@ -263,8 +263,8 @@ async def test_webhook_payment_refunded_maps_to_reembolsado(client, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_webhook_chargeback_maps_to_recusado(client, monkeypatch):
-    """PAYMENT_CHARGEBACK_REQUESTED maps to RECUSADO."""
+async def test_webhook_chargeback_requires_review_without_terminal_refusal(client, monkeypatch):
+    """PAYMENT_CHARGEBACK_REQUESTED preserves status and requires human review."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
 
@@ -281,7 +281,8 @@ async def test_webhook_chargeback_maps_to_recusado(client, monkeypatch):
         headers={"asaas-access-token": token},
     )
     assert resp.status_code == 200
-    assert resp.json()["payment_status"] == "RECUSADO"
+    assert resp.json()["payment_status"] == "PROCESSANDO"
+    assert resp.json()["review_required"] is True
 
 
 @pytest.mark.asyncio
