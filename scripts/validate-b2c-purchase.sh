@@ -18,7 +18,7 @@ fi
 alembic heads
 
 log "Backend: focused B2C purchase/payment/email/financial tests"
-pytest -q \
+pytest -q --no-cov \
   tests/test_b2c_purchase_lifecycle.py \
   tests/test_checkout_idempotency.py \
   tests/test_payment_creation_invariants.py \
@@ -31,7 +31,7 @@ pytest -q \
   tests/test_asaas_financial_events.py
 
 if [[ "${FULL_BACKEND:-0}" == "1" ]]; then
-  log "Backend: full suite"
+  log "Backend: full suite + project coverage threshold"
   pytest -q
 fi
 
