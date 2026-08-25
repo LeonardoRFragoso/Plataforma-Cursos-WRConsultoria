@@ -49,11 +49,11 @@ class Payment(Base):
             unique=True,
             postgresql_where=text(
                 "enrollment_id IS NOT NULL AND "
-                "status IN ('PENDENTE', 'PROCESSANDO', 'APROVADO')"
+                "status IN ('PENDENTE', 'PROCESSANDO')"
             ),
             sqlite_where=text(
                 "enrollment_id IS NOT NULL AND "
-                "status IN ('PENDENTE', 'PROCESSANDO', 'APROVADO')"
+                "status IN ('PENDENTE', 'PROCESSANDO')"
             ),
         ),
     )
