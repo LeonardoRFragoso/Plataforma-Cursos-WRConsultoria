@@ -100,6 +100,41 @@ describe('PaymentReturn', () => {
     expect(wrapper.find('[data-testid="retry-payment-link"]').attributes('href')).toBe('/cursos')
   })
 
+  it('expired payment returns to the course and never exposes the old checkout', async () => {
+    api.get.mockResolvedValue({
+      data: {
+        status: 'EXPIRADO',
+        course_id: 'course-expired',
+        checkout_url: 'https://checkout.test/expired-attempt',
+      },
+    })
+    const router = makeRouter()
+    await router.push('/payment/return/pay-expired')
+    await router.isReady()
+
+    const wrapper = mount(PaymentReturn, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const retryLink = wrapper.find('[data-testid="expired-payment-link"]')
+    expect(retryLink.exists()).toBe(true)
+    expect(retryLink.attributes('href')).toBe('/courses/course-expired')
+    expect(wrapper.text()).toContain('Pagamento expirado')
+    expect(wrapper.text()).toContain('gerar novo pagamento')
+    expect(wrapper.html()).not.toContain('https://checkout.test/expired-attempt')
+  })
+
+  it('expired payment without course context falls back to catalog', async () => {
+    api.get.mockResolvedValue({ data: { status: 'EXPIRADO' } })
+    const router = makeRouter()
+    await router.push('/payment/return/pay-expired')
+    await router.isReady()
+
+    const wrapper = mount(PaymentReturn, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="expired-payment-link"]').attributes('href')).toBe('/cursos')
+  })
+
   it('shows error state when API fails', async () => {
     api.get.mockRejectedValue({ response: { data: { detail: 'Not found' } } })
     const router = makeRouter()
