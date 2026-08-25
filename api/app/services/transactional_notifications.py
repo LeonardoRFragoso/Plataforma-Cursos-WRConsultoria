@@ -32,15 +32,23 @@ def _email_enabled() -> bool:
 
 
 def _safe_http_base_url(value: str | None) -> str | None:
-    """Accept only absolute HTTP(S) frontend URLs for email links."""
+    """Accept only absolute, credential-free HTTP(S) URLs for email links."""
     if not value:
         return None
+
     candidate = str(value).strip().rstrip("/")
+    if any(char in candidate for char in ("\r", "\n", "\t")):
+        return None
+
     try:
         parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        # Accessing port validates malformed values such as ``host:not-a-port``.
+        _ = parsed.port
     except ValueError:
         return None
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
         return None
     if parsed.username or parsed.password:
         return None
