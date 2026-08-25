@@ -109,6 +109,8 @@ async def _setup_student_and_payment():
             "payment_id": payment.id,
             "user_id": user.id,
             "student_id": student.id,
+            "course_id": course.id,
+            "enrollment_id": enrollment.id,
         }
 
 
@@ -117,6 +119,22 @@ def _headers(user_id, role="student", tenant_id=WR_TENANT_ID):
         {"sub": str(user_id), "role": role, "tenant_id": str(tenant_id)}
     )
     return {"Authorization": f"Bearer {token}", "x-tenant-slug": "wr"}
+
+
+@pytest.mark.asyncio
+async def test_payment_get_includes_course_context_for_return_journey(client):
+    """PaymentReturn receives the real course and enrollment context from API."""
+    ctx = await _setup_student_and_payment()
+
+    resp = await client.get(
+        f"/api/v1/payments/{ctx['payment_id']}",
+        headers=_headers(ctx["user_id"]),
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["course_id"] == str(ctx["course_id"])
+    assert body["enrollment_status"] == EnrollmentStatus.PENDENTE.value
 
 
 @pytest.mark.asyncio
