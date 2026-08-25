@@ -33,6 +33,10 @@ from app.models.payment import (
 )
 from app.models.tenant import Tenant
 from app.services.asaas_provider import AsaasProvider
+from app.services.financial_lifecycle import (
+    SPECIAL_FINANCIAL_EVENTS,
+    reconcile_special_financial_event,
+)
 from app.services.payment_provider_base import PaymentProviderError
 from app.services.payment_reconciliation import reconcile_payment_status
 from app.services.tenant_secret_service import (
@@ -79,20 +83,23 @@ _ASAAS_EVENT_MAP = {
     "PAYMENT_CONFIRMED": PaymentStatus.APROVADO,
     "PAYMENT_RECEIVED": PaymentStatus.APROVADO,
     "PAYMENT_ANTICIPATED": PaymentStatus.APROVADO,
+    # OVERDUE is not expiration: Asaas can still receive boleto/PIX after due
+    # date, so the external charge remains active until a terminal event.
     "PAYMENT_OVERDUE": PaymentStatus.PROCESSANDO,
-    "PAYMENT_REFUNDED": PaymentStatus.REEMBOLSADO,
-    "PAYMENT_PARTIALLY_REFUNDED": PaymentStatus.APROVADO,
-    "PAYMENT_REFUND_IN_PROGRESS": PaymentStatus.PROCESSANDO,
-    "PAYMENT_REFUND_DENIED": PaymentStatus.APROVADO,
+    # Special financial events are reconciled by financial_lifecycle.py.
+    "PAYMENT_REFUNDED": None,
+    "PAYMENT_PARTIALLY_REFUNDED": None,
+    "PAYMENT_REFUND_IN_PROGRESS": None,
+    "PAYMENT_REFUND_DENIED": None,
     "PAYMENT_REFUND_REQUESTED": PaymentStatus.PROCESSANDO,
-    "PAYMENT_CHARGEBACK_REQUESTED": PaymentStatus.RECUSADO,
-    "PAYMENT_CHARGEBACK_DISPUTE": PaymentStatus.RECUSADO,
-    "PAYMENT_AWAITING_CHARGEBACK_REVERSAL": PaymentStatus.RECUSADO,
+    "PAYMENT_CHARGEBACK_REQUESTED": None,
+    "PAYMENT_CHARGEBACK_DISPUTE": None,
+    "PAYMENT_AWAITING_CHARGEBACK_REVERSAL": None,
     "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED": PaymentStatus.RECUSADO,
     "PAYMENT_DELETED": PaymentStatus.RECUSADO,
     "PAYMENT_RESTORED": PaymentStatus.PROCESSANDO,
     "PAYMENT_RECEIVED_IN_CASH_UNDONE": PaymentStatus.PROCESSANDO,
-    "PAYMENT_BANK_SLIP_CANCELLED": PaymentStatus.PROCESSANDO,
+    "PAYMENT_BANK_SLIP_CANCELLED": None,
     "PAYMENT_BANK_SLIP_VIEWED": None,
     "PAYMENT_CHECKOUT_VIEWED": None,
     "PAYMENT_SPLIT_CANCELLED": None,
@@ -486,8 +493,9 @@ async def asaas_webhook(
             "state": EVENT_STATE_PENDING_MATCH,
         }
 
+    is_special_financial_event = event_type in SPECIAL_FINANCIAL_EVENTS
     new_status = _ASAAS_EVENT_MAP.get(event_type)
-    if new_status is None:
+    if new_status is None and not is_special_financial_event:
         event_record.result = f"{EVENT_STATE_IGNORED}:{event_type}"
         await db.commit()
         return {
@@ -536,7 +544,15 @@ async def asaas_webhook(
             }
 
     should_notify_course_access = False
-    if enrollment:
+    if is_special_financial_event:
+        result = await reconcile_special_financial_event(
+            db,
+            payment,
+            enrollment,
+            event_type,
+        )
+        event_record.result = f"{EVENT_STATE_PROCESSED}:{json.dumps(result)}"
+    elif enrollment:
         result = await reconcile_payment_status(payment, enrollment, new_status)
         should_notify_course_access = bool(
             result.get("enrollment_newly_confirmed")
@@ -561,7 +577,8 @@ async def asaas_webhook(
     return {
         "status": "ok",
         "event": event_type,
-        "payment_status": new_status.value,
+        "payment_status": payment.status.value,
+        "review_required": bool(payment.review_required),
         "state": EVENT_STATE_PROCESSED,
     }
 
