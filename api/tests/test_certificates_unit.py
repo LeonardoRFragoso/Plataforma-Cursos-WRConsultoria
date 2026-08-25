@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
 from starlette.requests import Request
 
 from app.api.routes.certificates import (
