@@ -74,4 +74,4 @@ class EnrollmentPurchaseRequest(BaseModel):
 
 class EnrollmentPurchaseResponse(BaseModel):
     enrollment: EnrollmentResponse
-    payment: PaymentResponse
+    payment: PaymentResponse | None = None
