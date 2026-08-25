@@ -51,6 +51,11 @@ class PaymentResponse(PaymentBase):
     paid_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    # Context used by the payment-return journey. These fields are populated
+    # by GET /payments/{id} for individual course payments and remain null for
+    # contexts where there is no single course/enrollment (e.g. company billing).
+    course_id: UUID | None = None
+    enrollment_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
