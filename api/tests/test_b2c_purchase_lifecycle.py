@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.api.routes.enrollments import purchase_enrollment
@@ -219,6 +220,49 @@ async def test_retry_is_idempotent_after_new_active_attempt():
     assert retry.enrollment.id == repeated.enrollment.id
     assert retry.payment.id == repeated.payment.id
     assert retry.payment.id != first_payment_id
+
+
+@pytest.mark.asyncio
+async def test_approved_payment_with_pending_enrollment_requires_manual_reconciliation():
+    """An anomalous approved/pending state must never start a second charge."""
+    course_id, _, _, user_id = await _seed_course(price=310.0)
+    current_user = {
+        "user_id": str(user_id),
+        "role": "student",
+        "tenant_id": str(WR_TENANT_ID),
+    }
+    data = EnrollmentPurchaseRequest(course_id=course_id)
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        first = await purchase_enrollment(data, db, current_user)
+        payment_id = first.payment.id
+        enrollment_id = first.enrollment.id
+
+    # Simulate an approved provider payment that did not unlock the enrollment,
+    # e.g. because reconciliation detected an amount mismatch.
+    async with AsyncSessionLocal() as db:
+        payment = await db.get(Payment, payment_id)
+        payment.status = PaymentStatus.APROVADO
+        await db.commit()
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        with pytest.raises(HTTPException) as exc:
+            await purchase_enrollment(data, db, current_user)
+
+    assert exc.value.status_code == 409
+    assert "manual reconciliation" in exc.value.detail
+
+    async with AsyncSessionLocal() as db:
+        attempts = (
+            await db.execute(
+                select(Payment).where(Payment.enrollment_id == enrollment_id)
+            )
+        ).scalars().all()
+    assert len(attempts) == 1
+    assert attempts[0].id == payment_id
+    assert attempts[0].status == PaymentStatus.APROVADO
 
 
 @pytest.mark.asyncio
