@@ -22,6 +22,7 @@ class PaymentStatus(str, PyEnum):
     APROVADO = "APROVADO"
     RECUSADO = "RECUSADO"
     REEMBOLSADO = "REEMBOLSADO"
+    EXPIRADO = "EXPIRADO"
 
 
 class PaymentMethod(str, PyEnum):
