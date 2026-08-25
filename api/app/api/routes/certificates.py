@@ -498,9 +498,21 @@ async def download_certificate(
 @router.delete("/{certificate_id}", status_code=status.HTTP_409_CONFLICT)
 async def delete_certificate(
     certificate_id: UUID,
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
     """Trusted certificates are immutable records; use revoke/reissue instead."""
+    tenant_id = get_current_tenant_id()
+    certificate = (
+        await db.execute(
+            select(Certificate).where(
+                Certificate.id == certificate_id,
+                Certificate.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not certificate:
+        raise HTTPException(status_code=404, detail="Certificate not found")
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail="Certificates are immutable. Use the revoke or reissue lifecycle.",
