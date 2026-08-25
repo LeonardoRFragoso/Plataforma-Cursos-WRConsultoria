@@ -11,7 +11,7 @@ from app.core.security import get_current_admin, get_current_tenant_id, get_curr
 from app.models.class_model import Class
 from app.models.company import Company
 from app.models.course import Course
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentProvider, PaymentStatus
 from app.models.student import Student
 from app.models.tenant import Tenant
@@ -132,24 +132,61 @@ async def create_payment(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Cria pagamento usando Enrollment.price como autoridade do valor."""
+    """Create/reuse an internal payment attempt for a pending enrollment.
+
+    This lower-level endpoint mirrors the same financial invariants as the B2C
+    purchase journey so it cannot be used to create duplicate active charges.
+    """
     is_admin = current_user.get("role") in ("admin", "super_admin")
     tenant_id = get_current_tenant_id()
-    stmt = select(Enrollment).where(
-        Enrollment.id == payment_data.enrollment_id,
-        Enrollment.tenant_id == tenant_id,
+    stmt = (
+        select(Enrollment)
+        .where(
+            Enrollment.id == payment_data.enrollment_id,
+            Enrollment.tenant_id == tenant_id,
+        )
+        .with_for_update()
     )
     if not is_admin:
         stmt = stmt.join(Student).where(Student.user_id == UUID(current_user["user_id"]))
 
-    result = await db.execute(stmt)
-    enrollment = result.scalar_one_or_none()
+    enrollment = (await db.execute(stmt)).scalar_one_or_none()
 
     if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
         )
+    if enrollment.status != EnrollmentStatus.PENDENTE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Enrollment is not pending payment",
+        )
+    if float(enrollment.price or 0) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Free enrollments do not require a payment",
+        )
+
+    active_stmt = (
+        select(Payment)
+        .where(
+            Payment.tenant_id == tenant_id,
+            Payment.enrollment_id == enrollment.id,
+            Payment.status.in_(
+                [
+                    PaymentStatus.PENDENTE,
+                    PaymentStatus.PROCESSANDO,
+                    PaymentStatus.APROVADO,
+                ]
+            ),
+        )
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
+        .limit(1)
+    )
+    active_payment = (await db.execute(active_stmt)).scalar_one_or_none()
+    if active_payment:
+        return active_payment
 
     payment = Payment(
         tenant_id=tenant_id,
