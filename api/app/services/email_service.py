@@ -1,10 +1,11 @@
 """Email delivery service.
 
-Sends transactional emails via SMTP (password reset, account activation).
+Sends transactional emails via SMTP (password reset, account activation,
+B2C welcome and course-access notifications).
 Tenant-aware: uses tenant branding/name in the email template.
 
 Requirements:
-- Tenant-aware frontend link (uses FRONTEND_URL or tenant custom domain)
+- Tenant-aware frontend link (uses caller-resolved frontend URL)
 - Tenant-aware branding/name
 - HTML + text fallback
 - SMTP timeout
@@ -20,6 +21,7 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
 from typing import Any
 
 from app.core.config import settings
@@ -169,6 +171,82 @@ Se você não criou esta conta, ignore este email.
         """
         return await self.send_email(
             to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_welcome(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        frontend_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Welcome a public B2C account without ever including a password."""
+        safe_name = escape(full_name)
+        safe_tenant = escape(tenant_name)
+        catalog_url = f"{frontend_url.rstrip('/')}/cursos"
+        subject = f"Bem-vindo à {tenant_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Sua conta foi criada com sucesso.</p>
+            <p>Você já pode acessar a plataforma e escolher seus treinamentos.</p>
+            <p><a href="{catalog_url}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">Ver cursos</a></p>
+            <p style="color: #999; font-size: 12px;">Por segurança, sua senha nunca é enviada por e-mail.</p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            "Sua conta foi criada com sucesso. Você já pode acessar a plataforma "
+            f"e escolher seus treinamentos: {catalog_url}\n\n"
+            "Por segurança, sua senha nunca é enviada por e-mail."
+        )
+        return await self.send_email(
+            to=to,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            from_name=tenant_name,
+        )
+
+    async def send_course_access(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        course_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Notify that payment was confirmed and course access is available."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        subject = f"Curso liberado — {course_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Seu pagamento foi confirmado e o acesso ao curso <strong>{safe_course}</strong> está liberado.</p>
+            <p><a href="{course_url}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Acessar meu curso</a></p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Seu pagamento foi confirmado e o curso {course_name} está liberado.\n"
+            f"Acesse: {course_url}"
+        )
+        return await self.send_email(
+            to=to,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            from_name=tenant_name,
         )
 
     @property
