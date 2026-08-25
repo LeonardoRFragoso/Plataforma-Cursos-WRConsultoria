@@ -18,6 +18,7 @@ from app.api.routes import (
     courses,
     dashboard,
     enrollments,
+    financial_admin,
     lessons,
     partner_leads,
     payments,
@@ -50,7 +51,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DOCS_ENABLED else None,
     openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
 )
-
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 app.add_middleware(GZipMiddleware)
 app.add_middleware(
@@ -77,9 +77,9 @@ _ENFORCEMENT_EXEMPT_PREFIXES = (
 
 def _is_enforcement_exempt(request: Request) -> bool:
     path = request.url.path
-    if path in _ENFORCEMENT_EXEMPT_EXACT:
-        return True
-    return any(path.startswith(p) for p in _ENFORCEMENT_EXEMPT_PREFIXES)
+    return path in _ENFORCEMENT_EXEMPT_EXACT or any(
+        path.startswith(prefix) for prefix in _ENFORCEMENT_EXEMPT_PREFIXES
+    )
 
 
 async def _get_tenant_subscription_status(tenant_id) -> str | None:
@@ -90,15 +90,14 @@ async def _get_tenant_subscription_status(tenant_id) -> str | None:
         db.info["tenant_id"] = tenant_id
         await db.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}'"))
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
-        stmt = (
+        result = await db.execute(
             _select(TenantSubscription)
             .where(TenantSubscription.tenant_id == tenant_id)
             .order_by(TenantSubscription.updated_at.desc())
             .limit(1)
         )
-        result = await db.execute(stmt)
-        sub = result.scalar_one_or_none()
-        return sub.status if sub else None
+        subscription = result.scalar_one_or_none()
+        return subscription.status if subscription else None
 
 
 @app.middleware("http")
@@ -107,9 +106,12 @@ async def rate_limit_middleware(request: Request, call_next):
         "/health", "/health/live", "/health/ready", "/",
     ):
         return await call_next(request)
-    client_host = get_client_ip(request)
     backend = get_rate_limiter()
-    if not backend.is_allowed(client_host, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW_SECONDS):
+    if not backend.is_allowed(
+        get_client_ip(request),
+        settings.RATE_LIMIT_REQUESTS,
+        settings.RATE_LIMIT_WINDOW_SECONDS,
+    ):
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             content={"detail": "Rate limit exceeded"},
@@ -123,7 +125,6 @@ async def tenant_middleware(request: Request, call_next):
         "/health", "/health/live", "/health/ready", "/", "/docs", "/redoc", "/openapi.json",
     ):
         return await call_next(request)
-
     resolver = TenantResolver()
     token = current_tenant_id.set(None)
     async with AsyncSessionLocal() as db:
@@ -142,7 +143,6 @@ async def tenant_middleware(request: Request, call_next):
             ):
                 current_tenant_id.reset(token)
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
     try:
         tenant_id = getattr(request.state, "tenant_id", None)
         if tenant_id and not _is_enforcement_exempt(request):
@@ -169,6 +169,7 @@ app.include_router(classes.router, prefix="/api/v1/classes", tags=["classes"])
 app.include_router(students.router, prefix="/api/v1/students", tags=["students"])
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
+app.include_router(financial_admin.router, prefix="/api/v1/financial", tags=["financial-admin"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
@@ -195,8 +196,7 @@ async def root():
 async def health(db: AsyncSession = Depends(get_db)):
     start = time.perf_counter()
     await db.execute(text("SELECT 1"))
-    duration = round((time.perf_counter() - start) * 1000, 2)
-    return {"status": "ok", "db_latency_ms": duration}
+    return {"status": "ok", "db_latency_ms": round((time.perf_counter() - start) * 1000, 2)}
 
 
 @app.get("/health/live")
@@ -210,8 +210,7 @@ async def health_ready():
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
-        duration = round((time.perf_counter() - start) * 1000, 2)
-        return {"status": "ok", "db_latency_ms": duration}
+        return {"status": "ok", "db_latency_ms": round((time.perf_counter() - start) * 1000, 2)}
     except (OperationalError, InterfaceError, OSError) as exc:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
