@@ -214,9 +214,10 @@ async def purchase_enrollment(
     - CONFIRMADA / CONCLUIDA: the course is already acquired; return the
       existing enrollment and never create another charge.
     - PENDENTE + paid course: reuse only an active payment attempt
-      (PENDENTE/PROCESSANDO). If the latest attempt is terminal
-      (RECUSADO/REEMBOLSADO), create a new Payment row and preserve the old
-      attempt unchanged for financial history/audit.
+      (PENDENTE/PROCESSANDO). If the latest attempt is RECUSADO/REEMBOLSADO,
+      create a new Payment row and preserve the old attempt unchanged.
+    - PENDENTE enrollment + APROVADO payment: require manual reconciliation;
+      never create another charge automatically (e.g. amount mismatch case).
     - Free course (price <= 0): confirm the enrollment directly and never
       create a Payment or contact a payment provider.
     - CANCELADA: a new enrollment may be created in another open class.
@@ -318,15 +319,26 @@ async def purchase_enrollment(
         return approved or (payments[0] if payments else None)
 
     async def _active_or_new_attempt(enrollment: Enrollment) -> Payment:
-        """Reuse an active attempt; preserve terminal attempts and create a new row."""
+        """Reuse active attempts and preserve terminal financial history."""
         payments = await _payments_for(enrollment)
         latest = payments[0] if payments else None
         if latest and latest.status in (
             PaymentStatus.PENDENTE,
             PaymentStatus.PROCESSANDO,
-            PaymentStatus.APROVADO,
         ):
             return latest
+
+        if latest and latest.status == PaymentStatus.APROVADO:
+            # An approved payment with a still-pending enrollment indicates an
+            # exceptional reconciliation state (for example, provider amount
+            # mismatch). Starting a second charge could double-charge the user.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Payment approved but enrollment is pending; "
+                    "manual reconciliation is required"
+                ),
+            )
 
         payment = Payment(
             tenant_id=tenant_id,
