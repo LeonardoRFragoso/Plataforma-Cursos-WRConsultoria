@@ -5,8 +5,6 @@ states. These events are intentionally separated from ordinary approval/reject
 reconciliation because access/certificate consequences are business rules.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -17,7 +15,6 @@ from app.core.utils import utc_now
 from app.models.certificate import Certificate
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.payment import Payment, PaymentStatus
-
 
 CHARGEBACK_REVIEW_EVENTS = frozenset(
     {
