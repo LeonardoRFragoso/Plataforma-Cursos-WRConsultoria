@@ -2,6 +2,7 @@ from app.models.attendance import Attendance
 from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
+from app.models.corporate import CorporateInvite, CorporateSeatAllocation, CorporateTrainingRequest
 from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course, CourseModality
 from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
@@ -30,6 +31,9 @@ __all__ = [
     "ClassStatus",
     "Company",
     "CorporateEnrollmentBatch",
+    "CorporateInvite",
+    "CorporateSeatAllocation",
+    "CorporateTrainingRequest",
     "Course",
     "CourseModality",
     "Enrollment",

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -18,7 +18,6 @@ class Company(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        
         nullable=False,
         index=True,
     )
@@ -28,6 +27,10 @@ class Company(Base):
     rh_name = Column(String, nullable=True)
     rh_email = Column(String, nullable=True)
     rh_phone = Column(String, nullable=True)
+    billing_email = Column(String, nullable=True)
+    contract_reference = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="ACTIVE", index=True)
+    notes = Column(Text, nullable=True)
     address = Column(String, nullable=True)
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
