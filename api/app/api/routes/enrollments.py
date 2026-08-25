@@ -25,6 +25,7 @@ from app.schemas.enrollment import (
     MyEnrollmentResponse,
 )
 from app.schemas.payment import PaymentResponse
+from app.services.financial_lifecycle import expire_abandoned_internal_attempt
 
 router = APIRouter()
 
@@ -214,8 +215,11 @@ async def purchase_enrollment(
     - CONFIRMADA / CONCLUIDA: the course is already acquired; return the
       existing enrollment and never create another charge.
     - PENDENTE + paid course: reuse only an active payment attempt
-      (PENDENTE/PROCESSANDO). If the latest attempt is RECUSADO/REEMBOLSADO,
-      create a new Payment row and preserve the old attempt unchanged.
+      (PENDENTE/PROCESSANDO). RECUSADO/REEMBOLSADO/EXPIRADO attempts remain
+      immutable history and a new Payment row is created.
+    - A provider-less PENDENTE attempt older than the configured TTL may be
+      expired locally before creating the replacement attempt. Attempts with
+      external provider evidence are never expired by the local timer.
     - PENDENTE enrollment + APROVADO payment: require manual reconciliation;
       never create another charge automatically (e.g. amount mismatch case).
     - Free course (price <= 0): confirm the enrollment directly and never
@@ -322,6 +326,13 @@ async def purchase_enrollment(
         """Reuse active attempts and preserve terminal financial history."""
         payments = await _payments_for(enrollment)
         latest = payments[0] if payments else None
+
+        # A stale internal attempt that never reached a provider is safe to
+        # expire. If a provider id/URL exists, the provider remains authoritative
+        # and the attempt continues to be reused until a webhook closes it.
+        if latest:
+            expire_abandoned_internal_attempt(latest)
+
         if latest and latest.status in (
             PaymentStatus.PENDENTE,
             PaymentStatus.PROCESSANDO,
