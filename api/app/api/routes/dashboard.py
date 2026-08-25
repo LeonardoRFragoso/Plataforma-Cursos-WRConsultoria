@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -95,6 +95,7 @@ async def get_dashboard_stats(
             Certificate,
             Certificate.tenant_id == tenant_id,
             Certificate.status == "ACTIVE",
+            or_(Certificate.expires_at.is_(None), Certificate.expires_at > now),
         ),
         "expiringCertificates30d": await _count(
             db,
