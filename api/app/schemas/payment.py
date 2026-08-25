@@ -52,6 +52,8 @@ class PaymentResponse(PaymentBase):
     checkout_url: str | None = None
     mercado_pago_id: str | None = None
     paid_at: datetime | None = None
+    review_required: bool = False
+    review_reason: str | None = None
     created_at: datetime
     updated_at: datetime
     # Context used by the payment-return journey. These fields are populated
