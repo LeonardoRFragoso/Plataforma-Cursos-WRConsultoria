@@ -75,6 +75,10 @@ async def create_company(
         rh_name=company_data.rh_name,
         rh_email=str(company_data.rh_email) if company_data.rh_email else None,
         rh_phone=company_data.rh_phone,
+        billing_email=str(company_data.billing_email) if company_data.billing_email else None,
+        contract_reference=company_data.contract_reference,
+        status=company_data.status.upper(),
+        notes=company_data.notes,
         address=company_data.address,
         city=company_data.city,
         state=company_data.state,
@@ -153,8 +157,10 @@ async def update_company(
     for field, value in update_data.items():
         if field == "cnpj" and value:
             value = _clean_cnpj(value)
-        if field == "rh_email" and value:
+        if field in {"rh_email", "billing_email"} and value:
             value = str(value)
+        if field == "status" and value:
+            value = value.upper()
         setattr(company, field, value)
 
     await db.commit()
