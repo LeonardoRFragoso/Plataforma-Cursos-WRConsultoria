@@ -21,6 +21,7 @@ log "Backend: focused B2C purchase/payment/email/financial tests"
 pytest -q \
   tests/test_b2c_purchase_lifecycle.py \
   tests/test_checkout_idempotency.py \
+  tests/test_payment_creation_invariants.py \
   tests/test_payment_reconciliation.py \
   tests/test_b2c_transactional_emails.py \
   tests/test_transactional_notification_urls.py \
