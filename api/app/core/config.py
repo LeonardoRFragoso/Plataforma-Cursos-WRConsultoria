@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     # In production this MUST be the publicly reachable URL.
     ASAAS_WEBHOOK_BASE_URL: str = ""
 
+    # Internal B2C purchase attempts that never created an external provider
+    # charge may be abandoned safely after this period. Attempts with a
+    # provider_payment_id are never auto-expired locally; the gateway webhook
+    # remains authoritative for them.
+    PAYMENT_PENDING_ATTEMPT_TTL_MINUTES: int = 60
+
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
