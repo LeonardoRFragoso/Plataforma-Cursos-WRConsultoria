@@ -8,8 +8,10 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -40,6 +42,21 @@ class PaymentProvider(str, PyEnum):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        Index(
+            "uq_payment_active_attempt_per_enrollment",
+            "enrollment_id",
+            unique=True,
+            postgresql_where=text(
+                "enrollment_id IS NOT NULL AND "
+                "status IN ('PENDENTE', 'PROCESSANDO', 'APROVADO')"
+            ),
+            sqlite_where=text(
+                "enrollment_id IS NOT NULL AND "
+                "status IN ('PENDENTE', 'PROCESSANDO', 'APROVADO')"
+            ),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(
