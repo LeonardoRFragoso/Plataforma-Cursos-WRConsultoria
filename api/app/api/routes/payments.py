@@ -76,6 +76,40 @@ async def _load_payment_with_context(db: AsyncSession, payment_id: UUID, tenant_
     return row
 
 
+async def _payment_response_with_course_context(
+    db: AsyncSession,
+    payment: Payment,
+    tenant_id: UUID,
+) -> PaymentResponse:
+    """Enrich an individual payment with course/enrollment return context."""
+    response = PaymentResponse.model_validate(payment)
+    if not payment.enrollment_id:
+        return response
+
+    stmt = (
+        select(Course.id, Enrollment.status)
+        .select_from(Enrollment)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(
+            Enrollment.id == payment.enrollment_id,
+            Enrollment.tenant_id == tenant_id,
+            Course.tenant_id == tenant_id,
+        )
+    )
+    row = (await db.execute(stmt)).first()
+    if not row:
+        return response
+
+    course_id, enrollment_status = row
+    return response.model_copy(
+        update={
+            "course_id": course_id,
+            "enrollment_status": enrollment_status,
+        }
+    )
+
+
 def _authorize_payment_access(row, current_user: dict) -> None:
     """Shared authorization for demo payment GET and POST endpoints.
 
@@ -215,7 +249,7 @@ async def get_payment(
 
     is_admin = current_user.get("role") in ("admin", "super_admin")
     if is_admin:
-        return payment
+        return await _payment_response_with_course_context(db, payment, tenant_id)
 
     # Student: only own payments (via enrollment->student->user)
     if payment.enrollment_id:
@@ -231,7 +265,7 @@ async def get_payment(
             )
         )
         if (await db.execute(ownership_stmt)).scalar_one_or_none():
-            return payment
+            return await _payment_response_with_course_context(db, payment, tenant_id)
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
