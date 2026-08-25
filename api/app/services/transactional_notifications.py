@@ -33,9 +33,16 @@ def _email_enabled() -> bool:
 def _tenant_frontend_url(tenant: Tenant | None) -> str:
     """Resolve a trusted frontend base URL for tenant-aware email links."""
     if tenant:
-        domain_status = getattr(tenant.custom_domain_status, "value", tenant.custom_domain_status)
+        domain_status = getattr(
+            tenant.custom_domain_status,
+            "value",
+            tenant.custom_domain_status,
+        )
         if tenant.custom_domain and domain_status in {"VERIFIED", "ACTIVE"}:
-            return f"https://{tenant.custom_domain.strip('/')}"
+            domain = tenant.custom_domain.strip().rstrip("/")
+            if domain.startswith(("https://", "http://")):
+                return domain
+            return f"https://{domain}"
 
         configured_url = (tenant.settings or {}).get("frontend_url")
         if configured_url:
