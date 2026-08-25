@@ -7,7 +7,10 @@ from app.models.payment import PaymentMethod, PaymentProvider, PaymentStatus
 
 
 class PaymentBase(BaseModel):
-    enrollment_id: UUID
+    # Individual course payments have enrollment_id; consolidated corporate
+    # payments intentionally use company_id at the model layer and therefore
+    # expose enrollment_id=None in API responses.
+    enrollment_id: UUID | None = None
     amount: float
     method: PaymentMethod
     installments: str | None = None
