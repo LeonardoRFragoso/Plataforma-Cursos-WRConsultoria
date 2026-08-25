@@ -8,6 +8,7 @@ or course access.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import select
@@ -30,6 +31,22 @@ def _email_enabled() -> bool:
     return bool(getattr(settings, "EMAIL_ENABLED", True))
 
 
+def _safe_http_base_url(value: str | None) -> str | None:
+    """Accept only absolute HTTP(S) frontend URLs for email links."""
+    if not value:
+        return None
+    candidate = str(value).strip().rstrip("/")
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.username or parsed.password:
+        return None
+    return candidate
+
+
 def _tenant_frontend_url(tenant: Tenant | None) -> str:
     """Resolve a trusted frontend base URL for tenant-aware email links."""
     if tenant:
@@ -41,14 +58,27 @@ def _tenant_frontend_url(tenant: Tenant | None) -> str:
         if tenant.custom_domain and domain_status in {"VERIFIED", "ACTIVE"}:
             domain = tenant.custom_domain.strip().rstrip("/")
             if domain.startswith(("https://", "http://")):
-                return domain
-            return f"https://{domain}"
+                safe_domain = _safe_http_base_url(domain)
+            else:
+                safe_domain = _safe_http_base_url(f"https://{domain}")
+            if safe_domain:
+                return safe_domain
 
-        configured_url = (tenant.settings or {}).get("frontend_url")
+        configured_url = _safe_http_base_url(
+            (tenant.settings or {}).get("frontend_url")
+        )
         if configured_url:
-            return str(configured_url).rstrip("/")
+            return configured_url
 
-    return settings.FRONTEND_URL.rstrip("/")
+    fallback = _safe_http_base_url(settings.FRONTEND_URL)
+    if fallback:
+        return fallback
+
+    # FRONTEND_URL is application-controlled configuration. If it is malformed,
+    # fail closed to a harmless relative base rather than emitting javascript:,
+    # credentials-in-URL, or another unsafe scheme in transactional email HTML.
+    logger.error("Invalid FRONTEND_URL configured for transactional email links")
+    return ""
 
 
 async def send_welcome_notification(
