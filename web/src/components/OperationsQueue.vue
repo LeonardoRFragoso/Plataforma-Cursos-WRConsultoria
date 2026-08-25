@@ -1,0 +1,2 @@
+<template><div class="rounded-xl border border-gray-200 bg-white p-5"><h2 class="font-semibold text-gray-900">{{ title }}</h2><div v-if="!items.length" class="py-8 text-sm text-gray-500">{{ empty }}</div><div v-else class="mt-4 divide-y"><div v-for="item in items" :key="item.id" class="py-3"><slot :item="item" /></div></div></div></template>
+<script setup>defineProps({ title: { type: String, required: true }, items: { type: Array, default: () => [] }, empty: { type: String, default: 'Sem pendências' } })</script>
