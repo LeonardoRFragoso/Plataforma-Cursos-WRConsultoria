@@ -126,6 +126,32 @@ def _amounts_match(a: float, b: float) -> bool:
     return abs(float(a) - float(b)) < 0.005
 
 
+async def _find_active_enrollment_payment(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    enrollment_id: UUID,
+) -> Payment | None:
+    """Return the single active financial attempt for an enrollment, if any."""
+    stmt = (
+        select(Payment)
+        .where(
+            Payment.tenant_id == tenant_id,
+            Payment.enrollment_id == enrollment_id,
+            Payment.status.in_(
+                [
+                    PaymentStatus.PENDENTE,
+                    PaymentStatus.PROCESSANDO,
+                    PaymentStatus.APROVADO,
+                ]
+            ),
+        )
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
+        .limit(1)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 @router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
     payment_data: PaymentCreate,
@@ -168,23 +194,11 @@ async def create_payment(
             detail="Free enrollments do not require a payment",
         )
 
-    active_stmt = (
-        select(Payment)
-        .where(
-            Payment.tenant_id == tenant_id,
-            Payment.enrollment_id == enrollment.id,
-            Payment.status.in_(
-                [
-                    PaymentStatus.PENDENTE,
-                    PaymentStatus.PROCESSANDO,
-                    PaymentStatus.APROVADO,
-                ]
-            ),
-        )
-        .order_by(Payment.created_at.desc(), Payment.id.desc())
-        .limit(1)
+    active_payment = await _find_active_enrollment_payment(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
     )
-    active_payment = (await db.execute(active_stmt)).scalar_one_or_none()
     if active_payment:
         return active_payment
 
@@ -211,13 +225,42 @@ async def create_payment_admin(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Criação administrativa explícita de pagamento com valor manual."""
+    """Create an explicit manual payment without bypassing active-attempt rules."""
     tenant_id = get_current_tenant_id()
-    enrollment = await db.get(Enrollment, payment_data.enrollment_id)
-    if not enrollment or enrollment.tenant_id != tenant_id:
+    stmt = (
+        select(Enrollment)
+        .where(
+            Enrollment.id == payment_data.enrollment_id,
+            Enrollment.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    enrollment = (await db.execute(stmt)).scalar_one_or_none()
+    if not enrollment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Enrollment not found",
+        )
+    if enrollment.status != EnrollmentStatus.PENDENTE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Enrollment is not pending payment",
+        )
+    if float(payment_data.amount or 0) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Manual payment amount must be greater than zero",
+        )
+
+    active_payment = await _find_active_enrollment_payment(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+    )
+    if active_payment:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Enrollment already has an active payment attempt",
         )
 
     payment = Payment(
