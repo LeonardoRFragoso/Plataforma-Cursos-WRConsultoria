@@ -26,6 +26,7 @@ pytest -q \
   tests/test_transactional_notification_urls.py \
   tests/test_email_service_hardening.py \
   tests/test_financial_lifecycle.py \
+  tests/test_payment_expiry_purchase_integration.py \
   tests/test_asaas_financial_events.py
 
 if [[ "${FULL_BACKEND:-0}" == "1" ]]; then
