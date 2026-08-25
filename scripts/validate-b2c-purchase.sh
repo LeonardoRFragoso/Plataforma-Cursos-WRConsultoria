@@ -46,6 +46,7 @@ fi
 if [[ "${E2E:-0}" == "1" ]]; then
   log "Frontend: B2C Playwright entry + purchase smoke"
   npx playwright test \
+    --project=ui-mocked \
     e2e/ui-mocked/b2c-entry.spec.js \
     e2e/ui-mocked/b2c-purchase.spec.js
 fi
