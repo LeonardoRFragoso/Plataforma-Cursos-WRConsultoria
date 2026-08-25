@@ -8,6 +8,7 @@ from app.models.financial_review import FinancialReview, FinancialReviewEvent
 from app.models.payment import Payment
 
 _OPEN_STATUSES = ("OPEN", "IN_REVIEW")
+_PRIORITY_RANK = {"LOW": 0, "NORMAL": 1, "HIGH": 2}
 
 
 def priority_for_reason(reason: str | None) -> str:
@@ -17,6 +18,12 @@ def priority_for_reason(reason: str | None) -> str:
     if "refund" in value or "expiry_after" in value:
         return "NORMAL"
     return "LOW"
+
+
+def _higher_priority(current: str | None, inferred: str) -> str:
+    """Never downgrade an operator-selected priority during materialization."""
+    normalized = (current or "LOW").upper()
+    return inferred if _PRIORITY_RANK.get(inferred, 0) > _PRIORITY_RANK.get(normalized, 0) else normalized
 
 
 async def ensure_payment_review(
@@ -41,10 +48,11 @@ async def ensure_payment_review(
 
     if payment.review_required:
         reason = payment.review_reason or "manual_review_required"
+        inferred_priority = priority_for_reason(reason)
         if existing:
             changed = existing.reason != reason
             existing.reason = reason
-            existing.priority = priority_for_reason(reason)
+            existing.priority = _higher_priority(existing.priority, inferred_priority)
             if changed:
                 db.add(
                     FinancialReviewEvent(
@@ -62,7 +70,7 @@ async def ensure_payment_review(
             payment_id=payment.id,
             status="OPEN",
             reason=reason,
-            priority=priority_for_reason(reason),
+            priority=inferred_priority,
         )
         db.add(review)
         await db.flush()
