@@ -44,8 +44,10 @@ if [[ "${FULL_FRONTEND:-0}" == "1" ]]; then
 fi
 
 if [[ "${E2E:-0}" == "1" ]]; then
-  log "Frontend: B2C Playwright smoke"
-  npx playwright test e2e/ui-mocked/b2c-entry.spec.js
+  log "Frontend: B2C Playwright entry + purchase smoke"
+  npx playwright test \
+    e2e/ui-mocked/b2c-entry.spec.js \
+    e2e/ui-mocked/b2c-purchase.spec.js
 fi
 
 printf '\nB2C purchase validation completed successfully.\n'
