@@ -60,6 +60,11 @@ async def setup_db():
     await engine.dispose()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        # Tests use SQLAlchemy create_all/drop_all instead of Alembic. Never
+        # leave a stale Alembic revision marker behind after the application
+        # tables have been removed, otherwise a later migration validation can
+        # believe the empty test database is already upgraded.
+        await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
         await conn.execute(text("""
         DO $$
         DECLARE
@@ -87,6 +92,7 @@ async def setup_db():
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
     await engine.dispose()
 
 
