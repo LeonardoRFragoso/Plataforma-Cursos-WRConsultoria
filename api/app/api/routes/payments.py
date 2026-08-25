@@ -178,6 +178,7 @@ async def create_payment_admin(
     await db.refresh(payment)
     return payment
 
+
 @router.get("/", response_model=list[PaymentResponse])
 async def list_payments(
     db: AsyncSession = Depends(get_db),
@@ -190,6 +191,7 @@ async def list_payments(
     result = await db.execute(stmt)
     payments = result.scalars().all()
     return payments
+
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
@@ -236,6 +238,7 @@ async def get_payment(
         detail="Not authorized to access this payment",
     )
 
+
 @router.put("/{payment_id}", response_model=PaymentResponse)
 async def update_payment(
     payment_id: UUID,
@@ -250,20 +253,21 @@ async def update_payment(
     )
     result = await db.execute(stmt)
     payment = result.scalar_one_or_none()
-    
+
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
-    
+
     update_data = payment_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(payment, field, value)
-    
+
     await db.commit()
     await db.refresh(payment)
     return payment
+
 
 @router.post("/webhook/mercado-pago")
 async def mercado_pago_webhook(
@@ -388,6 +392,7 @@ async def mercado_pago_webhook(
         return {"status": "amount_mismatch", "detail": "Payment amount does not match enrollment price"}
     return {"status": "ok"}
 
+
 @router.delete("/{payment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_payment(
     payment_id: UUID,
@@ -401,13 +406,13 @@ async def delete_payment(
     )
     result = await db.execute(stmt)
     payment = result.scalar_one_or_none()
-    
+
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
-    
+
     await db.delete(payment)
     await db.commit()
 
@@ -419,17 +424,17 @@ async def create_checkout(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Create or reuse a provider checkout for a payment.
+    """Create or reuse a provider checkout for an active payment attempt.
 
     Uses the provider abstraction to support Mercado Pago and Asaas.
     Handles both individual payments (enrollment_id set) and
     consolidated company payments (company_id set, enrollment_id=None).
 
-    Idempotency: if the payment already has a provider_payment_id and
-    checkout_url, and the payment is still in a pending/processing state,
-    the existing checkout_url is returned without creating a new external
-    charge. This prevents duplicate charges from double-clicks, refreshes,
-    or retries.
+    Idempotency: pending/processing attempts reuse their existing external
+    charge. Terminal attempts are immutable: approved, rejected and refunded
+    payments cannot be checked out again. A rejected/refunded purchase must
+    obtain a new Payment attempt through the purchase flow, preserving the
+    previous row as financial history.
     """
     tenant_id = current_tenant_id.get()
     if tenant_id is None:
@@ -509,6 +514,23 @@ async def create_checkout(
         course_name = course.name
         customer_email = user.email
         customer_name = user.full_name
+
+    # ── Terminal attempts are immutable ──
+    if payment.status == PaymentStatus.APROVADO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment already approved",
+        )
+    if payment.status in (PaymentStatus.RECUSADO, PaymentStatus.REEMBOLSADO):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment attempt is closed; start a new purchase attempt",
+        )
+    if float(payment.amount or 0) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Free courses do not require checkout",
+        )
 
     # ── Idempotency: reuse existing external charge if still active ──
     if (
