@@ -166,10 +166,10 @@ async def register(
     )
     db.add(student)
 
+    # Account creation is authoritative. Notification is best-effort and runs
+    # only after the registration transaction is durable.
     await db.commit()
     await db.refresh(user)
-    # Registration is already durable. Notification is best-effort and cannot
-    # roll back the account if SMTP is unavailable.
     await send_welcome_notification(db, user, resolved_tenant_id)
     return user
 
