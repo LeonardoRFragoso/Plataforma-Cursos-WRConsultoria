@@ -25,6 +25,11 @@ from app.services.email_service import EmailServiceError, get_email_service
 logger = logging.getLogger(__name__)
 
 
+def _email_enabled() -> bool:
+    """Honor the explicit production email switch when present."""
+    return bool(getattr(settings, "EMAIL_ENABLED", True))
+
+
 def _tenant_frontend_url(tenant: Tenant | None) -> str:
     """Resolve a trusted frontend base URL for tenant-aware email links."""
     if tenant:
@@ -45,6 +50,9 @@ async def send_welcome_notification(
     tenant_id: UUID,
 ) -> bool:
     """Send the public-registration welcome email without affecting registration."""
+    if not _email_enabled():
+        return False
+
     try:
         tenant = await db.get(Tenant, tenant_id)
         tenant_name = tenant.name if tenant else "Plataforma"
@@ -67,6 +75,9 @@ async def send_course_access_notification(
     enrollment: Enrollment,
 ) -> bool:
     """Notify a student after the enrollment is newly confirmed by payment."""
+    if not _email_enabled():
+        return False
+
     try:
         stmt = (
             select(User, Course, Tenant)
