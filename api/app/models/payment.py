@@ -2,6 +2,7 @@ import uuid
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -22,6 +23,7 @@ class PaymentStatus(str, PyEnum):
     APROVADO = "APROVADO"
     RECUSADO = "RECUSADO"
     REEMBOLSADO = "REEMBOLSADO"
+    EXPIRADO = "EXPIRADO"
 
 
 class PaymentMethod(str, PyEnum):
@@ -63,6 +65,11 @@ class Payment(Base):
     mercado_pago_id = Column(String, nullable=True, unique=True)
     installments = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)
+    # Financial events such as chargeback disputes, partial refunds or refunds
+    # after course completion require human review instead of silently mutating
+    # historical learning/certificate records.
+    review_required = Column(Boolean, default=False, nullable=False)
+    review_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
