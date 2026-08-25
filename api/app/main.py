@@ -85,6 +85,7 @@ def _is_enforcement_exempt(request: Request) -> bool:
 
 async def _get_tenant_subscription_status(tenant_id) -> str | None:
     from sqlalchemy import select as _select
+
     from app.models.tenant_subscription import TenantSubscription
 
     async with AsyncSessionLocal() as db:
