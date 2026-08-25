@@ -19,6 +19,8 @@ function makeRouter() {
     routes: [
       { path: '/payment/return/:paymentId', name: 'PaymentReturn', component: PaymentReturn },
       { path: '/dashboard', name: 'Dashboard', component: { template: '<div>Dashboard</div>' } },
+      { path: '/cursos', name: 'CourseCatalog', component: { template: '<div>Catalog</div>' } },
+      { path: '/courses/:id', name: 'CourseDetail', component: { template: '<div>Course</div>' } },
       { path: '/courses/:id/learn', name: 'CourseLearn', component: { template: '<div>Learn</div>' } },
     ],
   })
@@ -60,12 +62,17 @@ describe('PaymentReturn', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="access-course-link"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="access-course-link"]').attributes('href')).toBe('/courses/course-1/learn')
     expect(wrapper.text()).toContain('Pagamento confirmado')
   })
 
-  it('shows refused state with retry button when payment is RECUSADO', async () => {
+  it('refused payment returns to the course for a new payment attempt', async () => {
     api.get.mockResolvedValue({
-      data: { status: 'RECUSADO', checkout_url: 'https://checkout.test/abc' },
+      data: {
+        status: 'RECUSADO',
+        course_id: 'course-1',
+        checkout_url: 'https://checkout.test/old-attempt',
+      },
     })
     const router = makeRouter()
     await router.push('/payment/return/pay-1')
@@ -74,8 +81,23 @@ describe('PaymentReturn', () => {
     const wrapper = mount(PaymentReturn, { global: { plugins: [router] } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="retry-payment-btn"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Pagamento recusado')
+    const retryLink = wrapper.find('[data-testid="retry-payment-link"]')
+    expect(retryLink.exists()).toBe(true)
+    expect(retryLink.attributes('href')).toBe('/courses/course-1')
+    expect(wrapper.text()).toContain('Esta tentativa foi encerrada')
+    expect(wrapper.html()).not.toContain('https://checkout.test/old-attempt')
+  })
+
+  it('refused payment without course context falls back to catalog', async () => {
+    api.get.mockResolvedValue({ data: { status: 'RECUSADO' } })
+    const router = makeRouter()
+    await router.push('/payment/return/pay-1')
+    await router.isReady()
+
+    const wrapper = mount(PaymentReturn, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="retry-payment-link"]').attributes('href')).toBe('/cursos')
   })
 
   it('shows error state when API fails', async () => {
