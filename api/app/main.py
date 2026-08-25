@@ -15,6 +15,7 @@ from app.api.routes import (
     classes,
     companies,
     corporate,
+    corporate_invites,
     courses,
     dashboard,
     enrollments,
@@ -178,6 +179,7 @@ app.include_router(tenant_secrets.router, prefix="/api/v1/secrets", tags=["secre
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(corporate.router, prefix="/api/v1/corporate", tags=["corporate"])
+app.include_router(corporate_invites.router, prefix="/api/v1/corporate", tags=["corporate-invites"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
 app.include_router(

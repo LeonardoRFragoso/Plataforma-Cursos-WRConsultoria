@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.utils import utc_now
 from app.models.financial_review import FinancialReview, FinancialReviewEvent
 from app.models.payment import Payment
 
@@ -80,6 +81,7 @@ async def ensure_payment_review(
         existing.status = "DISMISSED"
         existing.resolution_action = "AUTO_CLEARED"
         existing.resolution_notes = "Payment review flag was cleared by financial lifecycle reconciliation."
+        existing.resolved_at = utc_now()
         db.add(
             FinancialReviewEvent(
                 tenant_id=payment.tenant_id,
