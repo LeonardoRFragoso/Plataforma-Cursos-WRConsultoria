@@ -95,6 +95,37 @@
         </router-link>
       </div>
 
+      <!-- Expired state -->
+      <div v-else-if="payment.status === 'EXPIRADO'" class="text-center py-6">
+        <div class="text-yellow-500 text-5xl mb-3">⌛</div>
+        <h2 class="text-lg font-bold text-gray-900 mb-2">Pagamento expirado</h2>
+        <p class="text-sm text-gray-600 mb-4">
+          Esta tentativa não pode mais ser utilizada. Você pode iniciar um novo pagamento pelo curso sem reutilizar a cobrança anterior.
+        </p>
+        <router-link
+          v-if="payment.course_id"
+          :to="`/courses/${payment.course_id}`"
+          data-testid="expired-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        >
+          Voltar ao curso e gerar novo pagamento
+        </router-link>
+        <router-link
+          v-else
+          to="/cursos"
+          data-testid="expired-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        >
+          Voltar ao catálogo
+        </router-link>
+        <router-link
+          to="/dashboard"
+          class="block mt-2 bg-gray-100 text-gray-700 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-200"
+        >
+          Voltar ao Dashboard
+        </router-link>
+      </div>
+
       <!-- Refunded state -->
       <div v-else-if="payment.status === 'REEMBOLSADO'" class="text-center py-6">
         <div class="text-blue-500 text-5xl mb-3">↩</div>
