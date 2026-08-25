@@ -92,6 +92,13 @@ async def test_trusted_certificate_edge_contracts(client, admin_headers, student
     second = second_response.json()
     assert second["version"] == 2
 
+    duplicate_reissue = await client.post(
+        f"/api/v1/certificates/{first['id']}/reissue",
+        json={"reason": "Tentativa duplicada"},
+        headers=admin_headers,
+    )
+    assert duplicate_reissue.status_code == 409
+
     third_response = await client.post(
         f"/api/v1/certificates/{second['id']}/reissue",
         json={"reason": "Segunda reemissão"},
