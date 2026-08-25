@@ -23,6 +23,7 @@ from app.schemas.payment import (
     PaymentUpdate,
     PaymentWebhookRequest,
 )
+from app.services.financial_lifecycle import reconcile_special_financial_event
 from app.services.mercado_pago_service import MercadoPagoError, MercadoPagoService
 from app.services.payment_customer_sync import (
     get_or_create_company_customer,
@@ -367,17 +368,52 @@ async def mercado_pago_webhook(
             detail="Payment mismatch",
         )
 
+    provider_status = str(mp_payment.get("status") or "unknown").lower()
+    status_detail = str(mp_payment.get("status_detail") or "").lower()
+
+    special_event = None
+    if provider_status in {"cancelled", "canceled", "expired"}:
+        special_event = (
+            "MERCADO_PAGO_EXPIRED"
+            if provider_status == "expired" or status_detail == "expired"
+            else "MERCADO_PAGO_CANCELLED"
+        )
+    elif provider_status == "refunded":
+        special_event = "MERCADO_PAGO_REFUNDED"
+    elif provider_status == "charged_back":
+        if status_detail == "settled":
+            special_event = "MERCADO_PAGO_CHARGEBACK_SETTLED"
+        elif status_detail == "reimbursed":
+            special_event = "MERCADO_PAGO_CHARGEBACK_REIMBURSED"
+        else:
+            special_event = "MERCADO_PAGO_CHARGEBACK_IN_PROCESS"
+
+    if special_event:
+        result = await reconcile_special_financial_event(
+            db,
+            payment,
+            enrollment,
+            special_event,
+        )
+        await db.commit()
+        return {"status": "ok", **result}
+
     status_map = {
         "approved": PaymentStatus.APROVADO,
         "pending": PaymentStatus.PROCESSANDO,
         "in_process": PaymentStatus.PROCESSANDO,
         "in_mediation": PaymentStatus.PROCESSANDO,
         "rejected": PaymentStatus.RECUSADO,
-        "cancelled": PaymentStatus.RECUSADO,
-        "refunded": PaymentStatus.REEMBOLSADO,
-        "charged_back": PaymentStatus.REEMBOLSADO,
     }
-    new_status = status_map.get(mp_payment.get("status", "unknown"), PaymentStatus.PENDENTE)
+    new_status = status_map.get(provider_status)
+    if new_status is None:
+        # Provider APIs evolve. Unknown statuses must not downgrade or unlock a
+        # payment; acknowledge safely and preserve the current state.
+        return {
+            "status": "ignored",
+            "provider_status": provider_status,
+            "payment_status": payment.status.value,
+        }
 
     result = await reconcile_payment_status(payment, enrollment, new_status)
     await db.commit()
@@ -499,7 +535,11 @@ async def create_checkout(
             status_code=status.HTTP_409_CONFLICT,
             detail="Payment already approved",
         )
-    if payment.status in (PaymentStatus.RECUSADO, PaymentStatus.REEMBOLSADO):
+    if payment.status in (
+        PaymentStatus.RECUSADO,
+        PaymentStatus.REEMBOLSADO,
+        PaymentStatus.EXPIRADO,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Payment attempt is closed; start a new purchase attempt",
