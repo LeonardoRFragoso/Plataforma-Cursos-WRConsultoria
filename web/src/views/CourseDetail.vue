@@ -73,7 +73,7 @@
                     @click="goToLogin"
                     class="w-full py-3 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors"
                   >
-                    Entrar para comprar
+                    {{ course.price > 0 ? 'Entrar para comprar' : 'Entrar para começar' }}
                   </button>
 
                   <div v-else-if="enrollmentLoading" class="text-center text-gray-500 py-3">
@@ -94,7 +94,7 @@
                     @click="startPurchase"
                     class="w-full py-3 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold transition-colors disabled:opacity-60"
                   >
-                    {{ purchasing ? 'Redirecionando...' : purchaseButtonText }}
+                    {{ purchasing ? purchaseLoadingText : purchaseButtonText }}
                   </button>
 
                   <p v-if="purchaseError" class="mt-3 text-sm text-red-600 text-center">
@@ -103,6 +103,10 @@
 
                   <p v-if="course.price > 0 && !courseEnrollment" class="text-xs text-gray-400 mt-3 text-center">
                     Pagamento seguro via Pix, boleto ou cartão
+                  </p>
+
+                  <p v-if="course.price <= 0 && !courseEnrollment" class="text-xs text-gray-500 mt-3 text-center">
+                    Acesso liberado sem pagamento
                   </p>
 
                   <p v-if="!authStore.isAuthenticated" class="text-sm text-gray-500 mt-4 text-center">
@@ -174,6 +178,14 @@ async function startPurchase() {
 
   try {
     const { data } = await purchaseCourse(course.value.id, 'UNDEFINED')
+
+    // Free courses are confirmed server-side without creating a Payment.
+    // Go straight to the learning experience and never call the gateway.
+    if (!data.payment) {
+      await router.push(`/courses/${course.value.id}/learn`)
+      return
+    }
+
     const paymentId = data.payment.id
     const checkout = await createCheckout(paymentId)
     window.location.href = checkout.data.checkout_url
@@ -184,10 +196,15 @@ async function startPurchase() {
 }
 
 const purchaseButtonText = computed(() => {
+  if (Number(course.value?.price || 0) <= 0) return 'Começar curso grátis'
   if (courseEnrollment.value?.status === 'PENDENTE') return 'Finalizar pagamento'
   if (courseEnrollment.value?.status === 'CANCELADA') return 'Comprar novamente'
   return 'Comprar agora'
 })
+
+const purchaseLoadingText = computed(() => (
+  Number(course.value?.price || 0) <= 0 ? 'Liberando acesso...' : 'Redirecionando...'
+))
 
 onMounted(async () => {
   try {
