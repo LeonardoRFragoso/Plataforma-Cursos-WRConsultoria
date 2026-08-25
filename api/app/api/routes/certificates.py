@@ -421,6 +421,23 @@ async def reissue_certificate(
         raise HTTPException(status_code=409, detail="Enrollment is not completed")
     if old.status == "SUPERSEDED":
         raise HTTPException(status_code=409, detail="Certificate was already superseded")
+
+    active_replacement = (
+        await db.execute(
+            select(Certificate).where(
+                Certificate.tenant_id == tenant_id,
+                Certificate.enrollment_id == enrollment.id,
+                Certificate.status == "ACTIVE",
+                Certificate.id != old.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if active_replacement:
+        raise HTTPException(
+            status_code=409,
+            detail="An active replacement certificate already exists for this enrollment",
+        )
+
     if old.status == "ACTIVE":
         old.status = "SUPERSEDED"
         old.revoked_at = utc_now()
