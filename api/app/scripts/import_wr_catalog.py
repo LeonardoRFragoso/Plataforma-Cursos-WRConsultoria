@@ -111,6 +111,7 @@ async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_
                     is_active=True,
                 )
                 db.add(course)
+                await db.flush()
                 existing_courses[code] = course
 
         elif action == "UPDATE" and code not in existing_courses:
@@ -130,6 +131,7 @@ async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_
                     is_active=True,
                 )
                 db.add(course)
+                await db.flush()
                 existing_courses[code] = course
 
         elif code in existing_courses and action == "CREATE":
