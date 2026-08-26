@@ -1,10 +1,7 @@
-import hashlib
-import uuid
-from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -24,31 +21,70 @@ from app.schemas.certificate import (
     CertificateReissueRequest,
     CertificateResponse,
     CertificateRevokeRequest,
+    CertificateSummary,
     CertificateValidationRequest,
     CertificateValidationResponse,
+    CourseSummary,
     StudentCertificateResponse,
+    StudentSummary,
 )
-from app.services.certificate_service import CertificateService
+from app.services.certificate_service import (
+    CertificateService,
+    build_validation_url,
+    effective_status,
+    is_demo_certificate,
+)
 
 router = APIRouter()
 
 
+# --- Backwards-compatible helpers (delegating to the service) ----------
+# These remain importable from this module so existing callers/tests keep
+# working while the canonical implementation lives in CertificateService.
+
+
 def generate_certificate_number() -> str:
-    return f"CERT-{uuid.uuid4().hex[:12].upper()}"
+    from app.services.certificate_service import generate_certificate_number as _gen
+
+    return _gen()
 
 
 def generate_validation_code() -> str:
-    return uuid.uuid4().hex[:16].upper()
+    from app.services.certificate_service import generate_validation_code as _gen
+
+    return _gen()
 
 
 def _effective_status(certificate: Certificate) -> str:
-    if certificate.status == "REVOKED":
-        return "REVOKED"
-    if certificate.status == "SUPERSEDED":
-        return "SUPERSEDED"
-    if certificate.expires_at and certificate.expires_at <= utc_now():
-        return "EXPIRED"
-    return "ACTIVE"
+    return effective_status(certificate)
+
+
+def _content_hash(
+    *,
+    certificate_number: str,
+    tenant_id: UUID,
+    enrollment_id: UUID,
+    student_id: UUID,
+    course_id: UUID,
+    issued_at,
+    version: int,
+) -> str:
+    """Backwards-compatible wrapper delegating to the service.
+
+    Kept so legacy callers (e.g. lessons auto-issuance) keep working while
+    the canonical implementation lives in ``certificate_service.content_hash``.
+    """
+    from app.services.certificate_service import content_hash as _hash
+
+    return _hash(
+        certificate_number=certificate_number,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment_id,
+        student_id=student_id,
+        course_id=course_id,
+        issued_at=issued_at,
+        version=version,
+    )
 
 
 def _resolve_trusted_frontend_url(request: Request, tenant: Tenant | None) -> str:
@@ -87,89 +123,6 @@ def _authorize(certificate: Certificate, user: User, current_user: dict, tenant_
     if str(user.id) == current_user["user_id"]:
         return
     raise HTTPException(status_code=403, detail="Cannot access this certificate")
-
-
-def _content_hash(
-    *,
-    certificate_number: str,
-    tenant_id: UUID,
-    enrollment_id: UUID,
-    student_id: UUID,
-    course_id: UUID,
-    issued_at,
-    version: int,
-) -> str:
-    payload = "|".join(
-        [
-            certificate_number,
-            str(tenant_id),
-            str(enrollment_id),
-            str(student_id),
-            str(course_id),
-            issued_at.isoformat(),
-            str(version),
-        ]
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-async def _issue_certificate(
-    db: AsyncSession,
-    *,
-    enrollment: Enrollment,
-    student: Student,
-    course: Course,
-    tenant_id: UUID,
-    actor_id: UUID | None,
-    supersedes_id: UUID | None = None,
-    reason: str | None = None,
-) -> Certificate:
-    max_version = await db.scalar(
-        select(func.coalesce(func.max(Certificate.version), 0)).where(
-            Certificate.tenant_id == tenant_id,
-            Certificate.enrollment_id == enrollment.id,
-        )
-    )
-    version = int(max_version or 0) + 1
-    issued_at = utc_now()
-    expires_at = (
-        issued_at + timedelta(days=course.certificate_validity_days)
-        if course.certificate_validity_days
-        else None
-    )
-    certificate = Certificate(
-        tenant_id=tenant_id,
-        enrollment_id=enrollment.id,
-        certificate_number=generate_certificate_number(),
-        validation_code=generate_validation_code(),
-        issued_at=issued_at,
-        expires_at=expires_at,
-        status="ACTIVE",
-        version=version,
-        supersedes_id=supersedes_id,
-    )
-    certificate.content_hash = _content_hash(
-        certificate_number=certificate.certificate_number,
-        tenant_id=tenant_id,
-        enrollment_id=enrollment.id,
-        student_id=student.id,
-        course_id=course.id,
-        issued_at=issued_at,
-        version=version,
-    )
-    db.add(certificate)
-    await db.flush()
-    db.add(
-        CertificateEvent(
-            tenant_id=tenant_id,
-            certificate_id=certificate.id,
-            event_type="REISSUED" if supersedes_id else "ISSUED",
-            actor_id=actor_id,
-            reason=reason,
-            details=f"version={version};hash={certificate.content_hash}",
-        )
-    )
-    return certificate
 
 
 @router.post("/", response_model=CertificateResponse, status_code=status.HTTP_201_CREATED)
@@ -213,12 +166,13 @@ async def create_certificate(
     if active and _effective_status(active) == "EXPIRED":
         active.status = "SUPERSEDED"
 
-    certificate = await _issue_certificate(
+    certificate = await CertificateService.issue_certificate(
         db,
+        tenant_id=tenant_id,
         enrollment=enrollment,
         student=student,
-        course=course,
-        tenant_id=tenant_id,
+        course_id=course.id,
+        course_validity_days=course.certificate_validity_days,
         actor_id=UUID(current_user["user_id"]),
         supersedes_id=active.id if active else None,
         reason="automatic renewal after expiry" if active else None,
@@ -295,6 +249,12 @@ async def validate_certificate(
     payload: CertificateValidationRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """Public certificate validation by validation code.
+
+    Returns only privacy-safe data: student full name, public course
+    details, the academic journey, and certificate metadata. No CPF,
+    email, phone, address, IDs or payment data are ever exposed.
+    """
     row = (
         await db.execute(
             select(Certificate, Enrollment, Student, User, Class, Course)
@@ -308,11 +268,45 @@ async def validate_certificate(
     ).first()
     if not row:
         return CertificateValidationResponse(valid=False, status="NOT_FOUND")
-    certificate, _enrollment, _student, user, _class, course = row
+    certificate, enrollment, student, user, _class, course = row
     effective = _effective_status(certificate)
+    demo = is_demo_certificate(certificate)
+
+    journey = await CertificateService.build_journey(
+        db,
+        certificate=certificate,
+        enrollment=enrollment,
+        student=student,
+        course_id=course.id,
+        course_name=course.name,
+    )
+
+    cert_summary = CertificateSummary(
+        number=certificate.certificate_number,
+        validation_code=certificate.validation_code,
+        version=certificate.version,
+        issued_at=certificate.issued_at,
+        expires_at=certificate.expires_at,
+        content_hash=certificate.content_hash,
+    )
+    student_summary = StudentSummary(name=user.full_name)
+    course_summary = CourseSummary(
+        code=course.code,
+        name=course.name,
+        category=course.category,
+        workload_hours=course.carga_horaria,
+        modality=course.modality.value if course.modality else None,
+    )
+
     return CertificateValidationResponse(
         valid=effective == "ACTIVE",
         status=effective,
+        is_demo=demo,
+        certificate=cert_summary,
+        student=student_summary,
+        course=course_summary,
+        journey=journey,
+        # Backwards-compatible flat fields
         certificate_number=certificate.certificate_number,
         validation_code=certificate.validation_code,
         version=certificate.version,
@@ -452,12 +446,13 @@ async def reissue_certificate(
                 reason=payload.reason.strip(),
             )
         )
-    certificate = await _issue_certificate(
+    certificate = await CertificateService.issue_certificate(
         db,
+        tenant_id=tenant_id,
         enrollment=enrollment,
         student=student,
-        course=course,
-        tenant_id=tenant_id,
+        course_id=course.id,
+        course_validity_days=course.certificate_validity_days,
         actor_id=UUID(current_user["user_id"]),
         supersedes_id=old.id,
         reason=payload.reason.strip(),
@@ -487,10 +482,9 @@ async def download_certificate(
     admin = (
         await db.execute(select(User).where(User.id == class_obj.responsible_admin_id))
     ).scalar_one_or_none()
-    validation_url = (
-        f"{_resolve_trusted_frontend_url(request, tenant)}"
-        f"/certificates/validate?code={certificate.validation_code}"
-    )
+    frontend_url = _resolve_trusted_frontend_url(request, tenant)
+    # QR points to the REAL public frontend route (Phase 2 fix).
+    validation_url = build_validation_url(frontend_url, certificate.validation_code)
     pdf = CertificateService.generate_certificate_pdf(
         student_name=user.full_name,
         course_name=course.name,
@@ -504,6 +498,7 @@ async def download_certificate(
         issued_date=certificate.issued_at,
         brand_primary_color=tenant.primary_color,
         brand_logo_url=tenant.logo_url,
+        is_demo=is_demo_certificate(certificate),
     )
     return Response(
         content=pdf,
