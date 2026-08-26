@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div id="app-sidebar">
     <div v-if="open" class="fixed inset-0 z-30 bg-slate-950/50 backdrop-blur-sm md:hidden" data-testid="app-drawer-backdrop" @click="$emit('close')"></div>
 
     <aside
@@ -7,7 +7,8 @@
       class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-hidden border-r border-white/5 text-white shadow-2xl transition-transform duration-200 ease-in-out md:translate-x-0"
       :class="open ? 'translate-x-0' : '-translate-x-full'"
       data-testid="app-sidebar"
-      :aria-hidden="open ? 'false' : 'true'"
+      :aria-hidden="drawerHidden ? 'true' : 'false'"
+      :inert="drawerHidden ? '' : null"
       aria-label="Navegação principal"
     >
       <div class="absolute inset-0 bg-slate-950"></div>
@@ -70,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
@@ -81,13 +82,15 @@ import NavIcon from './NavIcon.vue'
 const props = defineProps({ open: { type: Boolean, default: false } })
 const emit = defineEmits(['close'])
 const route = useRoute(); const router = useRouter(); const authStore = useAuthStore(); const tenantStore = useTenantStore(); const { navItems } = useNavConfig()
-const homeRoute = getHomeRoute(authStore); const sidebarRef = ref(null); const openGroups = ref(new Set())
+const homeRoute = getHomeRoute(authStore); const sidebarRef = ref(null); const openGroups = ref(new Set()); const isDesktop = ref(true)
 const isActive = (path) => route.path === path || route.path.startsWith(path + '/')
 const isGroupActive = (group) => group.items.some((item) => isActive(item.to))
 const isGroupOpen = (testid) => openGroups.value.has(testid)
 const toggleGroup = (testid) => { const next = new Set(openGroups.value); next.has(testid) ? next.delete(testid) : next.add(testid); openGroups.value = next }
 const initOpenGroups = () => { for (const group of navItems.value.groups) if (group.items.some((item) => isActive(item.to))) openGroups.value.add(group.testid) }
 initOpenGroups()
+const drawerHidden = computed(() => !isDesktop.value && !props.open)
+const syncViewport = () => { if (typeof window !== 'undefined') isDesktop.value = window.matchMedia('(min-width: 768px)').matches }
 const brandInitials = computed(() => (tenantStore.name || 'PL').split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase())
 const userInitials = computed(() => { const name = authStore.user?.full_name || authStore.user?.email || 'U'; const parts = name.trim().split(/\s+/); return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts.at(-1)?.[0] || '' : parts[0]?.[1] || '')).toUpperCase() })
 const roleLabel = computed(() => ({ admin: 'Administrador', student: 'Aluno', super_admin: 'Super Admin' }[authStore.userRole?.toLowerCase()] || authStore.userRole || 'Conta'))
@@ -95,4 +98,6 @@ const sidebarBrandStyle = computed(() => ({ background: `linear-gradient(165deg,
 const handleLogout = () => { emit('close'); authStore.logout(); router.push('/login') }
 watch(() => route.path, () => { emit('close'); initOpenGroups() })
 watch(() => props.open, async (opened) => { if (typeof document === 'undefined') return; if (opened) { document.body.style.overflow = 'hidden'; await nextTick(); sidebarRef.value?.querySelector('a, button')?.focus() } else document.body.style.overflow = '' })
+onMounted(() => { syncViewport(); window.addEventListener('resize', syncViewport) })
+onBeforeUnmount(() => { if (typeof window !== 'undefined') window.removeEventListener('resize', syncViewport) })
 </script>
