@@ -125,3 +125,49 @@ describe('AppSidebar', () => {
     expect(wrapper.find('[data-testid="app-drawer-backdrop"]').exists()).toBe(true)
   })
 })
+
+describe('AppSidebar — WR brand sidebar background (tenant-based)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('WR + ADMIN: sidebar background uses tenant primary_color', async () => {
+    const { wrapper, tenant } = await mountSidebar('admin')
+    tenant.primary_color = '#047F37'
+    await wrapper.vm.$nextTick()
+    const bg = wrapper.vm.sidebarBrandStyle.background
+    expect(bg).toContain('#047F37')
+  })
+
+  it('WR + STUDENT: sidebar background uses tenant primary_color', async () => {
+    const { wrapper, tenant } = await mountSidebar('student')
+    tenant.primary_color = '#047F37'
+    await wrapper.vm.$nextTick()
+    const bg = wrapper.vm.sidebarBrandStyle.background
+    expect(bg).toContain('#047F37')
+  })
+
+  it('WR + SUPER_ADMIN: sidebar background uses tenant primary_color', async () => {
+    const { wrapper, tenant } = await mountSidebar('super_admin', '/super-admin')
+    tenant.primary_color = '#047F37'
+    await wrapper.vm.$nextTick()
+    const bg = wrapper.vm.sidebarBrandStyle.background
+    expect(bg).toContain('#047F37')
+  })
+
+  it('non-WR tenant: sidebar does NOT use #047F37', async () => {
+    const { wrapper, tenant } = await mountSidebar('admin')
+    tenant.primary_color = '#E86A17' // Alfa orange
+    await wrapper.vm.$nextTick()
+    const bg = wrapper.vm.sidebarBrandStyle.background
+    expect(bg).not.toContain('#047F37')
+    expect(bg).toContain('#E86A17')
+  })
+
+  it('active nav item uses brand-primary text color (tenant-based)', async () => {
+    const { wrapper } = await mountSidebar('student', '/dashboard')
+    const activeLink = wrapper.find('[data-testid="nav-link-dashboard"]')
+    expect(activeLink.classes()).toContain('text-[var(--brand-primary)]')
+    expect(activeLink.classes()).not.toContain('text-slate-950')
+  })
+})

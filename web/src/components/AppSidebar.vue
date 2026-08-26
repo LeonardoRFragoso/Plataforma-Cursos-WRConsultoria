@@ -34,7 +34,7 @@
       <nav class="relative flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Navegação da conta">
         <router-link
           v-for="link in navItems.flat" :key="link.to" :to="link.to"
-          :class="['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all', isActive(link.to) ? 'bg-white text-slate-950 shadow-lg shadow-slate-950/10' : 'text-white/70 hover:bg-white/10 hover:text-white']"
+          :class="['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all', isActive(link.to) ? 'bg-white text-[var(--brand-primary)] shadow-lg shadow-slate-950/10' : 'text-white/70 hover:bg-white/10 hover:text-white']"
           :data-testid="'nav-link-' + link.testid" :aria-current="isActive(link.to) ? 'page' : undefined" @click="$emit('close')"
         >
           <span :class="['flex h-8 w-8 items-center justify-center rounded-lg transition-colors', isActive(link.to) ? 'bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]' : 'bg-white/5 text-white/65 group-hover:bg-white/10 group-hover:text-white']"><NavIcon :name="link.icon || 'home'" /></span>
@@ -50,9 +50,9 @@
           </button>
           <div v-show="isGroupOpen(group.testid)" :id="'nav-group-panel-' + group.testid" :data-testid="'nav-group-panel-' + group.testid" class="mt-1 space-y-1">
             <router-link v-for="item in group.items" :key="item.to" :to="item.to"
-              :class="['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all', isActive(item.to) ? 'bg-white/12 text-white font-semibold' : 'text-white/62 hover:bg-white/8 hover:text-white']"
+              :class="['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all', isActive(item.to) ? 'bg-white text-[var(--brand-primary)] font-semibold' : 'text-white/62 hover:bg-white/8 hover:text-white']"
               :data-testid="'nav-link-' + item.testid" :aria-current="isActive(item.to) ? 'page' : undefined" @click="$emit('close')">
-              <span :class="['flex h-7 w-7 items-center justify-center rounded-lg', isActive(item.to) ? 'bg-white/10 text-white' : 'text-white/45 group-hover:text-white/80']"><NavIcon :name="item.icon || 'arrow'" /></span>
+              <span :class="['flex h-7 w-7 items-center justify-center rounded-lg', isActive(item.to) ? 'bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]' : 'text-white/45 group-hover:text-white/80']"><NavIcon :name="item.icon || 'arrow'" /></span>
               <span class="min-w-0 truncate">{{ item.label }}</span>
             </router-link>
           </div>
@@ -94,7 +94,7 @@ const syncViewport = () => { if (typeof window !== 'undefined') isDesktop.value 
 const brandInitials = computed(() => (tenantStore.name || 'PL').split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase())
 const userInitials = computed(() => { const name = authStore.user?.full_name || authStore.user?.email || 'U'; const parts = name.trim().split(/\s+/); return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts.at(-1)?.[0] || '' : parts[0]?.[1] || '')).toUpperCase() })
 const roleLabel = computed(() => ({ admin: 'Administrador', student: 'Aluno', super_admin: 'Super Admin' }[authStore.userRole?.toLowerCase()] || authStore.userRole || 'Conta'))
-const sidebarBrandStyle = computed(() => ({ background: `linear-gradient(165deg, ${tenantStore.secondary_color || '#132a43'} 0%, color-mix(in srgb, ${tenantStore.secondary_color || '#132a43'} 76%, #020617) 58%, #020617 100%)` }))
+const sidebarBrandStyle = computed(() => ({ background: `linear-gradient(165deg, ${tenantStore.primary_color || '#047F37'} 0%, color-mix(in srgb, ${tenantStore.primary_color || '#047F37'} 76%, #020617) 58%, #020617 100%)` }))
 const handleLogout = () => { emit('close'); authStore.logout(); router.push('/login') }
 watch(() => route.path, () => { emit('close'); initOpenGroups() })
 watch(() => props.open, async (opened) => { if (typeof document === 'undefined') return; if (opened) { document.body.style.overflow = 'hidden'; await nextTick(); sidebarRef.value?.querySelector('a, button')?.focus() } else document.body.style.overflow = '' })
