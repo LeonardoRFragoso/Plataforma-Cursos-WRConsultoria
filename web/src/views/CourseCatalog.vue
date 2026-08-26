@@ -51,7 +51,7 @@
 
         <!-- Result count -->
         <p class="text-sm text-gray-500 mb-6" data-testid="catalog-count">
-          {{ filteredCourses.length }} curso{{ filteredCourses.length !== 1 ? 's' : '' }} disponíve{{ filteredCourses.length !== 1 ? 'is' : 'l' }}
+          {{ filteredCourses.length }} treinamento{{ filteredCourses.length !== 1 ? 's' : '' }} no catálogo
         </p>
 
         <!-- LOADING -->
@@ -114,21 +114,38 @@
               :fb-test-id="'catalog-cover-fallback'"
             />
             <div class="p-5 flex-1 flex flex-col">
-              <p class="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-1">{{ course.code }}</p>
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <p class="text-xs font-semibold text-primary-600 uppercase tracking-wide">{{ course.code }}</p>
+                <span
+                  v-if="course.catalog_only"
+                  class="inline-flex shrink-0 items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 border border-amber-200"
+                >
+                  Em breve
+                </span>
+              </div>
               <h3 class="text-base font-semibold text-secondary-900 mb-1 line-clamp-2">{{ course.name }}</h3>
               <p class="text-sm text-gray-500 mb-3">{{ course.category }}</p>
-              <div class="mt-auto flex items-center justify-between text-sm text-gray-600 pt-3 border-t border-gray-100">
+              <div class="mt-auto flex items-center justify-between gap-3 text-sm text-gray-600 pt-3 border-t border-gray-100">
                 <span>{{ course.carga_horaria }}h · {{ formatModality(course.modality) }}</span>
-                <span class="font-semibold text-primary-600">{{ formatPrice(course.price) }}</span>
+                <span v-if="!course.catalog_only" class="font-semibold text-primary-600">{{ formatPrice(course.price) }}</span>
+                <span v-else class="font-semibold text-amber-700">Em breve</span>
               </div>
             </div>
             <div class="p-3 border-t border-gray-100 bg-gray-50">
               <router-link
+                v-if="!course.catalog_only"
                 :to="`/cursos/${course.id}`"
                 class="block w-full text-center py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 font-semibold text-sm transition-colors"
               >
                 Ver detalhes
               </router-link>
+              <div
+                v-else
+                class="block w-full text-center py-2 bg-white text-gray-500 border border-gray-200 rounded-md font-semibold text-sm cursor-default"
+                aria-label="Treinamento disponível em breve"
+              >
+                Disponível em breve
+              </div>
             </div>
           </div>
         </div>
@@ -164,6 +181,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useTenantStore } from '../stores/tenant'
 import { useAuthStore } from '../stores/auth'
 import { fetchPublicCourses } from '../api/courses'
+import { extractFamily, isWrTenant } from '../utils/courseMedia'
 import AppNavbar from '../components/AppNavbar.vue'
 import CourseCover from '../components/CourseCover.vue'
 
@@ -174,6 +192,24 @@ const isAuthenticatedStudent = computed(
   () => authStore.isAuthenticated && authStore.userRole?.toLowerCase() === 'student'
 )
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
+
+const WR_CATALOG_SHOWCASE = [
+  { id: 'showcase-nr-01', code: 'NR-01-F', name: 'NR 1 - Disposições Gerais', category: 'Segurança', carga_horaria: 4, modality: 'EAD', catalog_only: true },
+  { id: 'showcase-nr-05', code: 'NR-05-F', name: 'NR 5 - CIPA', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-06', code: 'NR-06-F', name: 'NR 6 - Equipamentos de Proteção Individual', category: 'Segurança', carga_horaria: 4, modality: 'EAD', catalog_only: true },
+  { id: 'showcase-nr-11', code: 'NR-11-F', name: 'NR 11 - Movimentação de Materiais', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-17', code: 'NR-17-F', name: 'NR 17 - Ergonomia', category: 'Saúde', carga_horaria: 8, modality: 'EAD', catalog_only: true },
+  { id: 'showcase-nr-18', code: 'NR-18-F', name: 'NR 18 - Segurança na Construção Civil', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-20', code: 'NR-20-F', name: 'NR 20 - Inflamáveis e Combustíveis', category: 'Segurança', carga_horaria: 12, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-23', code: 'NR-23-F', name: 'NR 23 - Proteção Contra Incêndios', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-29', code: 'NR-29-F', name: 'NR 29 - Trabalho Portuário', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-32', code: 'NR-32-F', name: 'NR 32 - Serviços de Saúde', category: 'Saúde', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-33', code: 'NR-33-F', name: 'NR 33 - Espaços Confinados', category: 'Segurança', carga_horaria: 16, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-34', code: 'NR-34-F', name: 'NR 34 - Trabalho Naval', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-nr-36', code: 'NR-36-F', name: 'NR 36 - Segurança em Frigoríficos', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-ps', code: 'PS-F', name: 'Primeiros Socorros', category: 'Saúde', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+  { id: 'showcase-dd', code: 'DD-F', name: 'Direção Defensiva', category: 'Complementares', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
+]
 
 const allCourses = ref([])
 const loading = ref(true)
@@ -221,12 +257,29 @@ function formatModality(modality) {
   return map[modality] || modality || ''
 }
 
+function withWrShowcase(apiCourses) {
+  if (!isWrTenant()) return apiCourses
+
+  const apiFamilies = new Set(
+    apiCourses
+      .map((course) => extractFamily(course.code))
+      .filter(Boolean)
+  )
+
+  const showcaseCourses = WR_CATALOG_SHOWCASE.filter(
+    (course) => !apiFamilies.has(extractFamily(course.code))
+  )
+
+  return [...apiCourses, ...showcaseCourses]
+}
+
 async function loadCourses() {
   loading.value = true
   loadError.value = ''
   try {
     const { data } = await fetchPublicCourses()
-    allCourses.value = Array.isArray(data) ? data : []
+    const apiCourses = Array.isArray(data) ? data : []
+    allCourses.value = withWrShowcase(apiCourses)
   } catch (error) {
     allCourses.value = []
     loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
