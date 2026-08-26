@@ -126,6 +126,21 @@ def _tenant_key_for_material(
     return f"tenants/{tenant_id}/courses/{course_id}/lessons/{lesson_id}/materials/{safe}"
 
 
+def _tenant_key_for_course_material(
+    tenant_id: UUID, course_id: UUID, filename: str, sha256: str | None = None
+) -> str:
+    """Tenant-aware storage key for course-level materials (no lesson_id).
+
+    Includes SHA-256 prefix for idempotency — re-uploading the same file
+    produces the same key, preventing duplicate objects.
+    """
+    safe = _sanitize_filename(filename)
+    if sha256:
+        # Use first 16 chars of SHA to keep key manageable while ensuring uniqueness
+        return f"tenants/{tenant_id}/courses/{course_id}/materials/{sha256[:16]}/{safe}"
+    return f"tenants/{tenant_id}/courses/{course_id}/materials/{safe}"
+
+
 def _is_legacy_key(key: str) -> bool:
     """Check if a storage key uses the legacy format."""
     return key.startswith("lessons/") and "/video/" not in key
@@ -403,3 +418,110 @@ async def generate_material_download_url(
         )
 
     return url
+
+
+# ─── Course-level material storage (no lesson_id) ───
+
+async def generate_course_material_upload_url(
+    tenant_id: UUID,
+    course_id: UUID,
+    filename: str,
+    mime_type: str,
+    size_bytes: int,
+    sha256: str,
+    expiration: int = 3600,
+) -> tuple[str, str]:
+    """Generate presigned PUT URL for course-level material upload.
+
+    Returns (upload_url, storage_key).
+    The storage_key includes the SHA-256 prefix for idempotency.
+    """
+    if mime_type not in ALLOWED_MATERIAL_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Material content type not allowed: {mime_type}",
+        )
+
+    if size_bytes > MAX_MATERIAL_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Material size exceeds maximum of {MAX_MATERIAL_SIZE} bytes",
+        )
+
+    key = _tenant_key_for_course_material(tenant_id, course_id, filename, sha256)
+
+    if _is_local_backend():
+        return _local_upload_url(key), key
+
+    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage not configured",
+        )
+
+    s3 = _get_s3_client()
+
+    try:
+        url = s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": settings.STORAGE_BUCKET,
+                "Key": key,
+                "ContentType": mime_type,
+            },
+            ExpiresIn=expiration,
+        )
+    except ClientError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not generate course material upload URL: {exc}",
+        )
+
+    return url, key
+
+
+async def head_object_metadata(storage_key: str) -> dict | None:
+    """Get object metadata via head_object.
+
+    Returns dict with 'content_length' and 'content_type' if the object
+    exists, or None if it does not exist.
+    """
+    if _is_local_backend():
+        path = _local_file_path(storage_key)
+        if not (path.exists() and path.is_file()):
+            return None
+        import mimetypes
+        stat = path.stat()
+        return {
+            "content_length": stat.st_size,
+            "content_type": mimetypes.guess_type(str(path))[0] or "application/octet-stream",
+        }
+
+    if not settings.STORAGE_ENDPOINT or not settings.STORAGE_ACCESS_KEY or not settings.STORAGE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage not configured",
+        )
+
+    s3 = _get_s3_client()
+    try:
+        response = s3.head_object(Bucket=settings.STORAGE_BUCKET, Key=storage_key)
+        return {
+            "content_length": response.get("ContentLength"),
+            "content_type": response.get("ContentType"),
+        }
+    except ClientError:
+        return None
+
+
+def validate_storage_key_tenant_course(
+    storage_key: str,
+    tenant_id: UUID,
+    course_id: UUID,
+) -> bool:
+    """Validate that a storage_key belongs to the given tenant and course.
+
+    Prevents cross-tenant or cross-course key injection.
+    """
+    expected_prefix = f"tenants/{tenant_id}/courses/{course_id}/materials/"
+    return storage_key.startswith(expected_prefix)

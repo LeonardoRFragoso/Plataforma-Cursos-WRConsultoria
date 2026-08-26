@@ -296,3 +296,201 @@ class TestCourseMaterial:
         assert resp2.status_code == status.HTTP_200_OK
         assert resp2.json()["title"] == "Updated Title"
         assert resp2.json()["is_active"] is False
+
+
+class TestCourseMaterialUploadFlow:
+    """Tests for the presigned upload + complete flow."""
+
+    @pytest.mark.asyncio
+    async def test_upload_url_admin_only(self, client, student_user):
+        """Non-admin cannot request upload URL."""
+        course_id = str(uuid.uuid4())
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "test.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "a1b2c3d4" * 8,
+            },
+            headers=student_user["headers"],
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_upload_url_invalid_mime(self, client, admin_headers):
+        """Invalid mime type is rejected."""
+        course_id = await _create_course(client, admin_headers)
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "test.exe",
+                "mime_type": "application/x-msdownload",
+                "size_bytes": 1024,
+                "sha256": "b1a2c3d4" * 8,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    @pytest.mark.asyncio
+    async def test_upload_url_size_too_large(self, client, admin_headers):
+        """Oversized file is rejected."""
+        course_id = await _create_course(client, admin_headers)
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "huge.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 200 * 1024 * 1024,  # 200 MB > 100 MB limit
+                "sha256": "c1d2e3f4" * 8,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+    @pytest.mark.asyncio
+    async def test_upload_url_course_not_found(self, client, admin_headers):
+        """Non-existent course returns 404."""
+        resp = await client.post(
+            f"/api/v1/courses/{uuid.uuid4()}/materials/upload-url",
+            json={
+                "filename": "test.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "d1c2b3a4" * 8,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_upload_url_invalid_sha(self, client, admin_headers):
+        """Malformed SHA-256 is rejected."""
+        course_id = await _create_course(client, admin_headers)
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "test.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "not-a-valid-sha",
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_upload_url_duplicate_sha(self, client, admin_headers):
+        """Duplicate SHA returns 409."""
+        course_id = await _create_course(client, admin_headers)
+        sha = "e1f2d3c4" * 8
+
+        # Create first material with this SHA
+        await client.post(
+            f"/api/v1/courses/{course_id}/materials",
+            json={
+                "course_id": course_id,
+                "title": "First",
+                "storage_key": "test/key1.pdf",
+                "sha256": sha,
+            },
+            headers=admin_headers,
+        )
+
+        # Request upload URL with same SHA
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "second.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": sha,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_409_CONFLICT
+
+    @pytest.mark.asyncio
+    async def test_complete_wrong_tenant_key(self, client, admin_headers):
+        """Storage key with wrong tenant prefix is rejected."""
+        course_id = await _create_course(client, admin_headers)
+        wrong_key = f"tenants/{uuid.uuid4()}/courses/{uuid.uuid4()}/materials/abc/test.pdf"
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/complete",
+            json={
+                "storage_key": wrong_key,
+                "title": "Test",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "f1e2d3c4" * 8,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_complete_object_not_found(self, client, admin_headers, monkeypatch):
+        """Complete fails if object doesn't exist in storage (local mode)."""
+        monkeypatch.setattr("app.core.storage._is_local_backend", lambda: True)
+
+        course_id = await _create_course(client, admin_headers)
+        # In local mode, the object won't exist since we didn't upload it
+        # Use a valid tenant/course prefix
+        tenant_id = "11111111-1111-1111-1111-111111111111"
+        valid_key = f"tenants/{tenant_id}/courses/{course_id}/materials/abc123/test.pdf"
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/complete",
+            json={
+                "storage_key": valid_key,
+                "title": "Test",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+            },
+            headers=admin_headers,
+        )
+        # In local mode, object won't exist → 422
+        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_complete_admin_only(self, client, student_user):
+        """Non-admin cannot complete upload."""
+        course_id = str(uuid.uuid4())
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/complete",
+            json={
+                "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/x/materials/abc/test.pdf",
+                "title": "Test",
+                "mime_type": "application/pdf",
+                "size_bytes": 1024,
+                "sha256": "01234567" * 8,
+            },
+            headers=student_user["headers"],
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_upload_url_local_mode_success(self, client, admin_headers, monkeypatch):
+        """In local mode, upload URL endpoint returns a backend URL."""
+        monkeypatch.setattr("app.core.storage._is_local_backend", lambda: True)
+
+        course_id = await _create_course(client, admin_headers)
+        sha = "a1b2c3d4" * 8
+        resp = await client.post(
+            f"/api/v1/courses/{course_id}/materials/upload-url",
+            json={
+                "filename": "apostila.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 50000,
+                "sha256": sha,
+            },
+            headers=admin_headers,
+        )
+        assert resp.status_code == status.HTTP_200_OK, f"Body: {resp.text}"
+        data = resp.json()
+        assert "upload_url" in data
+        assert "storage_key" in data
+        assert "expires_in" in data
+        # Storage key should contain the tenant/course prefix
+        assert "materials/" in data["storage_key"]
