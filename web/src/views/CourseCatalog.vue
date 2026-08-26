@@ -54,7 +54,7 @@
           {{ filteredCourses.length }} treinamento{{ filteredCourses.length !== 1 ? 's' : '' }} no catálogo
         </p>
 
-        <!-- LOADING -->
+        <!-- LOADING (used for non-WR tenants; WR has an immediate local showcase) -->
         <div
           v-if="loading"
           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
@@ -211,8 +211,27 @@ const WR_CATALOG_SHOWCASE = [
   { id: 'showcase-dd', code: 'DD-F', name: 'Direção Defensiva', category: 'Complementares', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
 ]
 
-const allCourses = ref([])
-const loading = ref(true)
+function withWrShowcase(apiCourses) {
+  if (!isWrTenant()) return apiCourses
+
+  const apiFamilies = new Set(
+    apiCourses
+      .map((course) => extractFamily(course.code))
+      .filter(Boolean)
+  )
+
+  const showcaseCourses = WR_CATALOG_SHOWCASE.filter(
+    (course) => !apiFamilies.has(extractFamily(course.code))
+  )
+
+  return [...apiCourses, ...showcaseCourses]
+}
+
+// The WR catalog is a public marketing surface. Render its versioned local
+// showcase immediately instead of blocking every cover image on Railway.
+// The API still enriches/replaces matching families when it responds.
+const allCourses = ref(isWrTenant() ? withWrShowcase([]) : [])
+const loading = ref(!isWrTenant())
 const loadError = ref('')
 const activeCategory = ref('all')
 const searchQuery = ref('')
@@ -257,32 +276,24 @@ function formatModality(modality) {
   return map[modality] || modality || ''
 }
 
-function withWrShowcase(apiCourses) {
-  if (!isWrTenant()) return apiCourses
-
-  const apiFamilies = new Set(
-    apiCourses
-      .map((course) => extractFamily(course.code))
-      .filter(Boolean)
-  )
-
-  const showcaseCourses = WR_CATALOG_SHOWCASE.filter(
-    (course) => !apiFamilies.has(extractFamily(course.code))
-  )
-
-  return [...apiCourses, ...showcaseCourses]
-}
-
 async function loadCourses() {
-  loading.value = true
+  const hasLocalWrCatalog = isWrTenant() && allCourses.value.length > 0
+  loading.value = !hasLocalWrCatalog
   loadError.value = ''
   try {
     const { data } = await fetchPublicCourses()
     const apiCourses = Array.isArray(data) ? data : []
     allCourses.value = withWrShowcase(apiCourses)
   } catch (error) {
-    allCourses.value = []
-    loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
+    if (isWrTenant()) {
+      // The versioned WR showcase is a safe visual fallback. Keep it visible
+      // if the API is sleeping or temporarily unavailable.
+      allCourses.value = withWrShowcase([])
+      loadError.value = ''
+    } else {
+      allCourses.value = []
+      loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
+    }
   } finally {
     loading.value = false
   }
