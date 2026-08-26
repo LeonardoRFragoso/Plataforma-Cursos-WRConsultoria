@@ -2,11 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Premium UI production promotion marker. */
 :root {
-  --color-primary: #1b7a3a;
-  --color-secondary: #17324d;
-  --color-accent: #f59e0b;
+  /* Public baseline kept exactly compatible with the approved pre-login UI. */
+  --color-primary: #0056b3;
+  --color-secondary: #1a1a1a;
+  --color-accent: #ff6b35;
+
+  /* Premium authenticated application tokens. Tenant branding still overrides
+     --color-* and --brand-* at runtime through the tenant store. */
   --brand-primary: var(--color-primary);
   --brand-secondary: var(--color-secondary);
   --brand-accent: var(--color-accent);
@@ -35,38 +38,39 @@
   --radius-control: 12px;
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; background: var(--surface-page); }
-body {
+/* IMPORTANT: this is the original public/global baseline. Do not place the
+   premium page background or premium default text color on html/body. */
+* {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
   font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--text-primary);
-  background: var(--surface-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-button, input, select, textarea { font: inherit; }
-button, a { -webkit-tap-highlight-color: transparent; }
-::selection { background: var(--brand-primary-soft); color: var(--text-primary); }
 
-:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
-  outline-offset: 2px;
+html {
+  scroll-behavior: smooth;
 }
 
-/* White-label utility layer */
-.bg-primary { background-color: var(--brand-primary) !important; }
-.text-primary { color: var(--brand-primary) !important; }
-.bg-secondary { background-color: var(--brand-secondary) !important; }
-.text-secondary { color: var(--brand-secondary) !important; }
-.bg-accent { background-color: var(--brand-accent) !important; }
-.text-accent { color: var(--brand-accent) !important; }
-.brand-gradient { background: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-primary) 72%, color-mix(in srgb, var(--brand-primary) 72%, var(--brand-accent)) 100%); }
+/* Original white-label utility contract used by the approved public pages. */
+.bg-primary { background-color: var(--color-primary) !important; }
+.text-primary { color: var(--color-primary) !important; }
+.bg-secondary { background-color: var(--color-secondary) !important; }
+.text-secondary { color: var(--color-secondary) !important; }
+.bg-accent { background-color: var(--color-accent) !important; }
+.text-accent { color: var(--color-accent) !important; }
+
+/* Premium helpers are opt-in. Public pages that predate the premium shell do
+   not use these classes and therefore retain their original visual contract. */
+.brand-gradient {
+  background: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-primary) 72%, color-mix(in srgb, var(--brand-primary) 72%, var(--brand-accent)) 100%);
+}
 .brand-ring { box-shadow: 0 0 0 4px var(--brand-primary-soft); }
 
-/* Premium surfaces */
 .premium-card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
@@ -81,7 +85,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .premium-title { letter-spacing: -.035em; color: var(--text-primary); }
 .premium-muted { color: var(--text-secondary); }
 
-/* Upgrade legacy CRUD controls system-wide without changing page contracts */
+/* Premium interaction defaults are intentionally scoped to the authenticated
+   shell so public/auth/marketing pages remain visually unchanged. */
+[data-testid='app-shell'] button,
+[data-testid='app-shell'] input,
+[data-testid='app-shell'] select,
+[data-testid='app-shell'] textarea { font: inherit; }
+[data-testid='app-shell'] button,
+[data-testid='app-shell'] a { -webkit-tap-highlight-color: transparent; }
+[data-testid='app-shell'] ::selection { background: var(--brand-primary-soft); color: var(--text-primary); }
+[data-testid='app-shell'] :focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
 [data-testid='app-workspace'] input:not([type='checkbox']):not([type='radio']),
 [data-testid='app-workspace'] select,
 [data-testid='app-workspace'] textarea {
@@ -122,11 +139,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 [data-testid='app-workspace'] tbody tr { transition: background-color .14s ease; }
 [data-testid='app-workspace'] tbody tr:hover { background: #fafcfe; }
 
-/* Better scrollbars for dense operation screens */
-* { scrollbar-width: thin; scrollbar-color: #c7d0dc transparent; }
-*::-webkit-scrollbar { width: 9px; height: 9px; }
-*::-webkit-scrollbar-thumb { background: #c7d0dc; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
-*::-webkit-scrollbar-thumb:hover { background: #aab7c6; background-clip: content-box; }
+/* Premium scrollbar styling must not leak into the approved public website. */
+[data-testid='app-shell'],
+[data-testid='app-shell'] * { scrollbar-width: thin; scrollbar-color: #c7d0dc transparent; }
+[data-testid='app-shell']::-webkit-scrollbar,
+[data-testid='app-shell'] *::-webkit-scrollbar { width: 9px; height: 9px; }
+[data-testid='app-shell']::-webkit-scrollbar-thumb,
+[data-testid='app-shell'] *::-webkit-scrollbar-thumb { background: #c7d0dc; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+[data-testid='app-shell']::-webkit-scrollbar-thumb:hover,
+[data-testid='app-shell'] *::-webkit-scrollbar-thumb:hover { background: #aab7c6; background-clip: content-box; }
 
 @media (max-width: 767px) {
   :root { --radius-card: 15px; }
@@ -134,5 +155,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  [data-testid='app-shell'],
+  [data-testid='app-shell'] *,
+  [data-testid='app-shell'] *::before,
+  [data-testid='app-shell'] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
