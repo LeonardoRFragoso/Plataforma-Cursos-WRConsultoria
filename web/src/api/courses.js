@@ -24,3 +24,15 @@ export function fetchCourseMaterials(courseId) {
 export function downloadCourseMaterial(courseId, materialId) {
   return api.get(`/api/v1/courses/${courseId}/materials/${materialId}/download`)
 }
+
+export function requestMaterialUploadUrl(courseId, payload) {
+  return api.post(`/api/v1/courses/${courseId}/materials/upload-url`, payload)
+}
+
+export function completeMaterialUpload(courseId, payload) {
+  return api.post(`/api/v1/courses/${courseId}/materials/complete`, payload)
+}
+
+export function deleteCourseMaterial(courseId, materialId) {
+  return api.delete(`/api/v1/courses/${courseId}/materials/${materialId}`)
+}
