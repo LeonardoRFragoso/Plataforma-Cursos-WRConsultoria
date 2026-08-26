@@ -1,363 +1,46 @@
 <template>
   <div>
-    <AppPageHeader title="Cursos" description="Gerencie o catálogo de cursos.">
-      <template #actions>
-        <AppButton
-          v-if="isAdmin"
-          @click="showForm = true"
-          class="bg-primary-600 text-white"
-          data-testid="new-course-btn"
-        >
-          + Novo Curso
-        </AppButton>
-      </template>
+    <AppPageHeader eyebrow="Catálogo interno" title="Cursos" description="Gerencie conteúdo, aulas, alunos e disponibilidade dos treinamentos.">
+      <template #actions><AppButton v-if="isAdmin" @click="showForm = true" data-testid="new-course-btn"><span class="text-lg leading-none">+</span>Novo curso</AppButton></template>
     </AppPageHeader>
 
-      <!-- Formulário de Curso -->
-      <AppCard v-if="showForm" class="mb-8">
-        <template #header>
-          <h2 class="text-xl font-semibold text-secondary-900">{{ editingId ? 'Editar' : 'Novo' }} Curso</h2>
-        </template>
-        <form @submit.prevent="saveCourse" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <AppInput
-              v-model="form.code"
-              label="Código (ex: NR-10)"
-              placeholder="NR-10"
-              required
-            />
-            <AppInput
-              v-model="form.name"
-              label="Nome do Curso"
-              placeholder="Nome do Curso"
-              required
-            />
-            <AppInput
-              v-model="form.category"
-              label="Categoria"
-              placeholder="Categoria"
-              required
-            />
-            <AppInput
-              v-model.number="form.carga_horaria"
-              label="Carga Horária"
-              type="number"
-              placeholder="40"
-              required
-            />
-            <AppInput
-              v-model.number="form.price"
-              label="Preço (R$)"
-              type="number"
-              placeholder="0.00"
-              step="0.01"
-              required
-            />
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Modalidade</label>
-              <select
-                v-model="form.modality"
-                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
-              >
-                <option value="PRESENCIAL">Presencial</option>
-                <option value="EAD">EAD</option>
-                <option value="SEMIPRESENCIAL">Semipresencial</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-            <textarea
-              v-model="form.description"
-              placeholder="Descrição do curso"
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              rows="3"
-            ></textarea>
-          </div>
-          <!-- Course media fields -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <AppInput
-              v-model="form.cover_image_url"
-              label="URL da imagem de capa (opcional)"
-              placeholder="/assets/wr/courses/nr-10.webp ou https://..."
-              data-testid="course-cover-image-url"
-            />
-            <AppInput
-              v-model="form.cover_image_alt"
-              label="Texto alternativo da capa (opcional)"
-              placeholder="Descrição da imagem para acessibilidade"
-              data-testid="course-cover-image-alt"
-            />
-          </div>
-          <!-- Cover preview -->
-          <div v-if="form.cover_image_url" class="mt-2">
-            <p class="text-sm text-gray-500 mb-1">Pré-visualização:</p>
-            <img
-              :src="form.cover_image_url"
-              :alt="form.cover_image_alt || 'Preview'"
-              class="w-full max-w-xs rounded-md border border-gray-200"
-              style="aspect-ratio: 16/9; object-fit: cover;"
-              data-testid="course-cover-preview"
-            />
-          </div>
-          <div class="flex gap-2">
-            <AppButton type="submit" class="bg-primary-600 text-white" :disabled="saving" data-testid="save-course-btn">
-              {{ saving ? 'Salvando...' : 'Salvar' }}
-            </AppButton>
-            <AppButton
-              type="button"
-              @click="cancelForm"
-              class="bg-gray-300 text-gray-700"
-              data-testid="cancel-course-btn"
-            >
-              Cancelar
-            </AppButton>
-          </div>
-        </form>
-      </AppCard>
+    <AppCard v-if="showForm" class="mb-7">
+      <template #header><div class="flex items-center justify-between"><div><p class="premium-kicker">{{ editingId ? 'Edição' : 'Novo treinamento' }}</p><h2 class="mt-1 text-xl font-bold text-slate-900">{{ editingId ? 'Editar curso' : 'Cadastrar curso' }}</h2></div><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700"><NavIcon name="catalog" /></span></div></template>
+      <form @submit.prevent="saveCourse" class="space-y-5">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"><AppInput v-model="form.code" label="Código (ex: NR-10)" placeholder="NR-10" required/><AppInput v-model="form.name" label="Nome do curso" placeholder="Nome do curso" required/><AppInput v-model="form.category" label="Categoria" placeholder="Categoria" required/><AppInput v-model.number="form.carga_horaria" label="Carga horária" type="number" placeholder="40" required/><AppInput v-model.number="form.price" label="Preço (R$)" type="number" placeholder="0.00" step="0.01" required/><div><label class="mb-2 block text-sm font-semibold text-slate-700">Modalidade</label><select v-model="form.modality" class="w-full" required><option value="PRESENCIAL">Presencial</option><option value="EAD">EAD</option><option value="SEMIPRESENCIAL">Semipresencial</option></select></div></div>
+        <div><label class="mb-2 block text-sm font-semibold text-slate-700">Descrição</label><textarea v-model="form.description" placeholder="Descrição do curso" class="w-full px-4 py-3" rows="3"></textarea></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2"><AppInput v-model="form.cover_image_url" label="URL da imagem de capa (opcional)" placeholder="/assets/... ou https://..." data-testid="course-cover-image-url"/><AppInput v-model="form.cover_image_alt" label="Texto alternativo da capa (opcional)" placeholder="Descrição da imagem" data-testid="course-cover-image-alt"/></div>
+        <div v-if="form.cover_image_url" class="rounded-2xl border border-slate-100 bg-slate-50 p-3"><p class="mb-2 text-xs font-semibold text-slate-500">Pré-visualização</p><img :src="form.cover_image_url" :alt="form.cover_image_alt || 'Preview'" class="aspect-video w-full max-w-sm rounded-xl object-cover shadow-sm" data-testid="course-cover-preview"/></div>
+        <div class="flex flex-wrap gap-2"><AppButton type="submit" :disabled="saving" data-testid="save-course-btn">{{ saving ? 'Salvando...' : 'Salvar curso' }}</AppButton><AppButton type="button" variant="secondary" @click="cancelForm" data-testid="cancel-course-btn">Cancelar</AppButton></div>
+      </form>
+    </AppCard>
 
-      <!-- Loading -->
-      <LoadingState v-if="loading" message="Carregando cursos..." />
+    <LoadingState v-if="loading" message="Carregando cursos..." />
+    <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">{{ loadError }}<button @click="loadCourses" class="ml-2 underline">Tentar novamente</button></AppAlert>
+    <EmptyState v-else-if="courses.length === 0" title="Nenhum curso cadastrado" description="Crie o primeiro treinamento para começar a montar o catálogo." />
 
-      <!-- Error -->
-      <AppAlert v-else-if="loadError" type="error" closable @close="loadError = ''">
-        {{ loadError }}
-        <button @click="loadCourses" class="underline ml-2">Tentar novamente</button>
-      </AppAlert>
-
-      <!-- Empty -->
-      <EmptyState
-        v-else-if="courses.length === 0"
-        title="Nenhum curso cadastrado"
-        description="Clique em 'Novo Curso' para criar o primeiro curso."
-      />
-
-      <!-- Success list -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AppCard v-for="course in courses" :key="course.id" class="hover:shadow-lg transition-shadow">
-          <template #header>
-            <div class="flex items-start gap-3">
-              <CourseCover
-                :course="course"
-                ratio="16/9"
-                fit="cover"
-                loading="lazy"
-                wrapper-class="w-24 shrink-0 rounded-md overflow-hidden"
-                img-test-id="admin-course-thumb-img"
-                fb-test-id="admin-course-thumb-fallback"
-              />
-              <h3 class="text-lg font-semibold text-secondary-900 flex-1">{{ course.name }}</h3>
-            </div>
-          </template>
-          <div class="space-y-2 text-sm">
-            <p><strong>Código:</strong> {{ course.code }}</p>
-            <p><strong>Categoria:</strong> {{ course.category }}</p>
-            <p><strong>Carga Horária:</strong> {{ course.carga_horaria }}h</p>
-            <p><strong>Modalidade:</strong> {{ formatModality(course.modality) }}</p>
-            <p><strong>Preço:</strong> R$ {{ formatPrice(course.price) }}</p>
-            <p v-if="course.description" class="text-gray-600 mt-3">{{ course.description }}</p>
+    <div v-else>
+      <div class="premium-toolbar mb-5 flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-slate-800">{{ courses.length }} {{ courses.length === 1 ? 'curso cadastrado' : 'cursos cadastrados' }}</p><p class="text-xs text-slate-400">Ações destrutivas ficam protegidas no menu de opções.</p></div><div class="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500"><NavIcon name="shield" />Gestão segura</div></div>
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
+        <article v-for="course in courses" :key="course.id" class="premium-card premium-card-hover overflow-hidden">
+          <div class="relative"><CourseCover :course="course" ratio="16/9" fit="cover" loading="lazy" wrapper-class="w-full overflow-hidden" img-test-id="admin-course-thumb-img" fb-test-id="admin-course-thumb-fallback"/><div class="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/60 to-transparent"></div><div class="absolute left-4 top-4 flex items-center gap-2"><span class="rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow">{{ course.code }}</span><span class="rounded-full border border-white/20 bg-slate-950/45 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">{{ course.active === false ? 'Inativo' : 'Ativo' }}</span></div></div>
+          <div class="p-5"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="text-xs font-semibold text-[var(--brand-primary)]">{{ course.category }}</p><h3 class="mt-1 line-clamp-2 text-lg font-bold leading-snug text-slate-900">{{ course.name }}</h3></div><details v-if="isAdmin" class="relative shrink-0"><summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" aria-label="Mais opções">•••</summary><div class="absolute right-0 z-10 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><button @click="editCourse(course)" class="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50" data-testid="edit-course-btn">Editar curso</button><button @click="confirmDelete(course)" class="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50" data-testid="delete-course-btn">Excluir curso</button></div></details></div>
+            <div class="mt-4 grid grid-cols-3 divide-x divide-slate-100 rounded-xl bg-slate-50/80 py-3 text-center"><div><p class="text-[10px] uppercase tracking-wide text-slate-400">Carga</p><p class="mt-1 text-xs font-bold text-slate-700">{{ course.carga_horaria }}h</p></div><div><p class="text-[10px] uppercase tracking-wide text-slate-400">Formato</p><p class="mt-1 truncate px-1 text-xs font-bold text-slate-700">{{ formatModality(course.modality) }}</p></div><div><p class="text-[10px] uppercase tracking-wide text-slate-400">Preço</p><p class="mt-1 text-xs font-bold text-slate-700">R$ {{ formatPrice(course.price) }}</p></div></div>
+            <p v-if="course.description" class="mt-4 line-clamp-2 text-xs leading-5 text-slate-500">{{ course.description }}</p>
+            <div v-if="isAdmin" class="mt-5 flex gap-2"><AppButton @click="manageLessons(course)" size="sm" class="flex-1" data-testid="manage-lessons-btn"><NavIcon name="catalog" />Gerenciar aulas</AppButton><AppButton @click="viewProgress(course)" variant="secondary" size="sm" class="flex-1" data-testid="view-progress-btn"><NavIcon name="users" />Alunos</AppButton></div>
           </div>
-          <div v-if="isAdmin" class="mt-4 flex gap-2 flex-wrap">
-            <AppButton
-              @click="manageLessons(course)"
-              class="bg-teal-600 text-white text-sm flex-1"
-              data-testid="manage-lessons-btn"
-            >
-              Gerenciar Aulas
-            </AppButton>
-            <AppButton
-              @click="viewProgress(course)"
-              class="bg-indigo-600 text-white text-sm flex-1"
-              data-testid="view-progress-btn"
-            >
-              Acompanhar Alunos
-            </AppButton>
-            <AppButton
-              @click="editCourse(course)"
-              class="bg-blue-600 text-white text-sm flex-1"
-              data-testid="edit-course-btn"
-            >
-              Editar
-            </AppButton>
-            <AppButton
-              @click="confirmDelete(course)"
-              class="bg-red-600 text-white text-sm flex-1"
-              data-testid="delete-course-btn"
-            >
-              Excluir
-            </AppButton>
-          </div>
-        </AppCard>
+        </article>
       </div>
+    </div>
 
-    <!-- Delete confirmation -->
-    <ConfirmDialog
-      v-model="showDeleteConfirm"
-      :title="'Excluir curso'"
-      :message="deleteMessage"
-      confirm-text="Excluir"
-      cancel-text="Cancelar"
-      danger
-      :loading="deleting"
-      @confirm="doDelete"
-      data-testid="delete-course-dialog"
-    />
+    <ConfirmDialog v-model="showDeleteConfirm" title="Excluir curso" :message="deleteMessage" confirm-text="Excluir" cancel-text="Cancelar" danger :loading="deleting" @confirm="doDelete" data-testid="delete-course-dialog" />
   </div>
 </template>
-
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
-import { useToast } from '../composables/useToast'
-import api from '../api/client'
-import AppPageHeader from '../components/AppPageHeader.vue'
-import AppCard from '../components/AppCard.vue'
-import AppButton from '../components/AppButton.vue'
-import AppInput from '../components/AppInput.vue'
-import AppAlert from '../components/AppAlert.vue'
-import EmptyState from '../components/EmptyState.vue'
-import LoadingState from '../components/LoadingState.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
-import CourseCover from '../components/CourseCover.vue'
-
-const authStore = useAuthStore()
-const router = useRouter()
-const { success: toastSuccess, error: toastError } = useToast()
-
-const courses = ref([])
-const loading = ref(false)
-const saving = ref(false)
-const showForm = ref(false)
-const editingId = ref(null)
-const loadError = ref('')
-
-// Delete confirmation state
-const showDeleteConfirm = ref(false)
-const deleting = ref(false)
-const pendingDeleteId = ref(null)
-const pendingDeleteName = ref('')
-
-const form = ref({
-  code: '',
-  name: '',
-  category: '',
-  carga_horaria: 0,
-  price: 0,
-  modality: 'PRESENCIAL',
-  description: '',
-  cover_image_url: '',
-  cover_image_alt: '',
-})
-
-const isAdmin = computed(() => {
-  const role = authStore.userRole?.toLowerCase()
-  return role === 'admin' || role === 'super_admin'
-})
-
-const deleteMessage = computed(() =>
-  `Excluir o curso "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`
-)
-
-const formatModality = (modality) => {
-  const map = {
-    'PRESENCIAL': 'Presencial',
-    'EAD': 'EAD',
-    'SEMIPRESENCIAL': 'Semipresencial'
-  }
-  return map[modality] || modality
-}
-
-const formatPrice = (price) => {
-  return parseFloat(price).toFixed(2).replace('.', ',')
-}
-
-const loadCourses = async () => {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const response = await api.get('/api/v1/courses/')
-    courses.value = response.data
-  } catch (error) {
-    loadError.value = 'Não foi possível carregar os cursos. Tente novamente.'
-  } finally {
-    loading.value = false
-  }
-}
-
-const saveCourse = async () => {
-  saving.value = true
-  try {
-    if (editingId.value) {
-      await api.put(`/api/v1/courses/${editingId.value}`, form.value)
-      toastSuccess('Curso atualizado com sucesso!')
-    } else {
-      await api.post('/api/v1/courses/', form.value)
-      toastSuccess('Curso criado com sucesso!')
-    }
-    resetForm()
-    loadCourses()
-  } catch (error) {
-    toastError('Erro ao salvar curso: ' + (error.response?.data?.detail || error.message))
-  } finally {
-    saving.value = false
-  }
-}
-
-const editCourse = (course) => {
-  editingId.value = course.id
-  form.value = { ...course }
-  showForm.value = true
-}
-
-const manageLessons = (course) => {
-  router.push(`/courses/${course.id}/lessons`)
-}
-
-const viewProgress = (course) => {
-  router.push(`/courses/${course.id}/progress`)
-}
-
-const confirmDelete = (course) => {
-  pendingDeleteId.value = course.id
-  pendingDeleteName.value = course.name
-  showDeleteConfirm.value = true
-}
-
-const doDelete = async () => {
-  deleting.value = true
-  try {
-    await api.delete(`/api/v1/courses/${pendingDeleteId.value}`)
-    toastSuccess('Curso excluído com sucesso!')
-    showDeleteConfirm.value = false
-    loadCourses()
-  } catch (error) {
-    toastError('Erro ao excluir curso: ' + (error.response?.data?.detail || ''))
-  } finally {
-    deleting.value = false
-  }
-}
-
-const cancelForm = () => {
-  resetForm()
-}
-
-const resetForm = () => {
-  editingId.value = null
-  form.value = {
-    code: '',
-    name: '',
-    category: '',
-    carga_horaria: 0,
-    price: 0,
-    modality: 'PRESENCIAL',
-    description: '',
-    cover_image_url: '',
-    cover_image_alt: '',
-  }
-  showForm.value = false
-}
-
-onMounted(loadCourses)
+import { ref,onMounted,computed } from 'vue'; import { useRouter } from 'vue-router'; import { useAuthStore } from '../stores/auth'; import { useToast } from '../composables/useToast'; import api from '../api/client'; import AppPageHeader from '../components/AppPageHeader.vue'; import AppCard from '../components/AppCard.vue'; import AppButton from '../components/AppButton.vue'; import AppInput from '../components/AppInput.vue'; import AppAlert from '../components/AppAlert.vue'; import EmptyState from '../components/EmptyState.vue'; import LoadingState from '../components/LoadingState.vue'; import ConfirmDialog from '../components/ConfirmDialog.vue'; import CourseCover from '../components/CourseCover.vue'; import NavIcon from '../components/NavIcon.vue'
+const authStore=useAuthStore(),router=useRouter(); const {success:toastSuccess,error:toastError}=useToast(); const courses=ref([]),loading=ref(false),saving=ref(false),showForm=ref(false),editingId=ref(null),loadError=ref(''); const showDeleteConfirm=ref(false),deleting=ref(false),pendingDeleteId=ref(null),pendingDeleteName=ref(''); const form=ref({code:'',name:'',category:'',carga_horaria:0,price:0,modality:'PRESENCIAL',description:'',cover_image_url:'',cover_image_alt:''}); const isAdmin=computed(()=>['admin','super_admin'].includes(authStore.userRole?.toLowerCase())); const deleteMessage=computed(()=>`Excluir o curso "${pendingDeleteName.value}"? Esta ação não pode ser desfeita.`)
+const formatModality=(m)=>({PRESENCIAL:'Presencial',EAD:'EAD',SEMIPRESENCIAL:'Semipresencial'}[m]||m); const formatPrice=(p)=>parseFloat(p||0).toFixed(2).replace('.',',')
+const loadCourses=async()=>{loading.value=true;loadError.value='';try{courses.value=(await api.get('/api/v1/courses/')).data}catch{loadError.value='Não foi possível carregar os cursos. Tente novamente.'}finally{loading.value=false}}
+const saveCourse=async()=>{saving.value=true;try{editingId.value?await api.put(`/api/v1/courses/${editingId.value}`,form.value):await api.post('/api/v1/courses/',form.value);toastSuccess(editingId.value?'Curso atualizado com sucesso!':'Curso criado com sucesso!');resetForm();loadCourses()}catch(error){toastError('Erro ao salvar curso: '+(error.response?.data?.detail||error.message))}finally{saving.value=false}}
+const editCourse=(course)=>{editingId.value=course.id;form.value={...course};showForm.value=true}; const manageLessons=(course)=>router.push(`/courses/${course.id}/lessons`); const viewProgress=(course)=>router.push(`/courses/${course.id}/progress`); const confirmDelete=(course)=>{pendingDeleteId.value=course.id;pendingDeleteName.value=course.name;showDeleteConfirm.value=true}; const doDelete=async()=>{deleting.value=true;try{await api.delete(`/api/v1/courses/${pendingDeleteId.value}`);toastSuccess('Curso excluído com sucesso!');showDeleteConfirm.value=false;loadCourses()}catch(error){toastError('Erro ao excluir curso: '+(error.response?.data?.detail||''))}finally{deleting.value=false}}; const cancelForm=()=>resetForm(); const resetForm=()=>{editingId.value=null;form.value={code:'',name:'',category:'',carga_horaria:0,price:0,modality:'PRESENCIAL',description:'',cover_image_url:'',cover_image_alt:''};showForm.value=false}; onMounted(loadCourses)
 </script>
