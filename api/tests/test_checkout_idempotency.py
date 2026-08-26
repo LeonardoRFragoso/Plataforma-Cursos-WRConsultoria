@@ -1,4 +1,4 @@
-"""Tests for checkout idempotency — double checkout must not create duplicate charges."""
+"""Tests for checkout idempotency and immutable terminal payment attempts."""
 
 import uuid
 from datetime import timedelta
@@ -109,6 +109,8 @@ async def _setup_student_and_payment():
             "payment_id": payment.id,
             "user_id": user.id,
             "student_id": student.id,
+            "course_id": course.id,
+            "enrollment_id": enrollment.id,
         }
 
 
@@ -120,13 +122,24 @@ def _headers(user_id, role="student", tenant_id=WR_TENANT_ID):
 
 
 @pytest.mark.asyncio
-async def test_double_checkout_reuses_existing_charge(client, monkeypatch):
-    """Calling checkout twice must NOT create a second external charge.
+async def test_payment_get_includes_course_context_for_return_journey(client):
+    """PaymentReturn receives the real course and enrollment context from API."""
+    ctx = await _setup_student_and_payment()
 
-    First call creates the charge. Second call detects the existing
-    provider_payment_id + checkout_url + pending status and returns
-    the same URL with reused=True.
-    """
+    resp = await client.get(
+        f"/api/v1/payments/{ctx['payment_id']}",
+        headers=_headers(ctx["user_id"]),
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["course_id"] == str(ctx["course_id"])
+    assert body["enrollment_status"] == EnrollmentStatus.PENDENTE.value
+
+
+@pytest.mark.asyncio
+async def test_double_checkout_reuses_existing_charge(client, monkeypatch):
+    """Calling checkout twice must NOT create a second external charge."""
     ctx = await _setup_student_and_payment()
 
     call_count = {"n": 0}
@@ -168,16 +181,10 @@ async def test_double_checkout_reuses_existing_charge(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_checkout_after_approval_creates_new_charge(client, monkeypatch):
-    """After a payment is APROVADO, checkout creates a new charge (not reused).
-
-    This is the expected behavior for a re-purchase scenario — the
-    historical completed transaction is preserved, and a new charge
-    is created for the new checkout attempt.
-    """
+async def test_checkout_after_approval_is_rejected_and_history_preserved(client, monkeypatch):
+    """An approved Payment is terminal and cannot be turned into another charge."""
     ctx = await _setup_student_and_payment()
 
-    # Mark the payment as APROVADO
     async with AsyncSessionLocal() as db:
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
         payment = await db.get(Payment, ctx["payment_id"])
@@ -206,6 +213,44 @@ async def test_checkout_after_approval_creates_new_charge(client, monkeypatch):
         f"/api/v1/payments/{ctx['payment_id']}/checkout",
         headers=_headers(ctx["user_id"]),
     )
-    assert resp.status_code == 200
-    assert resp.json()["preference_id"] == "PREF-NEW-1"
-    assert call_count["n"] == 1
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Payment already approved"
+    assert call_count["n"] == 0
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        payment = await db.get(Payment, ctx["payment_id"])
+        assert payment.status == PaymentStatus.APROVADO
+        assert payment.provider_payment_id == "OLD-PREF"
+        assert payment.checkout_url == "https://old.checkout"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_status", [PaymentStatus.RECUSADO, PaymentStatus.REEMBOLSADO])
+async def test_checkout_rejects_closed_attempts(client, terminal_status):
+    """Rejected/refunded rows stay immutable; purchase must create a new attempt."""
+    ctx = await _setup_student_and_payment()
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        payment = await db.get(Payment, ctx["payment_id"])
+        payment.status = terminal_status
+        payment.provider_payment_id = "CLOSED-PREF"
+        payment.checkout_url = "https://closed.checkout"
+        await db.commit()
+
+    resp = await client.post(
+        f"/api/v1/payments/{ctx['payment_id']}/checkout",
+        headers=_headers(ctx["user_id"]),
+    )
+
+    assert resp.status_code == 409
+    assert "closed" in resp.json()["detail"].lower()
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        payment = await db.get(Payment, ctx["payment_id"])
+        assert payment.status == terminal_status
+        assert payment.provider_payment_id == "CLOSED-PREF"
+        assert payment.checkout_url == "https://closed.checkout"

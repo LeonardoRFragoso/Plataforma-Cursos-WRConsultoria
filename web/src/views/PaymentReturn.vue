@@ -25,7 +25,7 @@
         <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-yellow-200 border-t-yellow-600 mb-4"></div>
         <h2 class="text-lg font-bold text-gray-900 mb-2">Estamos confirmando seu pagamento...</h2>
         <p class="text-sm text-gray-500 mb-4">
-          Isso pode levar alguns instantes. Você será avisado quando o pagamento for confirmado.
+          Isso pode levar alguns instantes. Assim que a operadora confirmar, o acesso ao curso será liberado.
         </p>
         <p class="text-xs text-gray-400 mb-4">
           Status atual: <span class="font-medium">{{ payment.status }}</span>
@@ -69,16 +69,55 @@
         <div class="text-red-500 text-5xl mb-3">✗</div>
         <h2 class="text-lg font-bold text-red-700 mb-2">Pagamento recusado</h2>
         <p class="text-sm text-gray-600 mb-4">
-          O pagamento não foi processado. Tente novamente.
+          Esta tentativa foi encerrada. Para tentar novamente, inicie um novo pagamento pelo curso.
         </p>
-        <button
-          v-if="payment.checkout_url"
-          @click="retryCheckout"
-          data-testid="retry-payment-btn"
-          class="bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        <router-link
+          v-if="payment.course_id"
+          :to="`/courses/${payment.course_id}`"
+          data-testid="retry-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
         >
-          Tentar pagar novamente
-        </button>
+          Voltar ao curso e tentar novamente
+        </router-link>
+        <router-link
+          v-else
+          to="/cursos"
+          data-testid="retry-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        >
+          Voltar ao catálogo
+        </router-link>
+        <router-link
+          to="/dashboard"
+          class="block mt-2 bg-gray-100 text-gray-700 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-200"
+        >
+          Voltar ao Dashboard
+        </router-link>
+      </div>
+
+      <!-- Expired state -->
+      <div v-else-if="payment.status === 'EXPIRADO'" class="text-center py-6">
+        <div class="text-yellow-500 text-5xl mb-3">⌛</div>
+        <h2 class="text-lg font-bold text-gray-900 mb-2">Pagamento expirado</h2>
+        <p class="text-sm text-gray-600 mb-4">
+          Esta tentativa não pode mais ser utilizada. Você pode iniciar um novo pagamento pelo curso sem reutilizar a cobrança anterior.
+        </p>
+        <router-link
+          v-if="payment.course_id"
+          :to="`/courses/${payment.course_id}`"
+          data-testid="expired-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        >
+          Voltar ao curso e gerar novo pagamento
+        </router-link>
+        <router-link
+          v-else
+          to="/cursos"
+          data-testid="expired-payment-link"
+          class="block bg-primary-600 text-white px-6 py-3 rounded-md text-sm font-medium hover:bg-primary-700"
+        >
+          Voltar ao catálogo
+        </router-link>
         <router-link
           to="/dashboard"
           class="block mt-2 bg-gray-100 text-gray-700 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-200"
@@ -105,8 +144,7 @@
         <div class="text-yellow-500 text-5xl mb-3">⏱</div>
         <h2 class="text-lg font-bold text-gray-900 mb-2">Aguardando confirmação</h2>
         <p class="text-sm text-gray-600 mb-4">
-          O pagamento está sendo processado pela operadora.
-          Você receberá uma confirmação por e-mail em breve.
+          O pagamento ainda está sendo processado pela operadora. Você pode verificar novamente agora ou consultar o status mais tarde.
         </p>
         <p class="text-xs text-gray-400 mb-4">
           Status atual: <span class="font-medium">{{ payment.status }}</span>
@@ -212,12 +250,6 @@ function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
-  }
-}
-
-function retryCheckout() {
-  if (payment.value.checkout_url) {
-    window.location.href = payment.value.checkout_url
   }
 }
 </script>

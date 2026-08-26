@@ -1,10 +1,11 @@
 """Email delivery service.
 
-Sends transactional emails via SMTP (password reset, account activation).
+Sends transactional emails via SMTP (password reset, account activation,
+B2C welcome and course-access notifications).
 Tenant-aware: uses tenant branding/name in the email template.
 
 Requirements:
-- Tenant-aware frontend link (uses FRONTEND_URL or tenant custom domain)
+- Tenant-aware frontend link (uses caller-resolved frontend URL)
 - Tenant-aware branding/name
 - HTML + text fallback
 - SMTP timeout
@@ -16,10 +17,12 @@ Requirements:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
 from typing import Any
 
 from app.core.config import settings
@@ -29,6 +32,11 @@ logger = logging.getLogger(__name__)
 
 class EmailServiceError(Exception):
     """Sanitized email error — never contains SMTP credentials."""
+
+
+def _safe_header_text(value: str) -> str:
+    """Collapse control characters before using database text in mail headers."""
+    return " ".join(str(value).replace("\r", " ").replace("\n", " ").split())
 
 
 class EmailService:
@@ -49,6 +57,13 @@ class EmailService:
         self._mock = mock if mock is not None else getattr(settings, "EMAIL_MOCK_MODE", True)
         self._sent: list[dict[str, Any]] = []  # For test inspection
 
+    def _send_smtp_message(self, to: str, message: str) -> None:
+        """Blocking SMTP operation, executed outside the asyncio event loop."""
+        with smtplib.SMTP(self._smtp_server, self._smtp_port, timeout=30) as server:
+            server.starttls()
+            server.login(self._smtp_user, self._smtp_password)
+            server.sendmail(self._smtp_user, [to], message)
+
     async def send_email(
         self,
         *,
@@ -61,39 +76,40 @@ class EmailService:
         """Send an email. Returns True if sent (or mocked).
 
         Raises EmailServiceError on SMTP failure (sanitized — no
-        credentials in the error message).
+        credentials in the error message). Real SMTP I/O runs in a worker
+        thread so a slow provider does not block the FastAPI event loop.
         """
+        safe_subject = _safe_header_text(subject)
+        safe_from_name = _safe_header_text(from_name or "Plataforma")
+
         if self._mock:
             self._sent.append({
                 "to": to,
-                "subject": subject,
+                "subject": safe_subject,
                 "html_body": html_body,
                 "text_body": text_body,
                 "mock": True,
             })
-            logger.info("Email mock sent to %s: %s", to, subject)
+            logger.info("Email mock sent to %s: %s", to, safe_subject)
             return True
 
         if not self._smtp_user or not self._smtp_password:
             logger.warning("SMTP not configured — email to %s not sent", to)
             return False
 
-        from_addr = f"{from_name or 'Plataforma'} <{self._smtp_user}>"
+        from_addr = f"{safe_from_name} <{self._smtp_user}>"
         msg = MIMEMultipart("alternative")
         msg["From"] = from_addr
         msg["To"] = to
-        msg["Subject"] = subject
+        msg["Subject"] = safe_subject
 
         if text_body:
             msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
 
         try:
-            with smtplib.SMTP(self._smtp_server, self._smtp_port, timeout=30) as server:
-                server.starttls()
-                server.login(self._smtp_user, self._smtp_password)
-                server.sendmail(self._smtp_user, [to], msg.as_string())
-            logger.info("Email sent to %s: %s", to, subject)
+            await asyncio.to_thread(self._send_smtp_message, to, msg.as_string())
+            logger.info("Email sent to %s: %s", to, safe_subject)
             return True
         except smtplib.SMTPException as exc:
             # Sanitize: never include credentials in the error
@@ -115,10 +131,10 @@ class EmailService:
         html = f"""
         <html>
         <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">{tenant_name}</h2>
+            <h2 style="color: #333;">{escape(tenant_name)}</h2>
             <p>Você solicitou a redefinição de sua senha.</p>
             <p>Clique no link abaixo para redefinir sua senha:</p>
-            <p><a href="{reset_link}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">Redefinir senha</a></p>
+            <p><a href="{escape(reset_link, quote=True)}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">Redefinir senha</a></p>
             <p>Se você não solicitou esta redefinição, ignore este email.</p>
             <p style="color: #999; font-size: 12px;">Este link expira em 1 hora.</p>
         </body>
@@ -151,10 +167,10 @@ Este link expira em 1 hora.
         html = f"""
         <html>
         <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">{tenant_name}</h2>
+            <h2 style="color: #333;">{escape(tenant_name)}</h2>
             <p>Bem-vindo! Sua conta foi criada.</p>
             <p>Clique no link abaixo para ativar sua conta:</p>
-            <p><a href="{activation_link}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Ativar conta</a></p>
+            <p><a href="{escape(activation_link, quote=True)}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Ativar conta</a></p>
             <p style="color: #999; font-size: 12px;">Se você não criou esta conta, ignore este email.</p>
         </body>
         </html>
@@ -169,6 +185,84 @@ Se você não criou esta conta, ignore este email.
         """
         return await self.send_email(
             to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_welcome(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        frontend_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Welcome a public B2C account without ever including a password."""
+        safe_name = escape(full_name)
+        safe_tenant = escape(tenant_name)
+        catalog_url = f"{frontend_url.rstrip('/')}/cursos"
+        safe_catalog_url = escape(catalog_url, quote=True)
+        subject = f"Bem-vindo à {tenant_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Sua conta foi criada com sucesso.</p>
+            <p>Você já pode acessar a plataforma e escolher seus treinamentos.</p>
+            <p><a href="{safe_catalog_url}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">Ver cursos</a></p>
+            <p style="color: #999; font-size: 12px;">Por segurança, sua senha nunca é enviada por e-mail.</p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            "Sua conta foi criada com sucesso. Você já pode acessar a plataforma "
+            f"e escolher seus treinamentos: {catalog_url}\n\n"
+            "Por segurança, sua senha nunca é enviada por e-mail."
+        )
+        return await self.send_email(
+            to=to,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            from_name=tenant_name,
+        )
+
+    async def send_course_access(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        course_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Notify that payment was confirmed and course access is available."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        safe_course_url = escape(course_url, quote=True)
+        subject = f"Curso liberado — {course_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Seu pagamento foi confirmado e o acesso ao curso <strong>{safe_course}</strong> está liberado.</p>
+            <p><a href="{safe_course_url}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Acessar meu curso</a></p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Seu pagamento foi confirmado e o curso {course_name} está liberado.\n"
+            f"Acesse: {course_url}"
+        )
+        return await self.send_email(
+            to=to,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            from_name=tenant_name,
         )
 
     @property

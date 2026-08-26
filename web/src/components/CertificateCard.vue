@@ -1,143 +1,16 @@
 <template>
-  <div
-    class="group relative rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5"
-    :data-testid="testId"
-  >
-    <!-- Subtle course cover strip -->
-    <div class="relative h-16 bg-gray-100 overflow-hidden">
-      <CourseCover
-        :course="courseForCover"
-        ratio="16/4"
-        fit="cover"
-        loading="lazy"
-        wrapper-class="absolute inset-0"
-        img-test-id="cert-card-cover-img"
-        fb-test-id="cert-card-cover-fallback"
-      />
-      <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
-      <div class="absolute top-2 left-3 text-2xl" aria-hidden="true">🏆</div>
-    </div>
-
-    <div class="p-4">
-      <h3 class="font-semibold text-secondary-900 leading-snug line-clamp-2">
-        {{ certificate.course_name }}
-      </h3>
-      <p class="mt-1 text-xs text-gray-500">
-        Emitido em {{ formattedDate }}
-      </p>
-
-      <!-- Validation code -->
-      <div class="mt-3 flex items-center gap-2">
-        <span class="text-xs text-gray-500">Código:</span>
-        <code class="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-700">
-          {{ shortCode }}
-        </code>
-        <button
-          v-if="showCopy"
-          type="button"
-          @click="copyCode"
-          class="text-xs text-primary-600 hover:text-primary-700 font-medium"
-          :data-testid="testId + '-copy'"
-        >
-          {{ copied ? 'Copiado!' : 'Copiar' }}
-        </button>
-      </div>
-
-      <!-- Valid badge -->
-      <div class="mt-3 flex items-center gap-1.5 text-xs text-green-600">
-        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-        </svg>
-        Certificado válido
-      </div>
-
-      <!-- Actions -->
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          @click="download"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
-          :data-testid="testId + '-download'"
-        >
-          <span aria-hidden="true">⬇</span>
-          Baixar PDF
-        </button>
-        <router-link
-          :to="validationLink"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          :data-testid="testId + '-validate'"
-        >
-          <span aria-hidden="true">🔍</span>
-          Validar
-        </router-link>
-      </div>
+  <div class="premium-card premium-card-hover group relative overflow-hidden" :data-testid="testId">
+    <div class="relative h-24 overflow-hidden bg-slate-900"><CourseCover :course="courseForCover" ratio="16/4" fit="cover" loading="lazy" wrapper-class="absolute inset-0" img-test-id="cert-card-cover-img" fb-test-id="cert-card-cover-fallback" /><div class="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/55 to-transparent"></div><div class="absolute inset-x-0 bottom-0 flex items-end justify-between p-4"><div class="flex items-center gap-2 text-white"><span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-lg backdrop-blur">🏆</span><div><p class="text-[10px] font-bold uppercase tracking-[.16em] text-white/55">Certificado digital</p><p class="text-xs font-semibold text-white/90">Versão {{ certificate.version || 1 }}</p></div></div><span class="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">{{ statusLabel }}</span></div></div>
+    <div class="p-5"><h3 class="font-bold leading-snug text-slate-900">{{ certificate.course_name }}</h3><div class="mt-3 grid grid-cols-2 gap-3 text-xs"><div><p class="text-slate-400">Emissão</p><p class="mt-1 font-semibold text-slate-700">{{ formattedDate }}</p></div><div><p class="text-slate-400">Validade</p><p class="mt-1 font-semibold text-slate-700">{{ formattedExpiry }}</p></div></div>
+      <div class="mt-4 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Código de validação</p><code class="mt-1 block truncate font-mono text-xs font-semibold text-slate-700">{{ shortCode }}</code></div><button v-if="showCopy" type="button" @click="copyCode" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--brand-primary)] hover:bg-white" :data-testid="testId + '-copy'">{{ copied?'Copiado!':'Copiar' }}</button></div></div>
+      <div class="mt-3 flex items-center gap-2 text-xs font-semibold" :class="statusTextClass"><span class="h-2 w-2 rounded-full" :class="statusDotClass"></span>{{ statusMessage }}</div>
+      <div class="mt-5 flex flex-wrap gap-2"><button type="button" @click="download" class="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold text-white shadow-sm" :style="{background:'var(--brand-primary)'}" :data-testid="testId + '-download'">↓ Baixar PDF</button><router-link :to="validationLink" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50" :data-testid="testId + '-validate'">Validar autenticidade</router-link></div>
     </div>
   </div>
 </template>
-
 <script setup>
-import { computed, ref } from 'vue'
-import CourseCover from './CourseCover.vue'
-import api from '../api/client'
-
-const props = defineProps({
-  certificate: { type: Object, required: true },
-  showCopy: { type: Boolean, default: true },
-  testId: { type: String, default: 'certificate-card' },
-})
-
-const copied = ref(false)
-
-const courseForCover = computed(() => ({
-  id: props.certificate.course_id,
-  code: props.certificate.course_code,
-  name: props.certificate.course_name,
-  category: props.certificate.course_category,
-  cover_image_url: props.certificate.cover_image_url,
-  cover_image_alt: props.certificate.cover_image_alt,
-}))
-
-const formattedDate = computed(() =>
-  new Date(props.certificate.issued_at).toLocaleDateString('pt-BR')
-)
-
-const shortCode = computed(() => {
-  const c = props.certificate.validation_code || ''
-  return c.length > 16 ? c.slice(0, 8) + '…' : c
-})
-
-const validationLink = computed(
-  () => `/validar-certificado?code=${props.certificate.validation_code}`
-)
-
-const copyCode = async () => {
-  try {
-    await navigator.clipboard.writeText(props.certificate.validation_code)
-    copied.value = true
-    setTimeout(() => (copied.value = false), 1800)
-  } catch {
-    // clipboard not available
-  }
-}
-
-const download = async () => {
-  // Open the download endpoint in a new tab; the browser handles the PDF.
-  const url = `/api/v1/certificates/${props.certificate.id}/download`
-  // We need auth header — use axios with blob and trigger a download.
-  try {
-    const res = await api.get(url, { responseType: 'blob' })
-    const blob = new Blob([res.data], { type: 'application/pdf' })
-    const objUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = objUrl
-    a.download = `certificado-${props.certificate.certificate_number}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(objUrl)
-  } catch {
-    // fall back to direct navigation
-    window.open(url, '_blank')
-  }
-}
+import { computed,ref } from 'vue'; import CourseCover from './CourseCover.vue'; import api from '../api/client'
+const props=defineProps({certificate:{type:Object,required:true},showCopy:{type:Boolean,default:true},testId:{type:String,default:'certificate-card'}}); const copied=ref(false); const courseForCover=computed(()=>({id:props.certificate.course_id,code:props.certificate.course_code,name:props.certificate.course_name,category:props.certificate.course_category,cover_image_url:props.certificate.cover_image_url,cover_image_alt:props.certificate.cover_image_alt})); const formattedDate=computed(()=>new Date(props.certificate.issued_at).toLocaleDateString('pt-BR')); const formattedExpiry=computed(()=>props.certificate.expires_at?new Date(props.certificate.expires_at).toLocaleDateString('pt-BR'):'Sem expiração'); const shortCode=computed(()=>{const c=props.certificate.validation_code||'';return c.length>18?c.slice(0,10)+'…':c}); const validationLink=computed(()=>`/validar-certificado?code=${props.certificate.validation_code}`); const normalizedStatus=computed(()=>props.certificate.status||'ACTIVE'); const statusLabel=computed(()=>({ACTIVE:'Válido',EXPIRED:'Expirado',REVOKED:'Revogado',SUPERSEDED:'Substituído'}[normalizedStatus.value]||normalizedStatus.value)); const statusMessage=computed(()=>normalizedStatus.value==='ACTIVE'?'Certificado válido e verificável':`Certificado ${statusLabel.value.toLowerCase()}`); const statusTextClass=computed(()=>normalizedStatus.value==='ACTIVE'?'text-emerald-700':normalizedStatus.value==='REVOKED'?'text-red-700':'text-amber-700'); const statusDotClass=computed(()=>normalizedStatus.value==='ACTIVE'?'bg-emerald-500':normalizedStatus.value==='REVOKED'?'bg-red-500':'bg-amber-500')
+const copyCode=async()=>{try{await navigator.clipboard.writeText(props.certificate.validation_code);copied.value=true;setTimeout(()=>copied.value=false,1800)}catch{}}
+const download=async()=>{const url=`/api/v1/certificates/${props.certificate.id}/download`;try{const res=await api.get(url,{responseType:'blob'});const blob=new Blob([res.data],{type:'application/pdf'}),objUrl=URL.createObjectURL(blob),a=document.createElement('a');a.href=objUrl;a.download=`certificado-${props.certificate.certificate_number}.pdf`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(objUrl)}catch{window.open(url,'_blank')}}
 </script>

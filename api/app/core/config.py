@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     MERCADO_PAGO_PUBLIC_KEY: str = ""
     MERCADO_PAGO_MOCK_MODE: bool = False
 
+    # Provider-less PENDENTE attempts can be safely expired locally after this
+    # interval. Attempts that already created an external charge are never
+    # expired by this timer; provider webhooks remain authoritative for them.
+    PAYMENT_PENDING_ATTEMPT_TTL_MINUTES: int = 30
+
     # Asaas gateway — per-tenant API keys live in TenantSecret.
     # ASAAS_MOCK_MODE makes AsaasProvider return deterministic fakes
     # without touching the network (tests/staging only).

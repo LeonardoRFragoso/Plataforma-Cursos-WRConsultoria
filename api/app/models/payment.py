@@ -2,13 +2,16 @@ import uuid
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum,
     Float,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -22,6 +25,7 @@ class PaymentStatus(str, PyEnum):
     APROVADO = "APROVADO"
     RECUSADO = "RECUSADO"
     REEMBOLSADO = "REEMBOLSADO"
+    EXPIRADO = "EXPIRADO"
 
 
 class PaymentMethod(str, PyEnum):
@@ -38,6 +42,21 @@ class PaymentProvider(str, PyEnum):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        Index(
+            "uq_payment_active_attempt_per_enrollment",
+            "enrollment_id",
+            unique=True,
+            postgresql_where=text(
+                "enrollment_id IS NOT NULL AND "
+                "status IN ('PENDENTE', 'PROCESSANDO')"
+            ),
+            sqlite_where=text(
+                "enrollment_id IS NOT NULL AND "
+                "status IN ('PENDENTE', 'PROCESSANDO')"
+            ),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(
@@ -63,6 +82,11 @@ class Payment(Base):
     mercado_pago_id = Column(String, nullable=True, unique=True)
     installments = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)
+    # Financial events such as chargeback disputes, partial refunds or refunds
+    # after course completion require human review instead of silently mutating
+    # historical learning/certificate records.
+    review_required = Column(Boolean, default=False, nullable=False)
+    review_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 

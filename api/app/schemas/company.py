@@ -11,6 +11,10 @@ class CompanyBase(BaseModel):
     rh_name: str | None = None
     rh_email: EmailStr | None = None
     rh_phone: str | None = None
+    billing_email: EmailStr | None = None
+    contract_reference: str | None = None
+    status: str = "ACTIVE"
+    notes: str | None = None
     address: str | None = None
     city: str | None = None
     state: str | None = None
@@ -28,6 +32,10 @@ class CompanyUpdate(BaseModel):
     rh_name: str | None = None
     rh_email: EmailStr | None = None
     rh_phone: str | None = None
+    billing_email: EmailStr | None = None
+    contract_reference: str | None = None
+    status: str | None = None
+    notes: str | None = None
     address: str | None = None
     city: str | None = None
     state: str | None = None

@@ -98,6 +98,16 @@ async def _create_enrollment(client, admin_headers, student_id, class_id):
     return response.json()["id"]
 
 
+async def _complete_enrollment(client, admin_headers, enrollment_id):
+    response = await client.put(
+        f"/api/v1/enrollments/{enrollment_id}",
+        json={"status": "CONCLUIDA"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "CONCLUIDA"
+
+
 async def _create_payment(client, student_headers, enrollment_id):
     payload = {
         "enrollment_id": str(enrollment_id),
@@ -195,7 +205,6 @@ class TestAuth:
         assert response.status_code == 401
 
     async def test_login_inactive_user(self, client):
-
         payload = {
             "email": "inactive@example.com",
             "full_name": "Usuário Inativo",
@@ -660,63 +669,51 @@ class TestPayments:
 
 
 class TestCertificates:
-    async def test_create_certificate(self, client, admin_headers, student_user):
+    async def _completed_enrollment(self, client, admin_headers, student_user):
         course_id = await _create_course(client, admin_headers)
         admin_id = await _admin_id(client, admin_headers)
         class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
+        enrollment_id = await _create_enrollment(
+            client, admin_headers, student_user["student_id"], class_id
+        )
+        await _complete_enrollment(client, admin_headers, enrollment_id)
+        return enrollment_id
 
+    async def _issued_certificate(self, client, admin_headers, student_user):
+        enrollment_id = await self._completed_enrollment(client, admin_headers, student_user)
         response = await client.post(
             "/api/v1/certificates/",
             json={"enrollment_id": str(enrollment_id)},
             headers=admin_headers,
         )
-        assert response.status_code == 201
-        assert response.json()["enrollment_id"] == enrollment_id
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    async def test_create_certificate(self, client, admin_headers, student_user):
+        certificate = await self._issued_certificate(client, admin_headers, student_user)
+        assert certificate["status"] == "ACTIVE"
+        assert certificate["version"] == 1
+        assert certificate["content_hash"]
 
     async def test_list_certificates(self, client, admin_headers, student_user):
-        course_id = await _create_course(client, admin_headers)
-        admin_id = await _admin_id(client, admin_headers)
-        class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
-        await client.post(
-            "/api/v1/certificates/",
-            json={"enrollment_id": str(enrollment_id)},
-            headers=admin_headers,
-        )
+        created = await self._issued_certificate(client, admin_headers, student_user)
         response = await client.get("/api/v1/certificates/", headers=admin_headers)
         assert response.status_code == 200
-        assert len(response.json()) > 0
+        assert any(item["id"] == created["id"] for item in response.json())
 
     async def test_get_certificate(self, client, admin_headers, student_user):
-        course_id = await _create_course(client, admin_headers)
-        admin_id = await _admin_id(client, admin_headers)
-        class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
-        create = await client.post(
-            "/api/v1/certificates/",
-            json={"enrollment_id": str(enrollment_id)},
-            headers=admin_headers,
+        created = await self._issued_certificate(client, admin_headers, student_user)
+        response = await client.get(
+            f"/api/v1/certificates/{created['id']}",
+            headers=student_user["headers"],
         )
-        cert_id = create.json()["id"]
-        response = await client.get(f"/api/v1/certificates/{cert_id}", headers=student_user["headers"])
         assert response.status_code == 200
-        assert response.json()["id"] == cert_id
+        assert response.json()["id"] == created["id"]
 
     async def test_download_certificate(self, client, admin_headers, student_user):
-        course_id = await _create_course(client, admin_headers)
-        admin_id = await _admin_id(client, admin_headers)
-        class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
-        create = await client.post(
-            "/api/v1/certificates/",
-            json={"enrollment_id": str(enrollment_id)},
-            headers=admin_headers,
-        )
-        cert_id = create.json()["id"]
-
+        created = await self._issued_certificate(client, admin_headers, student_user)
         response = await client.get(
-            f"/api/v1/certificates/{cert_id}/download",
+            f"/api/v1/certificates/{created['id']}/download",
             headers=student_user["headers"],
         )
         assert response.status_code == 200
@@ -724,22 +721,14 @@ class TestCertificates:
         assert "certificate-" in response.headers["content-disposition"]
 
     async def test_validate_certificate(self, client, admin_headers, student_user):
-        course_id = await _create_course(client, admin_headers)
-        admin_id = await _admin_id(client, admin_headers)
-        class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
-        create = await client.post(
-            "/api/v1/certificates/",
-            json={"enrollment_id": str(enrollment_id)},
-            headers=admin_headers,
-        )
-        validation_code = create.json()["validation_code"]
+        created = await self._issued_certificate(client, admin_headers, student_user)
         response = await client.post(
             "/api/v1/certificates/validate",
-            json={"validation_code": validation_code},
+            json={"validation_code": created["validation_code"]},
         )
         assert response.status_code == 200
         assert response.json()["valid"] is True
+        assert response.json()["status"] == "ACTIVE"
 
     async def test_validate_invalid_certificate(self, client):
         response = await client.post(
@@ -750,18 +739,15 @@ class TestCertificates:
         assert response.json()["valid"] is False
 
     async def test_delete_certificate(self, client, admin_headers, student_user):
-        course_id = await _create_course(client, admin_headers)
-        admin_id = await _admin_id(client, admin_headers)
-        class_id = await _create_class(client, admin_headers, course_id, admin_id)
-        enrollment_id = await _create_enrollment(client, admin_headers, student_user["student_id"], class_id)
-        create = await client.post(
-            "/api/v1/certificates/",
-            json={"enrollment_id": str(enrollment_id)},
-            headers=admin_headers,
+        created = await self._issued_certificate(client, admin_headers, student_user)
+        response = await client.delete(
+            f"/api/v1/certificates/{created['id']}", headers=admin_headers
         )
-        cert_id = create.json()["id"]
-        response = await client.delete(f"/api/v1/certificates/{cert_id}", headers=admin_headers)
-        assert response.status_code == 204
+        assert response.status_code == 409
+        still_present = await client.get(
+            f"/api/v1/certificates/{created['id']}", headers=admin_headers
+        )
+        assert still_present.status_code == 200
 
     async def test_certificate_not_found(self, client, admin_headers):
         response = await client.get(f"/api/v1/certificates/{uuid.uuid4()}", headers=admin_headers)

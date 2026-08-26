@@ -28,6 +28,13 @@ const COURSE = {
   price: 500,
 }
 
+const FREE_COURSE = {
+  ...COURSE,
+  name: 'Curso Gratuito',
+  code: 'FREE-01',
+  price: 0,
+}
+
 function buildRouter() {
   return createRouter({
     history: createMemoryHistory(),
@@ -48,7 +55,7 @@ function buildRouter() {
   })
 }
 
-async function mountDetail(enrollments = []) {
+async function mountDetail(enrollments = [], selectedCourse = COURSE) {
   const router = buildRouter()
   await router.push('/courses/course-1')
   await router.isReady()
@@ -58,7 +65,7 @@ async function mountDetail(enrollments = []) {
       return Promise.resolve({ data: enrollments })
     }
     if (url.includes('/courses/')) {
-      return Promise.resolve({ data: COURSE })
+      return Promise.resolve({ data: selectedCourse })
     }
     return Promise.resolve({ data: {} })
   })
@@ -89,6 +96,7 @@ describe('CourseDetail View - acesso ao curso', () => {
     // Não inicia nova compra automaticamente
     expect(wrapper.text()).not.toContain('Comprar novamente')
   })
+
   it('mostra "Acessar curso" para matrícula CONCLUIDA (não "Comprar novamente")', async () => {
     const wrapper = await mountDetail([
       { id: 'e1', course_id: 'course-1', status: 'CONCLUIDA' },
@@ -113,6 +121,34 @@ describe('CourseDetail View - acesso ao curso', () => {
     ])
     expect(wrapper.text()).toContain('Comprar novamente')
     expect(wrapper.find('a[href="/courses/course-1/learn"]').exists()).toBe(false)
+  })
+
+  it('curso gratuito libera acesso sem criar checkout', async () => {
+    const wrapper = await mountDetail([], FREE_COURSE)
+    api.post.mockResolvedValueOnce({
+      data: {
+        enrollment: { id: 'free-enrollment', status: 'CONFIRMADA' },
+        payment: null,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Começar curso grátis')
+    expect(wrapper.text()).toContain('Acesso liberado sem pagamento')
+
+    const freeButton = wrapper.findAll('button').find((button) => (
+      button.text().includes('Começar curso grátis')
+    ))
+    expect(freeButton).toBeDefined()
+
+    await freeButton.trigger('click')
+    await flushPromises()
+
+    expect(api.post).toHaveBeenCalledTimes(1)
+    expect(api.post).toHaveBeenCalledWith('/api/v1/enrollments/purchase', {
+      course_id: 'course-1',
+      method: 'UNDEFINED',
+    })
+    expect(wrapper.vm.$router.currentRoute.value.path).toBe('/courses/course-1/learn')
   })
 })
 

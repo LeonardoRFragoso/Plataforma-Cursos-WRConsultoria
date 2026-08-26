@@ -7,7 +7,10 @@ from app.models.payment import PaymentMethod, PaymentProvider, PaymentStatus
 
 
 class PaymentBase(BaseModel):
-    enrollment_id: UUID
+    # Individual course payments have enrollment_id; consolidated corporate
+    # payments intentionally use company_id at the model layer and therefore
+    # expose enrollment_id=None in API responses.
+    enrollment_id: UUID | None = None
     amount: float
     method: PaymentMethod
     installments: str | None = None
@@ -49,8 +52,15 @@ class PaymentResponse(PaymentBase):
     checkout_url: str | None = None
     mercado_pago_id: str | None = None
     paid_at: datetime | None = None
+    review_required: bool = False
+    review_reason: str | None = None
     created_at: datetime
     updated_at: datetime
+    # Context used by the payment-return journey. These fields are populated
+    # by GET /payments/{id} for individual course payments and remain null for
+    # contexts where there is no single course/enrollment (e.g. company billing).
+    course_id: UUID | None = None
+    enrollment_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

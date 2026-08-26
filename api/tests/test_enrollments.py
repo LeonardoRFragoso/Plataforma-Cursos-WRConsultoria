@@ -10,7 +10,7 @@ def _random_email() -> str:
 
 
 async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
-    """Fluxo core: curso -> turma -> aluno -> matrícula -> pagamento -> certificado -> validação."""
+    """Fluxo core: curso -> turma -> aluno -> matrícula -> pagamento -> conclusão -> certificado -> validação."""
     # 1. Criar curso
     course_data = {
         "code": f"NR-TEST-{uuid.uuid4().hex[:6].upper()}",
@@ -73,7 +73,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     assert student_response.status_code == 201
     student_id = student_response.json()["id"]
 
-    # 6. Buscar matrícula automática e atualizar para concluída
+    # 5. Buscar matrícula automática ainda pendente
     list_enrollments = await client.get("/api/v1/enrollments/", headers=admin_headers)
     assert list_enrollments.status_code == 200
     enrollment = next(
@@ -82,6 +82,30 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     )
     assert enrollment is not None
     enrollment_id = enrollment["id"]
+    assert enrollment["status"] == "PENDENTE"
+
+    # 6. Criar pagamento enquanto a matrícula ainda está pendente
+    payment_response = await client.post(
+        "/api/v1/payments/",
+        json={
+            "enrollment_id": enrollment_id,
+            "amount": 299.90,
+            "method": "PIX",
+        },
+        headers=admin_headers,
+    )
+    assert payment_response.status_code == 201
+    payment = payment_response.json()
+    assert payment["status"] == "PENDENTE"
+
+    # 7. Aprovar pagamento e concluir a matrícula
+    payment_update = await client.put(
+        f"/api/v1/payments/{payment['id']}",
+        json={"status": "APROVADO"},
+        headers=admin_headers,
+    )
+    assert payment_update.status_code == 200
+    assert payment_update.json()["status"] == "APROVADO"
 
     update_response = await client.put(
         f"/api/v1/enrollments/{enrollment_id}",
@@ -91,21 +115,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     assert update_response.status_code == 200
     assert update_response.json()["status"] == "CONCLUIDA"
 
-    # 7. Criar pagamento
-    payment_data = {
-        "enrollment_id": enrollment_id,
-        "amount": 299.90,
-        "method": "PIX",
-    }
-    payment_response = await client.post(
-        "/api/v1/payments/",
-        json=payment_data,
-        headers=admin_headers,
-    )
-    assert payment_response.status_code == 201
-    assert payment_response.json()["status"] == "PENDENTE"
-
-    # 8. Gerar certificado
+    # 8. Gerar certificado somente após a conclusão
     certificate_response = await client.post(
         "/api/v1/certificates/",
         json={"enrollment_id": enrollment_id},
@@ -115,6 +125,7 @@ async def test_full_enrollment_payment_certificate_flow(client, admin_headers):
     certificate = certificate_response.json()
     assert certificate["certificate_number"].startswith("CERT-")
     assert certificate["validation_code"]
+    assert certificate["status"] == "ACTIVE"
 
     # 9. Validar certificado publicamente
     validation = await client.post(

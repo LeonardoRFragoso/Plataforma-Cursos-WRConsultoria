@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.course import CourseModality
 
@@ -17,10 +17,13 @@ class CourseBase(BaseModel):
     prerequisites: str | None = None
     cover_image_url: str | None = None
     cover_image_alt: str | None = None
+    certificate_validity_days: int | None = Field(default=None, ge=1, le=3650)
     is_active: bool = True
+
 
 class CourseCreate(CourseBase):
     pass
+
 
 class CourseUpdate(BaseModel):
     name: str | None = None
@@ -31,7 +34,9 @@ class CourseUpdate(BaseModel):
     prerequisites: str | None = None
     cover_image_url: str | None = None
     cover_image_alt: str | None = None
+    certificate_validity_days: int | None = Field(default=None, ge=1, le=3650)
     is_active: bool | None = None
+
 
 class CourseResponse(CourseBase):
     id: UUID

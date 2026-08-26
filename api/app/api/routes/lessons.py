@@ -1,13 +1,15 @@
 import re
-from uuid import UUID
+from datetime import timedelta
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.certificates import (
+    _content_hash,
     generate_certificate_number,
     generate_validation_code,
 )
@@ -24,7 +26,7 @@ from app.core.storage import (
     verify_object_exists,
 )
 from app.core.utils import utc_now
-from app.models.certificate import Certificate
+from app.models.certificate import Certificate, CertificateEvent
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course
 from app.models.enrollment import Enrollment, EnrollmentStatus
@@ -177,10 +179,8 @@ def _clean_content_type_switch(
 ) -> None:
     """When switching content types, clean incompatible state safely."""
     if new_content_type == LessonContentType.UPLOAD:
-        # Switching TO upload: clear external video URL
         lesson.video_url = None
     elif new_content_type in (LessonContentType.YOUTUBE, LessonContentType.VIMEO):
-        # Switching FROM upload: clear storage key (video will come from external URL)
         lesson.storage_key = None
 
 
@@ -197,7 +197,6 @@ async def create_lesson(
     tenant_id = get_current_tenant_id()
     await _load_course_tenant_filtered(db, course_id, tenant_id)
 
-    # Validate video_url for external content types
     if lesson_data.content_type == LessonContentType.YOUTUBE and lesson_data.video_url:
         _validate_youtube_url(lesson_data.video_url)
     elif lesson_data.content_type == LessonContentType.VIMEO and lesson_data.video_url:
@@ -244,7 +243,6 @@ async def list_lessons(
     result = await db.execute(stmt)
     lessons = result.scalars().all()
 
-    # For students with access, return lessons with progress
     if has_access and current_user.get("role") == "student":
         student_id = await _get_student_id(db, current_user["user_id"])
         progress_map = {}
@@ -279,7 +277,6 @@ async def list_lessons(
             for lesson in lessons
         ]
 
-    # For non-enrolled users, only show free preview lessons with hidden URLs
     if not has_access:
         return [
             LessonResponse(
@@ -302,7 +299,6 @@ async def list_lessons(
             if lesson.is_free_preview
         ]
 
-    # Admins get full lesson data
     return [LessonResponse.model_validate(lesson) for lesson in lessons]
 
 
@@ -339,14 +335,12 @@ async def update_lesson(
 
     update_data = lesson_data.model_dump(exclude_unset=True)
 
-    # Handle content type switching
     if "content_type" in update_data:
         new_ct = update_data["content_type"]
         if isinstance(new_ct, str):
             new_ct = LessonContentType(new_ct)
         _clean_content_type_switch(lesson, new_ct)
 
-    # Validate video_url for external content types
     ct = update_data.get("content_type", lesson.content_type)
     if isinstance(ct, str):
         ct = LessonContentType(ct)
@@ -374,7 +368,6 @@ async def delete_lesson(
     tenant_id = get_current_tenant_id()
     lesson = await _load_lesson_tenant_filtered(db, lesson_id, course_id, tenant_id)
 
-    # Check if any LessonProgress exists — refuse to destroy learning history
     progress_count = await db.scalar(
         select(func.count(LessonProgress.id)).where(
             LessonProgress.lesson_id == lesson_id,
@@ -388,11 +381,8 @@ async def delete_lesson(
                    "Archive or remove progress first.",
         )
 
-    # No progress — safe to hard delete
     await db.delete(lesson)
     await db.commit()
-
-    # Normalize ordering for remaining lessons
     await _normalize_lesson_order(db, course_id, tenant_id)
 
 
@@ -425,15 +415,12 @@ async def reorder_lessons(
     await _load_course_tenant_filtered(db, course_id, tenant_id)
 
     lesson_ids = reorder_data.lesson_ids
-
-    # Validate: no duplicates
     if len(lesson_ids) != len(set(lesson_ids)):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Duplicate lesson IDs in reorder request",
         )
 
-    # Load all lessons for this course+tenant
     stmt = (
         select(Lesson)
         .where(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id)
@@ -442,7 +429,6 @@ async def reorder_lessons(
     existing_lessons = result.scalars().all()
     existing_map = {lesson.id: lesson for lesson in existing_lessons}
 
-    # Validate: all IDs belong to this course+tenant
     for lid in lesson_ids:
         if lid not in existing_map:
             raise HTTPException(
@@ -450,7 +436,6 @@ async def reorder_lessons(
                 detail=f"Lesson {lid} does not belong to this course/tenant",
             )
 
-    # Validate: no missing lessons
     existing_ids = set(existing_map.keys())
     provided_ids = set(lesson_ids)
     missing = existing_ids - provided_ids
@@ -460,13 +445,10 @@ async def reorder_lessons(
             detail=f"Missing lesson IDs in reorder request: {missing}",
         )
 
-    # Assign contiguous order 1..N
     for idx, lid in enumerate(lesson_ids, start=1):
         existing_map[lid].order = idx
 
     await db.commit()
-
-    # Return lessons in new order
     ordered = [existing_map[lid] for lid in lesson_ids]
     return [LessonResponse.model_validate(lesson) for lesson in ordered]
 
@@ -481,13 +463,8 @@ async def presign_lesson_upload(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Step 1: Generate presigned PUT URL for video upload.
-
-    Does NOT replace lesson.storage_key — that only happens after
-    upload-complete verification.
-    """
+    """Step 1: Generate presigned PUT URL for video upload."""
     tenant_id = get_current_tenant_id()
-    # Load lesson (need course_id for tenant-aware key)
     stmt = select(Lesson).where(
         Lesson.id == lesson_id,
         Lesson.tenant_id == tenant_id,
@@ -495,19 +472,13 @@ async def presign_lesson_upload(
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
-    # Validate MIME type
     if upload_data.mime_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Content type not allowed: {upload_data.mime_type}",
         )
-
-    # Validate size
     if upload_data.size_bytes > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -522,7 +493,6 @@ async def presign_lesson_upload(
         tenant_id=tenant_id,
         course_id=lesson.course_id,
     )
-
     return UploadPresignResponse(upload_url=upload_url, storage_key=storage_key)
 
 
@@ -533,49 +503,28 @@ async def complete_lesson_upload(
     current_user: dict = Depends(get_current_admin),
     storage_key: str = "",
 ):
-    """Step 3: Verify upload completed and activate the new video.
-
-    Only after successful head_object verification does lesson.storage_key
-    get updated. If verification fails, the lesson continues pointing to
-    the previous valid video.
-    """
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
-    # Verify the object actually exists in storage
     exists = await verify_object_exists(storage_key)
     if not exists:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Upload verification failed: object not found in storage. "
-                   "Lesson video was not changed.",
+            detail="Upload verification failed: object not found in storage. Lesson video was not changed.",
         )
 
-    # Save the old storage_key for cleanup
     old_storage_key = lesson.storage_key
-
-    # Activate the new video
     lesson.content_type = LessonContentType.UPLOAD
     lesson.storage_key = storage_key
-    lesson.video_url = None  # Clear external URL when using upload
-
+    lesson.video_url = None
     await db.commit()
     await db.refresh(lesson)
-
-    # Best-effort cleanup of old video (after new one is confirmed)
     if old_storage_key and old_storage_key != storage_key:
         await delete_object(old_storage_key)
-
     return lesson
 
 
@@ -585,33 +534,20 @@ async def remove_lesson_video(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Remove the video from a lesson. Does NOT delete LessonProgress."""
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     old_storage_key = lesson.storage_key
-
     lesson.storage_key = None
     lesson.video_url = None
-    # Keep content_type as-is (don't change to UPLOAD if it was YOUTUBE)
-
     await db.commit()
     await db.refresh(lesson)
-
-    # Best-effort cleanup of old video from storage
     if old_storage_key:
         await delete_object(old_storage_key)
-
     return lesson
 
 
@@ -622,44 +558,26 @@ async def get_lesson_watch_url(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     if lesson.content_type == LessonContentType.YOUTUBE:
         return {"watch_url": lesson.video_url}
-
     if lesson.content_type == LessonContentType.VIMEO:
         return {"watch_url": lesson.video_url}
 
-    # UPLOAD: verify access (except preview)
     if not lesson.is_free_preview:
         has_access = await _require_course_access(db, lesson.course_id, tenant_id, current_user)
         if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this lesson",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this lesson")
 
-    # Use stored storage_key directly; fall back to legacy reconstruction
     if lesson.storage_key:
         watch_url = await generate_watch_url(storage_key=lesson.storage_key)
     else:
-        # Legacy: reconstruct key from lesson_id (old records without storage_key)
-        # This path is for backward compatibility and should rarely be hit
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Video not uploaded yet",
-        )
-
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not uploaded yet")
     return {"watch_url": watch_url}
 
 
@@ -674,32 +592,19 @@ async def update_lesson_progress(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     if not lesson.is_free_preview:
         has_access = await _require_course_access(db, lesson.course_id, tenant_id, current_user)
         if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this lesson",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this lesson")
 
     if progress_data.watched_seconds < 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="watched_seconds must be non-negative",
-        )
-
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="watched_seconds must be non-negative")
     if lesson.duration_seconds is not None and progress_data.watched_seconds > lesson.duration_seconds:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -707,7 +612,6 @@ async def update_lesson_progress(
         )
 
     student_id = await _get_student_id(db, current_user.get("user_id"))
-
     stmt = select(LessonProgress).where(
         and_(
             LessonProgress.student_id == student_id,
@@ -730,8 +634,6 @@ async def update_lesson_progress(
     else:
         progress.watched_seconds = max(progress.watched_seconds, progress_data.watched_seconds)
 
-    # Marca como concluído se atingiu 90% da duração ou veio completed=True
-    # Only for UPLOAD content type — external videos require manual completion
     if progress_data.completed:
         progress.completed = True
         progress.completed_at = utc_now()
@@ -741,8 +643,6 @@ async def update_lesson_progress(
             progress.completed_at = utc_now()
 
     await db.flush()
-
-    # Gatilho: verifica se todas as aulas obrigatórias do curso foram concluídas
     if progress.completed:
         await _maybe_create_certificate(db, student_id, lesson.course_id, tenant_id)
 
@@ -759,34 +659,23 @@ async def get_course_progress(
 ):
     tenant_id = get_current_tenant_id()
     await _load_course_tenant_filtered(db, course_id, tenant_id)
-
     has_access = await _require_course_access(db, course_id, tenant_id, current_user)
     if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this course",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this course")
 
     student_id = await _get_student_id(db, current_user.get("user_id"))
-
-    # Count required and optional lessons
-    total_stmt = select(func.count(Lesson.id)).where(
-        and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id)
-    )
-    total_lessons = await db.scalar(total_stmt) or 0
-
-    required_stmt = select(func.count(Lesson.id)).where(
-        and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id, Lesson.is_required == True)
-    )
-    required_lessons = await db.scalar(required_stmt) or 0
-
+    total_lessons = await db.scalar(
+        select(func.count(Lesson.id)).where(and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id))
+    ) or 0
+    required_lessons = await db.scalar(
+        select(func.count(Lesson.id)).where(
+            and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id, Lesson.is_required == True)
+        )
+    ) or 0
     optional_lessons = total_lessons - required_lessons
 
-    # Count completed required lessons
-    completed_required_stmt = (
-        select(func.count(LessonProgress.id))
-        .join(Lesson)
-        .where(
+    completed_required = await db.scalar(
+        select(func.count(LessonProgress.id)).join(Lesson).where(
             and_(
                 LessonProgress.student_id == student_id,
                 LessonProgress.tenant_id == tenant_id,
@@ -795,14 +684,9 @@ async def get_course_progress(
                 Lesson.is_required == True,
             )
         )
-    )
-    completed_required = await db.scalar(completed_required_stmt) or 0
-
-    # Count completed optional lessons
-    completed_optional_stmt = (
-        select(func.count(LessonProgress.id))
-        .join(Lesson)
-        .where(
+    ) or 0
+    completed_optional = await db.scalar(
+        select(func.count(LessonProgress.id)).join(Lesson).where(
             and_(
                 LessonProgress.student_id == student_id,
                 LessonProgress.tenant_id == tenant_id,
@@ -811,15 +695,10 @@ async def get_course_progress(
                 Lesson.is_required == False,
             )
         )
-    )
-    completed_optional = await db.scalar(completed_optional_stmt) or 0
+    ) or 0
 
-    percentage = 0.0
-    if required_lessons > 0:
-        percentage = round((completed_required / required_lessons) * 100, 2)
-
+    percentage = round((completed_required / required_lessons) * 100, 2) if required_lessons > 0 else 0.0
     certificate_eligible = required_lessons > 0 and completed_required >= required_lessons
-
     return CourseProgressDetailResponse(
         course_id=course_id,
         total_lessons=total_lessons,
@@ -842,19 +721,12 @@ async def presign_material_upload(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Generate presigned URL for material upload."""
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     upload_url, storage_key = await generate_material_upload_url(
         tenant_id=tenant_id,
@@ -864,7 +736,6 @@ async def presign_material_upload(
         mime_type=upload_data.mime_type,
         size_bytes=upload_data.size_bytes,
     )
-
     return MaterialUploadPresignResponse(upload_url=upload_url, storage_key=storage_key)
 
 
@@ -879,17 +750,11 @@ async def create_lesson_material(
     size_bytes: int | None = None,
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     material = LessonMaterial(
         tenant_id=tenant_id,
@@ -913,33 +778,24 @@ async def list_lesson_materials(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
+    stmt = select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id)
     result = await db.execute(stmt)
     lesson = result.scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     if not lesson.is_free_preview:
         has_access = await _require_course_access(db, lesson.course_id, tenant_id, current_user)
         if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this lesson",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this lesson")
 
-    stmt = select(LessonMaterial).where(
-        LessonMaterial.lesson_id == lesson_id,
-        LessonMaterial.tenant_id == tenant_id,
+    result = await db.execute(
+        select(LessonMaterial).where(
+            LessonMaterial.lesson_id == lesson_id,
+            LessonMaterial.tenant_id == tenant_id,
+        )
     )
-    result = await db.execute(stmt)
-    materials = result.scalars().all()
-    return materials
+    return result.scalars().all()
 
 
 @router.get("/{lesson_id}/materials/{material_id}/download")
@@ -949,53 +805,34 @@ async def download_lesson_material(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Generate a download URL for a material file."""
     tenant_id = get_current_tenant_id()
-    stmt = select(LessonMaterial).where(
-        LessonMaterial.id == material_id,
-        LessonMaterial.lesson_id == lesson_id,
-        LessonMaterial.tenant_id == tenant_id,
+    result = await db.execute(
+        select(LessonMaterial).where(
+            LessonMaterial.id == material_id,
+            LessonMaterial.lesson_id == lesson_id,
+            LessonMaterial.tenant_id == tenant_id,
+        )
     )
-    result = await db.execute(stmt)
     material = result.scalar_one_or_none()
     if not material:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Material not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
 
-    # Check access (except free preview lessons)
-    lesson_stmt = select(Lesson).where(
-        Lesson.id == lesson_id,
-        Lesson.tenant_id == tenant_id,
-    )
-    lesson_result = await db.execute(lesson_stmt)
-    lesson = lesson_result.scalar_one_or_none()
+    lesson = (
+        await db.execute(select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id))
+    ).scalar_one_or_none()
     if not lesson:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     if not lesson.is_free_preview:
         has_access = await _require_course_access(db, lesson.course_id, tenant_id, current_user)
         if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this lesson",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this lesson")
 
-    # Prefer storage_key-based download URL; fall back to legacy file_url
     if material.storage_key:
-        download_url = await generate_material_download_url(material.storage_key)
-        return {"download_url": download_url}
-    elif material.file_url:
+        return {"download_url": await generate_material_download_url(material.storage_key)}
+    if material.file_url:
         return {"download_url": material.file_url}
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Material file not available",
-        )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material file not available")
 
 
 @router.delete("/{lesson_id}/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1006,23 +843,19 @@ async def delete_lesson_material(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(LessonMaterial).where(
-        LessonMaterial.id == material_id,
-        LessonMaterial.lesson_id == lesson_id,
-        LessonMaterial.tenant_id == tenant_id,
+    result = await db.execute(
+        select(LessonMaterial).where(
+            LessonMaterial.id == material_id,
+            LessonMaterial.lesson_id == lesson_id,
+            LessonMaterial.tenant_id == tenant_id,
+        )
     )
-    result = await db.execute(stmt)
     material = result.scalar_one_or_none()
     if not material:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Material not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
 
-    # Best-effort cleanup of storage object
     if material.storage_key:
         await delete_object(material.storage_key)
-
     await db.delete(material)
     await db.commit()
 
@@ -1036,12 +869,10 @@ async def get_course_student_progress(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Admin view: per-student progress for a course."""
     tenant_id = get_current_tenant_id()
     await _load_course_tenant_filtered(db, course_id, tenant_id)
 
-    # Find all enrollments for this course's classes
-    stmt = (
+    result = await db.execute(
         select(Enrollment, Student, Class, User)
         .join(Student, Enrollment.student_id == Student.id)
         .join(Class, Enrollment.class_id == Class.id)
@@ -1054,10 +885,8 @@ async def get_course_student_progress(
             )
         )
     )
-    result = await db.execute(stmt)
     rows = result.all()
 
-    # Count required lessons
     required_count = await db.scalar(
         select(func.count(Lesson.id)).where(
             and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id, Lesson.is_required == True)
@@ -1066,11 +895,8 @@ async def get_course_student_progress(
 
     progress_list = []
     for enrollment, student, cls, user in rows:
-        # Count completed required lessons for this student
         completed_required = await db.scalar(
-            select(func.count(LessonProgress.id))
-            .join(Lesson)
-            .where(
+            select(func.count(LessonProgress.id)).join(Lesson).where(
                 and_(
                     LessonProgress.student_id == student.id,
                     LessonProgress.tenant_id == tenant_id,
@@ -1080,17 +906,13 @@ async def get_course_student_progress(
                 )
             )
         ) or 0
-
-        # Check certificate
         cert_count = await db.scalar(
             select(func.count(Certificate.id)).where(
                 Certificate.enrollment_id == enrollment.id,
                 Certificate.tenant_id == tenant_id,
             )
         ) or 0
-
         percentage = round((completed_required / required_count) * 100, 2) if required_count > 0 else 0.0
-
         progress_list.append({
             "student_id": str(student.id),
             "student_name": user.full_name,
@@ -1101,7 +923,6 @@ async def get_course_student_progress(
             "percentage": percentage,
             "certificate_status": "Sim" if cert_count > 0 else "Não",
         })
-
     return progress_list
 
 
@@ -1111,93 +932,137 @@ async def get_course_student_progress(
 async def _maybe_create_certificate(
     db: AsyncSession, student_id: UUID, course_id: UUID, tenant_id: UUID
 ):
-    """Cria certificado e conclui a matrícula correta se todas as aulas
-    obrigatórias (is_required=True) estiverem concluídas.
+    """Issue the trusted certificate and conclude the correct enrollment once all required lessons are complete.
 
-    Idempotent: uses on_conflict_do_nothing on enrollment_id.
+    The partial unique index allows historical revoked/superseded certificates while
+    keeping at most one ACTIVE certificate for an enrollment. The insert is
+    idempotent under concurrent/repeated completion requests.
     """
-    # Count required lessons
-    total_stmt = select(func.count(Lesson.id)).where(
-        and_(
-            Lesson.course_id == course_id,
-            Lesson.tenant_id == tenant_id,
-            Lesson.is_required == True,
-        )
-    )
-    total_result = await db.execute(total_stmt)
-    total_lessons = total_result.scalar() or 0
-
-    completed_stmt = (
-        select(func.count(LessonProgress.id))
-        .join(Lesson)
-        .where(
-            and_(
-                LessonProgress.student_id == student_id,
-                LessonProgress.tenant_id == tenant_id,
-                Lesson.course_id == course_id,
-                LessonProgress.completed == True,
-                Lesson.is_required == True,
+    total_lessons = (
+        await db.execute(
+            select(func.count(Lesson.id)).where(
+                and_(
+                    Lesson.course_id == course_id,
+                    Lesson.tenant_id == tenant_id,
+                    Lesson.is_required == True,
+                )
             )
         )
-    )
-    completed_result = await db.execute(completed_stmt)
-    completed_lessons = completed_result.scalar() or 0
+    ).scalar() or 0
+    completed_lessons = (
+        await db.execute(
+            select(func.count(LessonProgress.id))
+            .join(Lesson)
+            .where(
+                and_(
+                    LessonProgress.student_id == student_id,
+                    LessonProgress.tenant_id == tenant_id,
+                    Lesson.course_id == course_id,
+                    LessonProgress.completed == True,
+                    Lesson.is_required == True,
+                )
+            )
+        )
+    ).scalar() or 0
 
     if total_lessons == 0 or completed_lessons < total_lessons:
         return
 
-    # Seleciona a matrícula correta do fluxo: ativa (CONFIRMADA),
-    # em turma EM_ANDAMENTO, preferindo a turma mais recente.
-    stmt = (
-        select(Enrollment)
-        .join(Class)
-        .where(
-            and_(
-                Enrollment.student_id == student_id,
-                Enrollment.tenant_id == tenant_id,
-                Class.course_id == course_id,
-                Class.tenant_id == tenant_id,
-                Enrollment.status.in_([
-                    EnrollmentStatus.CONFIRMADA,
-                    EnrollmentStatus.CONCLUIDA,
-                ]),
+    enrollment = (
+        await db.execute(
+            select(Enrollment)
+            .join(Class)
+            .where(
+                and_(
+                    Enrollment.student_id == student_id,
+                    Enrollment.tenant_id == tenant_id,
+                    Class.course_id == course_id,
+                    Class.tenant_id == tenant_id,
+                    Enrollment.status.in_([
+                        EnrollmentStatus.CONFIRMADA,
+                        EnrollmentStatus.CONCLUIDA,
+                    ]),
+                )
             )
+            .order_by(
+                (Enrollment.status == EnrollmentStatus.CONFIRMADA).desc(),
+                (Class.status == ClassStatus.EM_ANDAMENTO).desc(),
+                (Class.status == ClassStatus.ABERTA).desc(),
+                Class.start_date.desc(),
+                Enrollment.enrollment_date.desc(),
+            )
+            .limit(1)
         )
-        .order_by(
-            # Prefer CONFIRMADA over CONCLUIDA
-            (Enrollment.status == EnrollmentStatus.CONFIRMADA).desc(),
-            # Prefer EM_ANDAMENTO classes
-            (Class.status == ClassStatus.EM_ANDAMENTO).desc(),
-            (Class.status == ClassStatus.ABERTA).desc(),
-            Class.start_date.desc(),
-            Enrollment.enrollment_date.desc(),
-        )
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    enrollment = result.scalar_one_or_none()
-
+    ).scalar_one_or_none()
     if not enrollment:
         return
+
+    course = await _load_course_tenant_filtered(db, course_id, tenant_id)
+    max_version = await db.scalar(
+        select(func.coalesce(func.max(Certificate.version), 0)).where(
+            Certificate.tenant_id == tenant_id,
+            Certificate.enrollment_id == enrollment.id,
+        )
+    )
+    version = int(max_version or 0) + 1
+    issued_at = utc_now()
+    expires_at = (
+        issued_at + timedelta(days=course.certificate_validity_days)
+        if course.certificate_validity_days
+        else None
+    )
+    certificate_id = uuid4()
+    certificate_number = generate_certificate_number()
+    validation_code = generate_validation_code()
+    content_hash = _content_hash(
+        certificate_number=certificate_number,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        student_id=student_id,
+        course_id=course_id,
+        issued_at=issued_at,
+        version=version,
+    )
 
     cert_stmt = (
         insert(Certificate)
         .values(
-            enrollment_id=enrollment.id,
-            certificate_number=generate_certificate_number(),
-            validation_code=generate_validation_code(),
+            id=certificate_id,
             tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            certificate_number=certificate_number,
+            validation_code=validation_code,
+            issued_at=issued_at,
+            expires_at=expires_at,
+            status="ACTIVE",
+            version=version,
+            content_hash=content_hash,
         )
-        .on_conflict_do_nothing(index_elements=["enrollment_id"])
+        .on_conflict_do_nothing(
+            index_elements=["enrollment_id"],
+            index_where=text("status = 'ACTIVE'"),
+        )
+        .returning(Certificate.id)
     )
 
     try:
-        await db.execute(cert_stmt)
+        inserted_id = (await db.execute(cert_stmt)).scalar_one_or_none()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao emitir certificado",
+        )
+
+    if inserted_id:
+        db.add(
+            CertificateEvent(
+                tenant_id=tenant_id,
+                certificate_id=inserted_id,
+                event_type="ISSUED",
+                actor_id=None,
+                details=f"version={version};hash={content_hash};source=course_completion",
+            )
         )
 
     enrollment.status = EnrollmentStatus.CONCLUIDA

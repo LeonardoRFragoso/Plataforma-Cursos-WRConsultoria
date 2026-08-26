@@ -42,6 +42,12 @@ describe('Navigation guards', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/courses/course-123/learn')
   })
 
+  it('mantém formulário de treinamento corporativo como rota pública', async () => {
+    await router.push('/treinamentos-para-empresas')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/treinamentos-para-empresas')
+  })
+
   it('redireciona aluno para /dashboard ao acessar rota admin', async () => {
     const auth = useAuthStore()
     auth.token = 'fake-token'
@@ -49,6 +55,17 @@ describe('Navigation guards', () => {
     auth.user = { role: 'student' }
 
     await router.push('/courses')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
+  it('impede aluno de acessar a central operacional', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'student'
+    auth.user = { role: 'student' }
+
+    await router.push('/operations')
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
@@ -62,6 +79,17 @@ describe('Navigation guards', () => {
     await router.push('/courses')
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/courses')
+  })
+
+  it('permite admin acessar as filas operacionais', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'admin'
+    auth.user = { role: 'admin' }
+
+    await router.push('/operations/finance')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/operations/finance')
   })
 
   it('redireciona student para /dashboard ao acessar rota super_admin', async () => {

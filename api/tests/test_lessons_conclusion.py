@@ -94,8 +94,6 @@ async def _create_enrollment(client, admin_headers, student_id, class_id, status
     return response.json()["id"]
 
 
-
-
 async def _complete_lesson(client, lesson_id, student_headers, seconds=120):
     response = await client.post(
         f"/api/v1/lessons/{lesson_id}/progress",
@@ -141,7 +139,6 @@ async def test_last_lesson_completes_correct_enrollment(client, admin_headers, s
     lesson1 = await _create_lesson(client, admin_headers, course_id, {"order": 0, "duration_seconds": 120})
     lesson2 = await _create_lesson(client, admin_headers, course_id, {"order": 1, "duration_seconds": 120})
 
-    # aula 1 não conclui
     r1 = await _complete_lesson(client, lesson1["id"], student_user["headers"], 120)
     assert r1.status_code == 200
 
@@ -149,7 +146,6 @@ async def test_last_lesson_completes_correct_enrollment(client, admin_headers, s
     assert status == EnrollmentStatus.CONFIRMADA
     assert await _certificate_count_db(enrollment_id=enrollment_id) == 0
 
-    # aula 2 conclui
     r2 = await _complete_lesson(client, lesson2["id"], student_user["headers"], 120)
     assert r2.status_code == 200
 
@@ -224,7 +220,6 @@ async def test_repeat_completion_no_duplicate_certificate(client, admin_headers,
     assert await _certificate_count_db(enrollment_id=enrollment_id) == 1
     assert await _enrollment_status_db(enrollment_id) == EnrollmentStatus.CONCLUIDA
 
-    # repetição da última aula
     r3 = await _complete_lesson(client, lesson2["id"], student_user["headers"], 120)
     assert r3.status_code == 200
 
@@ -242,40 +237,42 @@ async def test_certificate_failure_does_not_leave_partial_state(client, admin_he
     lesson1 = await _create_lesson(client, admin_headers, course_id, {"order": 0, "duration_seconds": 120})
     lesson2 = await _create_lesson(client, admin_headers, course_id, {"order": 1, "duration_seconds": 120})
 
-    # conclui aula 1
     r1 = await _complete_lesson(client, lesson1["id"], student_user["headers"], 120)
     assert r1.status_code == 200
 
-    # cria certificado em outra matrícula com número conhecido
+    # Seed a valid trusted certificate on the student's other fixture enrollment,
+    # then force the next automatic issuance to collide on certificate_number.
     async with AsyncSessionLocal() as db:
         other = (
-            await db.execute(select(Enrollment.id).where(Enrollment.student_id == uuid.UUID(student_id)).limit(1))
-        ).scalar_one_or_none()
+            await db.execute(
+                select(Enrollment).where(
+                    Enrollment.student_id == uuid.UUID(student_id),
+                    Enrollment.id != uuid.UUID(enrollment_id),
+                ).limit(1)
+            )
+        ).scalar_one()
         db.add(
             Certificate(
-                enrollment_id=other,
+                tenant_id=other.tenant_id,
+                enrollment_id=other.id,
                 certificate_number="CERT-DUP",
                 validation_code="VAL-DUP",
+                status="ACTIVE",
+                version=1,
             )
         )
         await db.commit()
 
-    # força duplicação do número do certificado na próxima emissão
     monkeypatch.setattr("app.api.routes.lessons.generate_certificate_number", lambda: "CERT-DUP")
     monkeypatch.setattr("app.api.routes.lessons.generate_validation_code", lambda: "VAL-NEW")
 
-    # tenta concluir aula 2 e emitir certificado: deve falhar
     r2 = await _complete_lesson(client, lesson2["id"], student_user["headers"], 120)
     assert r2.status_code == 500
 
-    # matrícula não pode ter sido marcada como concluída
     status = await _enrollment_status_db(enrollment_id)
     assert status == EnrollmentStatus.CONFIRMADA
-
-    # progresso da aula 2 não deve ter sido persistido
     assert await _lesson_progress_count(lesson2["id"], student_id) == 0
 
-    # nenhum certificado foi criado para a matrícula deste fluxo
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(func.count(Certificate.id)).where(Certificate.enrollment_id == uuid.UUID(enrollment_id))

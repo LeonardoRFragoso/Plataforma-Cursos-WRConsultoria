@@ -11,7 +11,7 @@ from tests.conftest import make_valid_cpf
 
 
 async def _create_test_enrollment(client, admin_headers):
-    """Helper que cria curso, turma, aluno e retorna enrollment_id."""
+    """Helper que cria curso, turma, aluno e retorna enrollment_id pendente."""
     course = await client.post(
         "/api/v1/courses/",
         json={
@@ -78,19 +78,12 @@ async def _create_test_enrollment(client, admin_headers):
         None,
     )
     assert enrollment is not None
-    enrollment_id = enrollment["id"]
-
-    update = await client.put(
-        f"/api/v1/enrollments/{enrollment_id}",
-        json={"status": "CONCLUIDA"},
-        headers=admin_headers,
-    )
-    assert update.status_code == 200
-    return enrollment_id
+    assert enrollment["status"] == "PENDENTE"
+    return enrollment["id"]
 
 
 async def test_create_payment(client, admin_headers):
-    """Deve criar um pagamento para uma matrícula existente."""
+    """Deve criar um pagamento para uma matrícula pendente existente."""
     enrollment_id = await _create_test_enrollment(client, admin_headers)
 
     payment_data = {

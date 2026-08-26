@@ -34,6 +34,7 @@ from app.schemas.user import (
 )
 from app.services.email_service import EmailServiceError, get_email_service
 from app.services.one_time_token_service import OneTimeTokenService
+from app.services.transactional_notifications import send_welcome_notification
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -165,8 +166,11 @@ async def register(
     )
     db.add(student)
 
+    # Account creation is authoritative. Notification is best-effort and runs
+    # only after the registration transaction is durable.
     await db.commit()
     await db.refresh(user)
+    await send_welcome_notification(db, user, resolved_tenant_id)
     return user
 
 @router.post("/login", response_model=TokenResponse)
