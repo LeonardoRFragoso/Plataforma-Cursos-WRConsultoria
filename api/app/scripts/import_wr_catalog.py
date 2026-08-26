@@ -38,7 +38,7 @@ from app.models.course_content_profile import CourseContentProfile
 from app.models.course_material import CourseMaterial
 from app.models.tenant import Tenant
 
-MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "wr_course_content_manifest.json"
+MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "wr_course_content_manifest.json"
 
 
 async def get_wr_tenant_id(db: AsyncSession) -> UUID | None:
@@ -98,6 +98,25 @@ async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_
         elif action == "CREATE" and code not in existing_courses:
             desc = content.get("short_description") or content.get("full_description") or ""
             report["CREATE_COURSE"].append({"code": code, "name": entry["name"]})
+            if not dry_run:
+                course = Course(
+                    tenant_id=tenant_id,
+                    code=code,
+                    name=entry["name"],
+                    category=_get_category(entry["nr_family"]),
+                    description=desc[:500] if desc else None,
+                    carga_horaria=_get_ch(entry),
+                    modality=_get_modality(entry),
+                    price=_get_price(entry),
+                    is_active=True,
+                )
+                db.add(course)
+                existing_courses[code] = course
+
+        elif action == "UPDATE" and code not in existing_courses:
+            # UPDATE course doesn't exist in production — create it instead
+            desc = content.get("short_description") or content.get("full_description") or ""
+            report["CREATE_COURSE"].append({"code": code, "name": entry["name"], "note": "UPDATE→CREATE (not found in DB)"})
             if not dry_run:
                 course = Course(
                     tenant_id=tenant_id,
