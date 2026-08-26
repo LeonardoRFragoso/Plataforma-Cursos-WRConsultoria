@@ -50,26 +50,23 @@ function mountCatalog() {
   })
 }
 
-describe('CourseCatalog — WR tenant showcase', () => {
+describe('CourseCatalog — WR tenant (API-driven)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     tenantSlugMock.value = 'wr'
   })
 
-  // Scenario 5: tenant WR — showcase visible immediately (before API resolves)
-  it('renders WR showcase immediately without loading skeletons', () => {
+  // WR tenant now shows loading skeleton while API loads (no more showcase)
+  it('shows loading skeleton while API loads', () => {
     fetchPublicCourses.mockReturnValue(new Promise(() => {})) // never resolves
     const wrapper = mountCatalog()
-    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="catalog-loading"]').exists()).toBe(false)
-    // Showcase courses should be present
-    const cards = wrapper.findAll('[data-testid="catalog-grid"] > div')
-    expect(cards.length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="catalog-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(false)
   })
 
-  // Scenario 1: API returns real courses — showcase families deduplicated
-  it('merges real API courses and removes showcase duplicates by family', async () => {
+  // API returns real courses — they are rendered
+  it('renders real API courses', async () => {
     fetchPublicCourses.mockResolvedValue({
       data: [
         { id: 1, code: 'NR-10-B', name: 'NR 10 - Básico', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 150 },
@@ -79,75 +76,53 @@ describe('CourseCatalog — WR tenant showcase', () => {
     const wrapper = mountCatalog()
     await flushPromises()
 
-    // Real courses should be present
+    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('NR 10 - Básico')
     expect(wrapper.text()).toContain('NR 35 - Trabalho em Altura')
-    // Showcase NR-35 should NOT appear (deduplicated by family)
-    const nr35Showcase = wrapper.findAll('[data-testid="catalog-grid"] > div').filter((c) =>
-      c.text().includes('NR 35') && c.text().includes('Em breve')
-    )
-    expect(nr35Showcase.length).toBe(0)
-    // Real courses should have "Ver detalhes", not "Em breve"
     expect(wrapper.text()).toContain('Ver detalhes')
   })
 
-  // Scenario 2: API returns [] — showcase remains
-  it('keeps showcase when API returns empty array', async () => {
+  // API returns [] — empty state shown
+  it('shows empty state when API returns empty array', async () => {
     fetchPublicCourses.mockResolvedValue({ data: [] })
     const wrapper = mountCatalog()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="catalog-empty"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="catalog-error"]').exists()).toBe(false)
-    const cards = wrapper.findAll('[data-testid="catalog-grid"] > div')
-    expect(cards.length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="catalog-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(false)
   })
 
-  // Scenario 3: API returns error — showcase remains, no error state
-  it('keeps showcase on API error without showing error state', async () => {
+  // API returns error — error state shown
+  it('shows error state on API failure', async () => {
     fetchPublicCourses.mockRejectedValue(new Error('Network error'))
     const wrapper = mountCatalog()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="catalog-error"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="catalog-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="catalog-error"]').exists()).toBe(true)
   })
 
-  // Scenario 4: API demora indefinidamente — showcase stays, no skeleton
-  it('does not show skeleton when API is slow (WR showcase already visible)', async () => {
-    fetchPublicCourses.mockReturnValue(new Promise(() => {}))
-    const wrapper = mountCatalog()
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="catalog-loading"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
-  })
-
-  // Scenario 9: duplicação por família — no duplicate NR-10
-  it('does not produce duplicate courses for same family', async () => {
+  // No showcase "Em breve" badges anymore
+  it('does not show "Em breve" badges', async () => {
     fetchPublicCourses.mockResolvedValue({
       data: [
         { id: 1, code: 'NR-10-B', name: 'NR 10 - Básico', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 150 },
-        { id: 2, code: 'NR-10-AE', name: 'NR 10 - SEP', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 200 },
       ],
     })
     const wrapper = mountCatalog()
     await flushPromises()
 
-    // NR-10 family appears twice (both real), but no showcase NR-10
-    const nr10Cards = wrapper.findAll('[data-testid="catalog-grid"] > div').filter((c) =>
-      c.text().includes('NR-10') || c.text().includes('NR 10')
-    )
-    // Should have exactly 2 real NR-10 courses, no showcase duplicate
-    const nr10Showcase = nr10Cards.filter((c) => c.text().includes('Em breve'))
-    expect(nr10Showcase.length).toBe(0)
+    expect(wrapper.text()).not.toContain('Em breve')
+    expect(wrapper.text()).not.toContain('Disponível em breve')
   })
 
-  // Scenario 7: busca — search filters showcase courses
+  // Search filters courses
   it('search filters courses by name', async () => {
-    fetchPublicCourses.mockResolvedValue({ data: [] })
+    fetchPublicCourses.mockResolvedValue({
+      data: [
+        { id: 1, code: 'NR-05-F', name: 'NR 5 - CIPA', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 150 },
+        { id: 2, code: 'NR-10-B', name: 'NR 10 - Básico', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 200 },
+      ],
+    })
     const wrapper = mountCatalog()
     await flushPromises()
 
@@ -160,9 +135,14 @@ describe('CourseCatalog — WR tenant showcase', () => {
     expect(cards[0].text()).toContain('CIPA')
   })
 
-  // Scenario 8: filtros — category filter works
+  // Category filter works
   it('category filter narrows courses', async () => {
-    fetchPublicCourses.mockResolvedValue({ data: [] })
+    fetchPublicCourses.mockResolvedValue({
+      data: [
+        { id: 1, code: 'NR-05-F', name: 'NR 5 - CIPA', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 150 },
+        { id: 2, code: 'PS-F', name: 'Primeiros Socorros', category: 'Saúde', carga_horaria: 8, modality: 'EAD', price: 200 },
+      ],
+    })
     const wrapper = mountCatalog()
     await flushPromises()
 
@@ -176,24 +156,19 @@ describe('CourseCatalog — WR tenant showcase', () => {
     })
   })
 
-  // Scenario 10: imagens dos cards — CourseCover renders for showcase
-  it('renders course cards with cover images for showcase', () => {
-    fetchPublicCourses.mockReturnValue(new Promise(() => {}))
-    const wrapper = mountCatalog()
-
-    // Showcase courses should have cover images (CourseCover component)
-    const covers = wrapper.findAllComponents({ name: 'CourseCover' })
-    expect(covers.length).toBeGreaterThan(0)
-  })
-
-  // Showcase courses show "Em breve", real courses show "Ver detalhes"
-  it('showcase courses show "Em breve" badge and "Disponível em breve" button', async () => {
-    fetchPublicCourses.mockResolvedValue({ data: [] })
+  // Inactive courses are filtered out
+  it('filters out inactive courses', async () => {
+    fetchPublicCourses.mockResolvedValue({
+      data: [
+        { id: 1, code: 'NR-10-B', name: 'NR 10 - Básico', category: 'Segurança', carga_horaria: 8, modality: 'EAD', price: 150, is_active: true },
+        { id: 2, code: 'NR-10-R', name: 'NR 10 - Reciclagem', category: 'Segurança', carga_horaria: 4, modality: 'EAD', price: 80, is_active: false },
+      ],
+    })
     const wrapper = mountCatalog()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Em breve')
-    expect(wrapper.text()).toContain('Disponível em breve')
+    expect(wrapper.text()).toContain('NR 10 - Básico')
+    expect(wrapper.text()).not.toContain('NR 10 - Reciclagem')
   })
 })
 
@@ -204,8 +179,7 @@ describe('CourseCatalog — non-WR tenant', () => {
     tenantSlugMock.value = 'alfa'
   })
 
-  // Scenario 6: tenant não-WR — no showcase, normal loading
-  it('shows loading skeleton for non-WR tenant (no showcase)', () => {
+  it('shows loading skeleton for non-WR tenant', () => {
     fetchPublicCourses.mockReturnValue(new Promise(() => {}))
     const wrapper = mountCatalog()
 
@@ -240,7 +214,6 @@ describe('CourseCatalog — non-WR tenant', () => {
 
     expect(wrapper.find('[data-testid="catalog-grid"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Course X')
-    // No showcase courses
     expect(wrapper.text()).not.toContain('Em breve')
   })
 })

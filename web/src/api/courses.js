@@ -12,3 +12,15 @@ export function fetchPublicCourses() {
 export function fetchCourse(courseId) {
   return api.get(`/api/v1/courses/${courseId}`)
 }
+
+export function fetchCourseContentProfile(courseId) {
+  return api.get(`/api/v1/courses/${courseId}/content-profile`)
+}
+
+export function fetchCourseMaterials(courseId) {
+  return api.get(`/api/v1/courses/${courseId}/materials`)
+}
+
+export function downloadCourseMaterial(courseId, materialId) {
+  return api.get(`/api/v1/courses/${courseId}/materials/${materialId}/download`)
+}

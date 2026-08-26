@@ -58,6 +58,84 @@
                   <h3 class="text-lg font-semibold text-secondary-900 mb-2">Pré-requisitos</h3>
                   <p class="text-gray-600">{{ course.prerequisite }}</p>
                 </div>
+
+                <!-- Enriched content from apostila (CourseContentProfile) -->
+                <div v-if="contentProfile" class="space-y-6 mb-8">
+                  <div v-if="contentProfile.target_audience && contentProfile.target_audience !== 'REVIEW_REQUIRED'">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Público-alvo</h3>
+                    <p class="text-gray-600">{{ contentProfile.target_audience }}</p>
+                  </div>
+
+                  <div v-if="contentProfile.general_objective">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Objetivo geral</h3>
+                    <p class="text-gray-600">{{ contentProfile.general_objective }}</p>
+                  </div>
+
+                  <div v-if="contentProfile.specific_objectives && contentProfile.specific_objectives.length">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Objetivos específicos</h3>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                      <li v-for="obj in contentProfile.specific_objectives" :key="obj">{{ obj }}</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="contentProfile.syllabus && contentProfile.syllabus.length">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Conteúdo programático</h3>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                      <li v-for="topic in contentProfile.syllabus" :key="topic">{{ topic }}</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="contentProfile.key_topics && contentProfile.key_topics.length">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Principais tópicos</h3>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                      <li v-for="topic in contentProfile.key_topics" :key="topic">{{ topic }}</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="contentProfile.risks_covered && contentProfile.risks_covered.length">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Riscos tratados</h3>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                      <li v-for="risk in contentProfile.risks_covered" :key="risk">{{ risk }}</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="contentProfile.standards_referenced && contentProfile.standards_referenced.length">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Normas e referências</h3>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                      <li v-for="std in contentProfile.standards_referenced" :key="std">{{ std }}</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="contentProfile.recycling_summary">
+                    <h3 class="text-lg font-semibold text-secondary-900 mb-2">Reciclagem / Validade</h3>
+                    <p class="text-gray-600">{{ contentProfile.recycling_summary }}</p>
+                  </div>
+                </div>
+
+                <!-- Course materials (apostilas) -->
+                <div v-if="materials && materials.length" class="mb-8">
+                  <h3 class="text-lg font-semibold text-secondary-900 mb-3">Materiais do curso</h3>
+                  <div class="space-y-2">
+                    <div
+                      v-for="material in materials"
+                      :key="material.id"
+                      class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span class="text-sm font-medium text-gray-700">{{ material.title }}</span>
+                      </div>
+                      <button
+                        @click="downloadMaterial(material)"
+                        class="text-sm font-semibold text-primary-600 hover:text-primary-700"
+                      >
+                        Visualizar / Baixar
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="w-full md:w-80 shrink-0">
@@ -132,7 +210,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
-import { fetchCourse } from '../api/courses'
+import { fetchCourse, fetchCourseContentProfile, fetchCourseMaterials, downloadCourseMaterial } from '../api/courses'
 import { purchaseCourse, getMyEnrollments, createCheckout } from '../api/enrollments'
 import AppNavbar from '../components/AppNavbar.vue'
 import CourseCover from '../components/CourseCover.vue'
@@ -153,6 +231,8 @@ const purchasing = ref(false)
 const purchaseError = ref('')
 const enrollments = ref([])
 const enrollmentLoading = ref(false)
+const contentProfile = ref(null)
+const materials = ref([])
 
 const redirectPath = computed(() => route.fullPath)
 const loginWithRedirect = computed(() => ({ path: '/login', query: { redirect: redirectPath.value } }))
@@ -197,16 +277,47 @@ const purchaseLoadingText = computed(() =>
   Number(course.value?.price || 0) <= 0 ? 'Liberando acesso...' : 'Redirecionando...'
 )
 
+async function downloadMaterial(material) {
+  try {
+    const { data } = await downloadCourseMaterial(course.value.id, material.id)
+    if (data.download_url) {
+      window.open(data.download_url, '_blank')
+    }
+  } catch (err) {
+    // If not authorized, redirect to login
+    if (err.response?.status === 401) {
+      router.push({ path: '/login', query: { redirect: route.fullPath } })
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     await authStore.initializeUser()
     const { data } = await fetchCourse(route.params.id)
     course.value = data
 
+    // Load content profile (public, may 404 if not yet created)
+    try {
+      const { data: profile } = await fetchCourseContentProfile(route.params.id)
+      contentProfile.value = profile
+    } catch {
+      // Content profile not yet available — silently skip
+    }
+
+    // Load materials (requires auth + enrollment)
     if (authStore.isAuthenticated) {
       enrollmentLoading.value = true
       const { data: list } = await getMyEnrollments()
       enrollments.value = list
+
+      // Try to load materials (may 403 if not enrolled)
+      try {
+        const { data: mats } = await fetchCourseMaterials(route.params.id)
+        materials.value = mats
+      } catch {
+        // Not enrolled or not authorized — materials stay empty
+      }
     }
   } catch (err) {
     error.value = err.response?.data?.detail || 'Curso não encontrado.'

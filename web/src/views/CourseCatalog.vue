@@ -181,7 +181,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useTenantStore } from '../stores/tenant'
 import { useAuthStore } from '../stores/auth'
 import { fetchPublicCourses } from '../api/courses'
-import { extractFamily, isWrTenant } from '../utils/courseMedia'
 import AppNavbar from '../components/AppNavbar.vue'
 import CourseCover from '../components/CourseCover.vue'
 
@@ -193,45 +192,10 @@ const isAuthenticatedStudent = computed(
 )
 const tenantName = computed(() => tenantStore.name || 'Plataforma de Cursos')
 
-const WR_CATALOG_SHOWCASE = [
-  { id: 'showcase-nr-01', code: 'NR-01-F', name: 'NR 1 - Disposições Gerais', category: 'Segurança', carga_horaria: 4, modality: 'EAD', catalog_only: true },
-  { id: 'showcase-nr-05', code: 'NR-05-F', name: 'NR 5 - CIPA', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-06', code: 'NR-06-F', name: 'NR 6 - Equipamentos de Proteção Individual', category: 'Segurança', carga_horaria: 4, modality: 'EAD', catalog_only: true },
-  { id: 'showcase-nr-11', code: 'NR-11-F', name: 'NR 11 - Movimentação de Materiais', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-17', code: 'NR-17-F', name: 'NR 17 - Ergonomia', category: 'Saúde', carga_horaria: 8, modality: 'EAD', catalog_only: true },
-  { id: 'showcase-nr-18', code: 'NR-18-F', name: 'NR 18 - Segurança na Construção Civil', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-20', code: 'NR-20-F', name: 'NR 20 - Inflamáveis e Combustíveis', category: 'Segurança', carga_horaria: 12, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-23', code: 'NR-23-F', name: 'NR 23 - Proteção Contra Incêndios', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-29', code: 'NR-29-F', name: 'NR 29 - Trabalho Portuário', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-32', code: 'NR-32-F', name: 'NR 32 - Serviços de Saúde', category: 'Saúde', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-33', code: 'NR-33-F', name: 'NR 33 - Espaços Confinados', category: 'Segurança', carga_horaria: 16, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-34', code: 'NR-34-F', name: 'NR 34 - Trabalho Naval', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-nr-36', code: 'NR-36-F', name: 'NR 36 - Segurança em Frigoríficos', category: 'Segurança', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-ps', code: 'PS-F', name: 'Primeiros Socorros', category: 'Saúde', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-  { id: 'showcase-dd', code: 'DD-F', name: 'Direção Defensiva', category: 'Complementares', carga_horaria: 8, modality: 'SEMIPRESENCIAL', catalog_only: true },
-]
-
-function withWrShowcase(apiCourses) {
-  if (!isWrTenant()) return apiCourses
-
-  const apiFamilies = new Set(
-    apiCourses
-      .map((course) => extractFamily(course.code))
-      .filter(Boolean)
-  )
-
-  const showcaseCourses = WR_CATALOG_SHOWCASE.filter(
-    (course) => !apiFamilies.has(extractFamily(course.code))
-  )
-
-  return [...apiCourses, ...showcaseCourses]
-}
-
-// The WR catalog is a public marketing surface. Render its versioned local
-// showcase immediately instead of blocking every cover image on Railway.
-// The API still enriches/replaces matching families when it responds.
-const allCourses = ref(isWrTenant() ? withWrShowcase([]) : [])
-const loading = ref(!isWrTenant())
+// The WR catalog is now fully driven by the API (reconciled with real
+// apostilas). No more local showcase — the database is the source of truth.
+const allCourses = ref([])
+const loading = ref(true)
 const loadError = ref('')
 const activeCategory = ref('all')
 const searchQuery = ref('')
@@ -277,23 +241,16 @@ function formatModality(modality) {
 }
 
 async function loadCourses() {
-  const hasLocalWrCatalog = isWrTenant() && allCourses.value.length > 0
-  loading.value = !hasLocalWrCatalog
+  loading.value = true
   loadError.value = ''
   try {
     const { data } = await fetchPublicCourses()
     const apiCourses = Array.isArray(data) ? data : []
-    allCourses.value = withWrShowcase(apiCourses)
+    // Filter to active courses only for public catalog
+    allCourses.value = apiCourses.filter((c) => c.is_active !== false)
   } catch (error) {
-    if (isWrTenant()) {
-      // The versioned WR showcase is a safe visual fallback. Keep it visible
-      // if the API is sleeping or temporarily unavailable.
-      allCourses.value = withWrShowcase([])
-      loadError.value = ''
-    } else {
-      allCourses.value = []
-      loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
-    }
+    allCourses.value = []
+    loadError.value = error.response?.data?.detail || 'Erro ao carregar cursos.'
   } finally {
     loading.value = false
   }

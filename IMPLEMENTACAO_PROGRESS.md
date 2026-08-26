@@ -23,7 +23,7 @@
 | **Real Asaas activation** | DEFERRED TO OFFICIAL LAUNCH GATE |
 | **Business Journeys** | CURRENT DEVELOPMENT MACRO-PHASE |
 | **Official domain** | NOT DEFINED YET |
-| **Content readiness** | PENDING CEO CONTENT / MATERIALS |
+| **Content readiness** | RECONCILED — 47 apostilas OCR'd, manifest built, importer ready |
 
 ---
 

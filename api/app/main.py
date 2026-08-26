@@ -16,6 +16,8 @@ from app.api.routes import (
     companies,
     corporate,
     corporate_invites,
+    course_content,
+    course_materials,
     courses,
     dashboard,
     enrollments,
@@ -183,6 +185,8 @@ app.include_router(corporate.router, prefix="/api/v1/corporate", tags=["corporat
 app.include_router(corporate_invites.router, prefix="/api/v1/corporate", tags=["corporate-invites"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
+app.include_router(course_content.router, prefix="/api/v1", tags=["course-content"])
+app.include_router(course_materials.router, prefix="/api/v1", tags=["course-materials"])
 app.include_router(
     asaas_integration.router,
     prefix="/api/v1/integrations/asaas",
