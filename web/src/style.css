@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Premium UI production promotion marker. */
 :root {
   --color-primary: #1b7a3a;
   --color-secondary: #17324d;
