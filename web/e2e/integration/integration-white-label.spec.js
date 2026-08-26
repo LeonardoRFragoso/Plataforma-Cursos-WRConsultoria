@@ -176,7 +176,7 @@ test.describe('Integration — White Label Two-Tenant', () => {
     const primaryColor = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()
     )
-    expect(primaryColor.toLowerCase()).toBe('#0056b3')
+    expect(primaryColor.toLowerCase()).toBe('#047f37')
 
     await page.close()
   })

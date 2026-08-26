@@ -19,9 +19,9 @@ const WR_BRANDING = {
   logo_url: null,
   logo_white_url: null,
   favicon_url: null,
-  primary_color: '#0056b3',
-  secondary_color: '#1a1a1a',
-  accent_color: '#ff6b35',
+  primary_color: '#047F37',
+  secondary_color: '#17324D',
+  accent_color: '#F59E0B',
 }
 
 const ALFA_BRANDING = {
@@ -67,7 +67,7 @@ test.describe('White Label — WR tenant', () => {
     const primaryColor = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()
     )
-    expect(primaryColor).toBe('#0056b3')
+    expect(primaryColor).toBe('#047F37')
   })
 
   test('footer shows tenant name, not hardcoded WR', async ({ page }) => {

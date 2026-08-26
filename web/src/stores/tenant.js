@@ -11,7 +11,7 @@ const DEFAULTS = {
 
 const WR_DEFAULTS = {
   name: 'WR Consultoria e Soluções em QSMS',
-  primary: '#1B7A3A',
+  primary: '#047F37',
   secondary: '#17324D',
   accent: '#F59E0B',
 }

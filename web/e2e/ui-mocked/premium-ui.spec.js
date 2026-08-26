@@ -8,7 +8,7 @@ const BRANDING = {
   logo_url: null,
   logo_white_url: null,
   favicon_url: null,
-  primary_color: '#1B7A3A',
+  primary_color: '#047F37',
   secondary_color: '#17324D',
   accent_color: '#F59E0B',
 }

@@ -38,7 +38,7 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify({
         name: 'WR Consultoria',
         logo_url: null,
-        primary_color: '#0056b3',
+        primary_color: '#047F37',
         secondary_color: '#1a1a1a',
       }),
     })
@@ -220,7 +220,7 @@ test('B2C-ENTRY-003: logout → login → redirect ainda funciona', async ({ bro
       body: JSON.stringify({
         name: 'WR Consultoria',
         logo_url: null,
-        primary_color: '#0056b3',
+        primary_color: '#047F37',
         secondary_color: '#1a1a1a',
       }),
     })

@@ -9,7 +9,7 @@ vi.mock('../../utils/tenantSlug', () => ({
 // Mock tenant store
 vi.mock('../../stores/tenant', () => ({
   useTenantStore: () => ({
-    primary_color: '#0056b3',
+    primary_color: '#047F37',
     secondary_color: '#1a1a1a',
     name: 'WR Cursos',
   }),
