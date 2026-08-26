@@ -40,7 +40,7 @@ export const useTenantStore = defineStore('tenant', {
         this.secondary_color = normalizeHex(data.secondary_color, DEFAULTS.secondary)
         this.accent_color = normalizeHex(data.accent_color, DEFAULTS.accent)
         this.loaded = true
-      } catch (error) {
+      } catch {
         this.name = DEFAULTS.name
         this.primary_color = DEFAULTS.primary
         this.secondary_color = DEFAULTS.secondary
