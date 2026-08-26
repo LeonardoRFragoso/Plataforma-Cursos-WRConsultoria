@@ -1,17 +1,15 @@
 <template>
   <div
     :class="[
-      'bg-white rounded-lg border border-gray-200 shadow-md p-6',
-      hoverable && 'hover:shadow-lg transition-shadow cursor-pointer'
+      'premium-card p-5 sm:p-6',
+      hoverable && 'premium-card-hover cursor-pointer'
     ]"
   >
-    <div v-if="$slots.header" class="mb-4">
+    <div v-if="$slots.header" class="mb-5">
       <slot name="header" />
     </div>
-    
     <slot />
-    
-    <div v-if="$slots.footer" class="mt-4 pt-4 border-t border-gray-200">
+    <div v-if="$slots.footer" class="mt-5 border-t border-slate-100 pt-4">
       <slot name="footer" />
     </div>
   </div>
@@ -19,9 +17,6 @@
 
 <script setup>
 defineProps({
-  hoverable: {
-    type: Boolean,
-    default: false
-  }
+  hoverable: { type: Boolean, default: false },
 })
 </script>

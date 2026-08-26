@@ -1,6 +1,19 @@
 import { defineStore } from 'pinia'
 import { fetchTenantBranding } from '../api/tenant'
 
+const DEFAULTS = {
+  name: 'Plataforma de Cursos',
+  primary: '#1B7A3A',
+  secondary: '#17324D',
+  accent: '#F59E0B',
+}
+
+const normalizeHex = (value, fallback) => {
+  if (typeof value !== 'string') return fallback
+  const hex = value.trim()
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback
+}
+
 export const useTenantStore = defineStore('tenant', {
   state: () => ({
     name: '',
@@ -10,11 +23,6 @@ export const useTenantStore = defineStore('tenant', {
     primary_color: null,
     secondary_color: null,
     accent_color: null,
-    // `loading` is true while branding is being resolved from the API;
-    // `loaded` becomes true once the first resolution (success or fallback)
-    // completes. Components should show a neutral placeholder while
-    // `loading && !loaded` so they never permanently display the generic
-    // "Plataforma de Cursos" identity when a configured tenant exists.
     loading: false,
     loaded: false,
   }),
@@ -28,38 +36,46 @@ export const useTenantStore = defineStore('tenant', {
         this.logo_url = data.logo_url
         this.logo_white_url = data.logo_white_url
         this.favicon_url = data.favicon_url
-        this.primary_color = data.primary_color
-        this.secondary_color = data.secondary_color
-        this.accent_color = data.accent_color
+        this.primary_color = normalizeHex(data.primary_color, DEFAULTS.primary)
+        this.secondary_color = normalizeHex(data.secondary_color, DEFAULTS.secondary)
+        this.accent_color = normalizeHex(data.accent_color, DEFAULTS.accent)
         this.loaded = true
       } catch (error) {
-        this.name = 'Plataforma de Cursos'
-        this.primary_color = '#0056b3'
-        this.secondary_color = '#1a1a1a'
-        this.accent_color = '#ff6b35'
+        this.name = DEFAULTS.name
+        this.primary_color = DEFAULTS.primary
+        this.secondary_color = DEFAULTS.secondary
+        this.accent_color = DEFAULTS.accent
         this.loaded = true
       } finally {
         this.loading = false
+        this.applyColors()
       }
     },
 
     async refreshBranding(slug) {
       await this.loadBranding(slug)
-      this.applyColors()
-      const name = this.name || 'Plataforma de Cursos'
+      const name = this.name || DEFAULTS.name
       document.title = name
       this.applyFavicon()
     },
 
     applyColors() {
+      if (typeof document === 'undefined') return
       const root = document.documentElement
-      if (this.primary_color) root.style.setProperty('--color-primary', this.primary_color)
-      if (this.secondary_color) root.style.setProperty('--color-secondary', this.secondary_color)
-      if (this.accent_color) root.style.setProperty('--color-accent', this.accent_color)
+      const primary = normalizeHex(this.primary_color, DEFAULTS.primary)
+      const secondary = normalizeHex(this.secondary_color, DEFAULTS.secondary)
+      const accent = normalizeHex(this.accent_color, DEFAULTS.accent)
+      root.style.setProperty('--color-primary', primary)
+      root.style.setProperty('--color-secondary', secondary)
+      root.style.setProperty('--color-accent', accent)
+      root.style.setProperty('--brand-primary', primary)
+      root.style.setProperty('--brand-secondary', secondary)
+      root.style.setProperty('--brand-accent', accent)
+      root.dataset.tenantBrand = 'ready'
     },
 
     applyFavicon() {
-      if (!this.favicon_url) return
+      if (!this.favicon_url || typeof document === 'undefined') return
       let link = document.querySelector("link[rel~='icon']")
       if (!link) {
         link = document.createElement('link')
