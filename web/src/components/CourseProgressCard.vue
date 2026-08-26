@@ -1,197 +1,27 @@
 <template>
-  <div
-    class="group rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5"
-    :data-testid="testId"
-  >
-    <div class="flex gap-4 p-4">
-      <!-- Cover -->
-      <CourseCover
-        :course="courseForCover"
-        ratio="1/1"
-        fit="cover"
-        loading="lazy"
-        wrapper-class="w-24 sm:w-28 shrink-0 rounded-lg overflow-hidden"
-        img-test-id="progress-card-cover-img"
-        fb-test-id="progress-card-cover-fallback"
-      />
-
-      <div class="flex-1 min-w-0 flex flex-col">
-        <!-- Title + status -->
-        <div class="flex items-start justify-between gap-2">
-          <h3 class="font-semibold text-secondary-900 leading-snug line-clamp-2">
-            {{ enrollment.course_name }}
-          </h3>
-          <StatusBadge
-            v-if="courseState"
-            :status="courseState"
-            :test-id="testId + '-status'"
-          />
-        </div>
-
-        <!-- Class dates -->
-        <p class="mt-1 text-xs text-gray-500">
-          {{ formattedDates }}
-        </p>
-
-        <!-- Progress -->
-        <div class="mt-auto pt-3">
-          <ProgressBar
-            :value="percentage"
-            :label="'Progresso'"
-            :hint="progressHint"
-            :show-label="true"
-            size="md"
-            :test-id="testId + '-progress'"
-          />
-        </div>
-
-        <!-- CTAs -->
-        <div class="mt-3 flex flex-wrap gap-2">
-          <router-link
-            :to="learnRoute"
-            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500"
-            :class="primaryCtaClass"
-            :data-testid="testId + '-cta'"
-          >
-            <span aria-hidden="true">{{ primaryCtaIcon }}</span>
-            {{ primaryCtaLabel }}
-          </router-link>
-          <router-link
-            v-if="hasCertificate"
-            :to="`/certificates`"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            :data-testid="testId + '-cert'"
-          >
-            <span aria-hidden="true">🏆</span>
-            Certificado
-          </router-link>
-        </div>
+  <div class="premium-card premium-card-hover group overflow-hidden" :data-testid="testId">
+    <div class="flex flex-col gap-4 p-4 sm:flex-row sm:p-5">
+      <CourseCover :course="courseForCover" ratio="1/1" fit="cover" loading="lazy" wrapper-class="w-full sm:w-32 sm:h-32 shrink-0 rounded-2xl overflow-hidden shadow-sm" img-test-id="progress-card-cover-img" fb-test-id="progress-card-cover-fallback" />
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.13em] text-[var(--brand-primary)]">{{ enrollment.course_code || 'Treinamento' }}</p><h3 class="mt-1 line-clamp-2 font-bold leading-snug text-slate-900">{{ enrollment.course_name }}</h3></div><StatusBadge v-if="courseState" :status="courseState" :test-id="testId + '-status'" /></div>
+        <p v-if="formattedDates" class="mt-1.5 text-xs text-slate-400">{{ formattedDates }}</p>
+        <div class="mt-4"><ProgressBar :value="percentage" label="Progresso" :hint="progressHint" :show-label="true" size="md" :test-id="testId + '-progress'" /></div>
+        <div class="mt-4 flex flex-wrap gap-2"><router-link :to="learnRoute" class="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition focus:outline-none focus:ring-4 focus:ring-primary-100" :class="primaryCtaClass" :data-testid="testId + '-cta'"><span aria-hidden="true">{{ primaryCtaIcon }}</span>{{ primaryCtaLabel }}</router-link><router-link v-if="hasCertificate" to="/certificates" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50" :data-testid="testId + '-cert'"><span aria-hidden="true">🏆</span>Certificado</router-link></div>
       </div>
     </div>
   </div>
 </template>
-
 <script setup>
-import { computed, ref, watch } from 'vue'
-import api from '../api/client'
-import CourseCover from './CourseCover.vue'
-import ProgressBar from './ProgressBar.vue'
-import StatusBadge from './StatusBadge.vue'
-
-const props = defineProps({
-  enrollment: { type: Object, required: true },
-  // Optional: pass certificate course ids set to show cert CTA
-  certificateCourseIds: { type: Set, default: () => new Set() },
-  testId: { type: String, default: 'course-progress-card' },
-})
-
-const progress = ref(null)
-const progressError = ref(false)
-
-// Map enrollment shape → shape expected by getCourseCover().
-// /enrollments/me returns course_code/course_name/cover_image_url,
-// but getCourseCover() reads course.code/course.name/cover_image_url.
-const courseForCover = computed(() => ({
-  id: props.enrollment.course_id,
-  code: props.enrollment.course_code,
-  name: props.enrollment.course_name,
-  category: props.enrollment.course_category,
-  cover_image_url: props.enrollment.cover_image_url,
-  cover_image_alt: props.enrollment.cover_image_alt,
-}))
-
-const percentage = computed(() => {
-  if (progress.value && typeof progress.value.percentage === 'number') {
-    return progress.value.percentage
-  }
-  // Derive a coarse state from enrollment status when no lesson progress yet
-  if (props.enrollment.status === 'CONCLUIDA') return 100
-  return 0
-})
-
-const courseState = computed(() => {
-  if (props.enrollment.status === 'CONCLUIDA') return 'completed'
-  if (progress.value && progress.value.percentage > 0) return 'in_progress'
-  if (props.enrollment.status === 'CONFIRMADA') return 'in_progress'
-  if (props.enrollment.status === 'PENDENTE') return 'not_started'
-  return null
-})
-
-const hasCertificate = computed(() =>
-  props.certificateCourseIds.has(props.enrollment.course_id)
-)
-
-const canPlay = computed(() =>
-  props.enrollment.status === 'CONFIRMADA' || props.enrollment.status === 'CONCLUIDA'
-)
-
-const learnRoute = computed(() =>
-  canPlay.value
-    ? `/courses/${props.enrollment.course_id}/learn`
-    : '/cursos'
-)
-
-const primaryCtaLabel = computed(() => {
-  if (!canPlay.value) return 'Ver catálogo'
-  if (courseState.value === 'completed') return 'Revisar curso'
-  if (courseState.value === 'in_progress') return 'Continuar curso'
-  return 'Começar curso'
-})
-
-const primaryCtaIcon = computed(() => {
-  if (!canPlay.value) return '→'
-  if (courseState.value === 'completed') return '↺'
-  return '▶'
-})
-
-const primaryCtaClass = computed(() => {
-  if (!canPlay.value) {
-    return 'border border-gray-200 text-gray-700 hover:bg-gray-50'
-  }
-  return 'bg-primary-600 text-white hover:bg-primary-700'
-})
-
-const progressHint = computed(() => {
-  if (progress.value && typeof progress.value.required_lessons === 'number') {
-    const c = progress.value.completed_required || 0
-    const r = progress.value.required_lessons || 0
-    if (r > 0) return `${c} de ${r} aulas obrigatórias`
-  }
-  if (props.enrollment.status === 'CONCLUIDA') return 'Curso concluído'
-  if (props.enrollment.status === 'PENDENTE') return 'Aguardando confirmação da matrícula'
-  return ''
-})
-
-const formattedDates = computed(() => {
-  const s = props.enrollment.start_date
-  const e = props.enrollment.end_date
-  if (!s || !e) return ''
-  const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-  const sd = new Date(s)
-  const ed = new Date(e)
-  const sameYear = sd.getFullYear() === ed.getFullYear()
-  const start = `${sd.getDate()} ${months[sd.getMonth()]}`
-  const end = `${ed.getDate()} ${months[ed.getMonth()]} ${ed.getFullYear()}`
-  return sameYear ? `${start} — ${end}` : `${start} ${sd.getFullYear()} — ${end}`
-})
-
-const loadProgress = async () => {
-  if (!canPlay.value) return
-  progressError.value = false
-  try {
-    const { data } = await api.get(
-      `/api/v1/lessons/courses/${props.enrollment.course_id}/my-progress`
-    )
-    progress.value = data
-  } catch (e) {
-    // 403/404 just means no access yet; silently keep enrollment-derived state
-    progress.value = null
-  }
-}
-
-watch(
-  () => props.enrollment?.course_id,
-  () => loadProgress(),
-  { immediate: true }
-)
+import { computed, ref, watch } from 'vue'; import api from '../api/client'; import CourseCover from './CourseCover.vue'; import ProgressBar from './ProgressBar.vue'; import StatusBadge from './StatusBadge.vue'
+const props=defineProps({enrollment:{type:Object,required:true},certificateCourseIds:{type:Set,default:()=>new Set()},testId:{type:String,default:'course-progress-card'}}); const progress=ref(null)
+const courseForCover=computed(()=>({id:props.enrollment.course_id,code:props.enrollment.course_code,name:props.enrollment.course_name,category:props.enrollment.course_category,cover_image_url:props.enrollment.cover_image_url,cover_image_alt:props.enrollment.cover_image_alt}))
+const percentage=computed(()=>progress.value&&typeof progress.value.percentage==='number'?progress.value.percentage:props.enrollment.status==='CONCLUIDA'?100:0)
+const courseState=computed(()=>props.enrollment.status==='CONCLUIDA'?'completed':progress.value&&progress.value.percentage>0?'in_progress':props.enrollment.status==='CONFIRMADA'?'in_progress':props.enrollment.status==='PENDENTE'?'not_started':null)
+const hasCertificate=computed(()=>props.certificateCourseIds.has(props.enrollment.course_id)); const canPlay=computed(()=>['CONFIRMADA','CONCLUIDA'].includes(props.enrollment.status)); const learnRoute=computed(()=>canPlay.value?`/courses/${props.enrollment.course_id}/learn`:'/cursos')
+const primaryCtaLabel=computed(()=>!canPlay.value?'Ver catálogo':courseState.value==='completed'?'Revisar curso':courseState.value==='in_progress'?'Continuar curso':'Começar curso'); const primaryCtaIcon=computed(()=>!canPlay.value?'→':courseState.value==='completed'?'↺':'▶'); const primaryCtaClass=computed(()=>canPlay.value?'text-white shadow-sm':'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50')
+const progressHint=computed(()=>{if(progress.value&&typeof progress.value.required_lessons==='number'){const c=progress.value.completed_required||0,r=progress.value.required_lessons||0;if(r>0)return`${c} de ${r} aulas obrigatórias`}if(props.enrollment.status==='CONCLUIDA')return'Curso concluído';if(props.enrollment.status==='PENDENTE')return'Aguardando confirmação da matrícula';return''})
+const formattedDates=computed(()=>{const s=props.enrollment.start_date,e=props.enrollment.end_date;if(!s||!e)return'';const months=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'],sd=new Date(s),ed=new Date(e);return`${sd.getDate()} ${months[sd.getMonth()]} — ${ed.getDate()} ${months[ed.getMonth()]} ${ed.getFullYear()}`})
+const loadProgress=async()=>{if(!canPlay.value)return;try{progress.value=(await api.get(`/api/v1/lessons/courses/${props.enrollment.course_id}/my-progress`)).data}catch{progress.value=null}}
+watch(()=>props.enrollment?.course_id,()=>loadProgress(),{immediate:true})
 </script>
+<style scoped>a.text-white{background:var(--brand-primary)}a.text-white:hover{background:var(--brand-primary-hover)}</style>
