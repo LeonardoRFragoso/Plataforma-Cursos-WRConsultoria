@@ -1,120 +1,50 @@
 <template>
-  <div class="min-h-screen flex flex-col lg:flex-row" data-testid="auth-layout">
-    <!-- ────────────────────────────────────────────────────────────
-         VISUAL PANEL (desktop only — hidden on mobile to prioritize form)
-         WR: dedicated auth crop (photographic right side of hero, no
-         embedded marketing text). Non-WR: tenant-color gradient fallback.
-         No /assets/wr/ reference for non-WR tenants.
-    ──────────────────────────────────────────────────────────── -->
-    <div
-      class="hidden lg:flex lg:w-[52%] xl:w-[55%] relative overflow-hidden"
-      data-testid="auth-visual-panel"
-    >
-      <!-- WR tenant: dedicated auth crop (workers/training, no embedded headline) -->
-      <img
-        v-if="authVisual"
-        :src="authVisual.src"
-        :alt="authVisual.alt"
-        class="absolute inset-0 w-full h-full object-cover"
-        data-testid="auth-visual-img"
-      />
-      <!-- Non-WR fallback: tenant-color gradient (no WR imagery) -->
-      <div
-        v-else
-        class="absolute inset-0"
-        :style="gradientStyle"
-        data-testid="auth-visual-fallback"
-      ></div>
-
-      <!-- Dark green overlay for depth and text legibility (WR only) -->
-      <div
-        v-if="authVisual"
-        class="absolute inset-0 bg-gradient-to-br from-primary-900/40 via-transparent to-primary-900/60"
-      ></div>
-
-      <!-- Tenant brand at top of visual panel -->
-      <div class="absolute top-0 left-0 right-0 p-10 xl:p-14">
-        <p class="text-white/90 text-sm font-semibold tracking-wide drop-shadow-lg">
-          {{ tenantStore.name || 'Plataforma de Cursos' }}
-        </p>
-      </div>
-
-      <!-- Tagline at bottom — clean photographic area, no embedded text collision -->
-      <div class="absolute bottom-0 left-0 right-0 p-10 xl:p-14">
-        <p class="text-white text-xl xl:text-2xl font-semibold leading-snug drop-shadow-lg">
-          Capacitação que transforma<br />segurança em prática.
-        </p>
-      </div>
-    </div>
-
-    <!-- ────────────────────────────────────────────────────────────
-         FORM PANEL
-         Centered, controlled width. The form itself stays max-w-md.
-    ──────────────────────────────────────────────────────────── -->
-    <div class="flex-1 flex flex-col bg-gray-50" data-testid="auth-form-panel">
-      <!-- Compact brand header (simplified — no redundant navbar) -->
-      <div class="px-6 sm:px-10 pt-8">
-        <router-link to="/" class="inline-flex items-center gap-2" data-testid="auth-brand">
-          <img
-            v-if="tenantStore.logo_url"
-            :src="tenantStore.logo_url"
-            :alt="tenantStore.name"
-            class="h-10 w-auto max-w-[180px] object-contain"
-          />
-          <span
-            v-else-if="tenantStore.loading && !tenantStore.loaded"
-            class="text-sm text-gray-400"
-            data-testid="auth-brand-loading"
-          >
-            Carregando…
-          </span>
-          <span v-else class="text-lg font-bold text-primary-600">
-            {{ tenantStore.name || 'Plataforma de Cursos' }}
-          </span>
-        </router-link>
-      </div>
-
-      <!-- Form content slot — each auth view provides its own form -->
-      <div class="flex-1 flex items-center justify-center px-6 sm:px-10 py-8">
-        <div class="w-full max-w-md" data-testid="auth-form-content">
-          <slot />
+  <div class="min-h-screen lg:grid lg:grid-cols-[1.05fr_.95fr]" data-testid="auth-layout">
+    <section class="relative hidden min-h-screen overflow-hidden bg-slate-950 lg:flex" data-testid="auth-visual-panel">
+      <img v-if="authVisual" :src="authVisual.src" :alt="authVisual.alt" class="absolute inset-0 h-full w-full object-cover" data-testid="auth-visual-img" />
+      <div v-else class="absolute inset-0" :style="gradientStyle" data-testid="auth-visual-fallback"></div>
+      <div class="absolute inset-0 bg-gradient-to-br from-slate-950/65 via-slate-950/25 to-slate-950/85"></div>
+      <div class="absolute -left-32 top-1/3 h-96 w-96 rounded-full bg-white/[.06] blur-3xl"></div>
+      <div class="relative flex w-full flex-col justify-between p-10 xl:p-14">
+        <div class="flex items-center gap-3">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 p-2 backdrop-blur">
+            <img v-if="tenantStore.logo_white_url || tenantStore.logo_url" :src="tenantStore.logo_white_url || tenantStore.logo_url" :alt="tenantStore.name" class="max-h-8 max-w-9 object-contain" />
+            <span v-else class="text-sm font-black text-white">{{ initials }}</span>
+          </div>
+          <div><p class="text-sm font-bold text-white">{{ tenantStore.name || 'Plataforma de Cursos' }}</p><p class="mt-0.5 text-[10px] font-semibold uppercase tracking-[.18em] text-white/45">Learning platform</p></div>
         </div>
+        <div class="max-w-xl">
+          <p class="text-xs font-bold uppercase tracking-[.2em] text-white/50">Capacitação profissional</p>
+          <h1 class="mt-4 text-3xl font-bold leading-tight tracking-tight text-white xl:text-4xl">Aprender, acompanhar e certificar em uma experiência única.</h1>
+          <p class="mt-4 max-w-lg text-sm leading-7 text-white/65">Treinamentos, progresso e certificados verificáveis com a identidade da sua organização.</p>
+          <div class="mt-8 flex gap-3"><span class="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 backdrop-blur">White-label</span><span class="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 backdrop-blur">Certificação digital</span><span class="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 backdrop-blur">B2B + B2C</span></div>
+        </div>
+        <p class="text-xs text-white/35">Ambiente seguro e personalizado para cada tenant.</p>
       </div>
+    </section>
 
-      <!-- Footer -->
-      <div class="px-6 sm:px-10 py-5 text-center text-xs text-gray-400">
-        &copy; {{ new Date().getFullYear() }} {{ tenantStore.name || 'Plataforma de Cursos' }}. Todos os direitos reservados.
+    <section class="relative flex min-h-screen flex-col overflow-hidden bg-[var(--surface-page)]" data-testid="auth-form-panel">
+      <div class="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[var(--brand-primary-soft)] blur-3xl"></div>
+      <header class="relative px-6 pt-7 sm:px-10 lg:px-12">
+        <router-link to="/" class="inline-flex items-center gap-3" data-testid="auth-brand">
+          <div v-if="tenantStore.logo_url" class="flex h-10 min-w-10 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-slate-100"><img :src="tenantStore.logo_url" :alt="tenantStore.name" class="max-h-7 max-w-[150px] object-contain" /></div>
+          <span v-else-if="tenantStore.loading && !tenantStore.loaded" class="text-sm text-slate-400" data-testid="auth-brand-loading">Carregando…</span>
+          <span v-else class="text-base font-bold text-slate-900">{{ tenantStore.name || 'Plataforma de Cursos' }}</span>
+        </router-link>
+      </header>
+      <div class="relative flex flex-1 items-center justify-center px-6 py-10 sm:px-10 lg:px-12">
+        <div class="w-full max-w-md" data-testid="auth-form-content"><slot /></div>
       </div>
-    </div>
+      <footer class="relative px-6 py-5 text-center text-[11px] text-slate-400">&copy; {{ new Date().getFullYear() }} {{ tenantStore.name || 'Plataforma de Cursos' }}. Todos os direitos reservados.</footer>
+    </section>
   </div>
 </template>
-
 <script setup>
-/**
- * AuthLayout — shared visual shell for authentication pages.
- *
- * Desktop (lg+): 52-55% visual panel (dedicated WR auth crop for WR
- * tenant — photographic right side of hero with no embedded marketing
- * text; neutral tenant-color gradient for others) + 45-48% form panel.
- *
- * Mobile (<lg): visual panel hidden, form panel full-width with compact
- * brand header. The form receives visual priority.
- *
- * White-label isolation: non-WR tenants never see /assets/wr/ imagery.
- */
 import { computed } from 'vue'
 import { useTenantStore } from '../stores/tenant'
 import { getWrAuthVisual } from '../utils/courseMedia'
-
 const tenantStore = useTenantStore()
-
 const authVisual = computed(() => getWrAuthVisual())
-
-const gradientStyle = computed(() => {
-  const primary = tenantStore.primary_color || '#0056b3'
-  const secondary = tenantStore.secondary_color || '#1a1a1a'
-  return {
-    background: `linear-gradient(135deg, ${primary}, ${secondary})`,
-  }
-})
+const initials = computed(() => (tenantStore.name || 'PL').split(/\s+/).slice(0,2).map(p => p[0]).join('').toUpperCase())
+const gradientStyle = computed(() => ({ background: `linear-gradient(145deg, ${tenantStore.secondary_color || '#17324D'} 0%, ${tenantStore.primary_color || '#1B7A3A'} 72%, ${tenantStore.accent_color || '#F59E0B'} 140%)` }))
 </script>
