@@ -239,15 +239,24 @@ def _get_price(entry: dict) -> float:
     return 149.90
 
 
+def _to_text(value) -> str | None:
+    """Convert a value to a string suitable for Text columns, or None."""
+    if value is None or value == "REVIEW_REQUIRED":
+        return None
+    if isinstance(value, list):
+        return "; ".join(str(v) for v in value) if value else None
+    return str(value)
+
+
 def _build_profile_data(content: dict, entry: dict) -> dict:
     """Build CourseContentProfile fields from manifest content."""
     return {
-        "short_description": content.get("short_description"),
-        "full_description": content.get("full_description"),
-        "target_audience": content.get("target_audience") if content.get("target_audience") != "REVIEW_REQUIRED" else None,
-        "general_objective": content.get("general_objective"),
+        "short_description": _to_text(content.get("short_description")),
+        "full_description": _to_text(content.get("full_description")),
+        "target_audience": _to_text(content.get("target_audience")),
+        "general_objective": _to_text(content.get("general_objective")),
         "specific_objectives": content.get("specific_objectives", []),
-        "prerequisites": content.get("prerequisites"),
+        "prerequisites": _to_text(content.get("prerequisites")),
         "learning_outcomes": content.get("learning_outcomes", []),
         "syllabus": content.get("syllabus", []),
         "modules": content.get("modules", []),
@@ -257,10 +266,10 @@ def _build_profile_data(content: dict, entry: dict) -> dict:
         "ppe_topics": content.get("ppe_topics", []),
         "emergency_topics": content.get("emergency_topics", []),
         "standards_referenced": content.get("standards_referenced", []),
-        "assessment_summary": content.get("assessment_information"),
-        "recycling_summary": content.get("recycling_information"),
-        "validity_summary": content.get("validity_information"),
-        "technical_responsible": content.get("technical_responsible"),
+        "assessment_summary": _to_text(content.get("assessment_information")),
+        "recycling_summary": _to_text(content.get("recycling_information")),
+        "validity_summary": _to_text(content.get("validity_information")),
+        "technical_responsible": _to_text(content.get("technical_responsible")),
         "instructor_information": content.get("instructor_information", []),
         "source_manifest": {
             "pdf": entry["source_pdf"]["filename"],
