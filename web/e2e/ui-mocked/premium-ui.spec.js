@@ -48,7 +48,7 @@ test('PREMIUM-UI-001: catálogo aplica branding e superfície premium', async ({
   )
   expect(primary).toBe(BRANDING.primary_color.toLowerCase())
 
-  const cardRadius = await page.locator('[data-testid="catalog-grid"] article').first().evaluate((el) =>
+  const cardRadius = await page.locator('[data-testid="catalog-grid"] > div').first().evaluate((el) =>
     getComputedStyle(el).borderRadius
   )
   expect(parseFloat(cardRadius)).toBeGreaterThanOrEqual(12)

@@ -99,7 +99,9 @@ describe('Tenant Store — applyColors', () => {
 
     store.applyColors()
 
-    expect(document.documentElement.style.getPropertyValue('--color-primary')).toBe('')
+    // When colors are null, applyColors falls back to INITIAL_FALLBACK which
+    // is WR_DEFAULTS (test env resolves TENANT_SLUG to 'wr').
+    expect(document.documentElement.style.getPropertyValue('--color-primary')).toBe('#1B7A3A')
   })
 })
 
@@ -137,7 +139,9 @@ describe('Tenant Store — loadBranding', () => {
     await store.loadBranding('alfa')
 
     expect(store.name).toBe('Plataforma de Cursos')
-    expect(store.primary_color).toBe('#0056b3')
+    // DEFAULTS.primary was updated to WR green (#1B7A3A) to match the
+    // WR brand colors used as the platform-wide neutral fallback.
+    expect(store.primary_color).toBe('#1B7A3A')
     expect(store.loaded).toBe(true)
   })
 })

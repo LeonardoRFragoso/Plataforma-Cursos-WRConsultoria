@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // Mock tenantSlug before importing courseMedia
 const tenantSlugMock = vi.hoisted(() => ({ value: 'wr' }))
@@ -347,5 +349,52 @@ describe('courseMedia — null/invalid media handling', () => {
       cover_image_url: '',
     })
     expect(cover.src).toBe('/assets/wr/courses/nr-10-eletricidade.webp')
+  })
+})
+
+describe('courseMedia — WR asset files exist on disk', () => {
+  beforeEach(() => {
+    tenantSlugMock.value = 'wr'
+  })
+
+  // Resolve web/public as the public root. __dirname in vitest points to the
+  // test file's directory (web/src/__tests__/utils), so web/public is 3 levels up.
+  const publicDir = path.resolve(__dirname, '..', '..', '..', 'public')
+
+  it('all WR_FAMILY_MEDIA src paths resolve to existing files', () => {
+    const paths = getWrAssetPaths()
+    const missing = []
+    for (const p of paths) {
+      // p is like "/assets/wr/courses/nr-10-eletricidade.webp"
+      const fullPath = path.join(publicDir, p)
+      if (!fs.existsSync(fullPath)) {
+        missing.push(p)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
+  it('WR_HERO asset file exists', () => {
+    const hero = getWrHero()
+    expect(hero).not.toBeNull()
+    const fullPath = path.join(publicDir, hero.src)
+    expect(fs.existsSync(fullPath)).toBe(true)
+  })
+
+  it('WR_AUTH_VISUAL asset file exists', () => {
+    const visual = getWrAuthVisual()
+    expect(visual).not.toBeNull()
+    const fullPath = path.join(publicDir, visual.src)
+    expect(fs.existsSync(fullPath)).toBe(true)
+  })
+
+  it('no WR asset path is a directory or empty file', () => {
+    const paths = getWrAssetPaths()
+    for (const p of paths) {
+      const fullPath = path.join(publicDir, p)
+      const stat = fs.statSync(fullPath)
+      expect(stat.isFile()).toBe(true)
+      expect(stat.size).toBeGreaterThan(0)
+    }
   })
 })

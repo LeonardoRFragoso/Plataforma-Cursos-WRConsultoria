@@ -383,6 +383,10 @@ test.describe('Confirm dialog behavior', () => {
     await page.goto('/courses')
     await expect(page.locator('text=NR-10 Test')).toBeVisible({ timeout: 10000 })
 
+    // Open the options dropdown (details/summary) to reveal the delete button
+    await page.click('summary[aria-label="Mais opções"]')
+    await expect(page.locator('[data-testid="delete-course-btn"]')).toBeVisible()
+
     // Click delete button
     await page.click('[data-testid="delete-course-btn"]')
 
@@ -396,8 +400,14 @@ test.describe('Confirm dialog behavior', () => {
     await expect(page.locator('[data-testid="confirm-dialog-content"]')).toHaveCount(0)
     expect(deleteCalled).toBe(false)
 
-    // Reopen and confirm — should delete
-    await page.click('[data-testid="delete-course-btn"]')
+    // Reopen dropdown and confirm — should delete
+    // The <details> dropdown may still be open from before; if the delete
+    // button is already visible, click it directly. Otherwise, open the menu.
+    const deleteBtn = page.locator('[data-testid="delete-course-btn"]')
+    if (!(await deleteBtn.isVisible())) {
+      await page.click('summary[aria-label="Mais opções"]')
+    }
+    await deleteBtn.click()
     await expect(page.locator('[data-testid="confirm-dialog-content"]')).toBeVisible()
     await page.click('[data-testid="confirm-ok"]')
     await page.waitForTimeout(500)
