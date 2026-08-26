@@ -42,7 +42,9 @@ cd "$ROOT_DIR/web"
 npm run lint
 npm run test:run -- \
   src/__tests__/router.spec.js \
+  src/__tests__/composables/useNavConfig.spec.js \
   src/__tests__/views/CourseDetail.spec.js \
+  src/__tests__/views/CourseLearn.spec.js \
   src/__tests__/views/PaymentReturn.spec.js
 npm run build
 
@@ -52,11 +54,12 @@ if [[ "${FULL_FRONTEND:-0}" == "1" ]]; then
 fi
 
 if [[ "${E2E:-0}" == "1" ]]; then
-  log "Frontend: Playwright B2C entry + purchase smoke"
+  log "Frontend: Playwright B2C + premium UI smoke"
   npx playwright test \
     --project=ui-mocked \
     e2e/ui-mocked/b2c-entry.spec.js \
-    e2e/ui-mocked/b2c-purchase.spec.js
+    e2e/ui-mocked/b2c-purchase.spec.js \
+    e2e/ui-mocked/premium-ui.spec.js
 fi
 
-printf '\nPre-launch platform validation completed successfully.\n'
+printf '\nPre-launch platform + premium UI validation completed successfully.\n'
