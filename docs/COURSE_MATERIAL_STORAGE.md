@@ -187,6 +187,45 @@ duplicate SHA check in the API prevents duplicate CourseMaterial records.
 - Lesson progress (materials are separate from lessons)
 - Course completion
 - Certificate issuance
+
+## Production Status (2026-08-26)
+
+### Pipeline Implementation: COMPLETE
+
+- PR #24 merged to main (`a7c81fe`)
+- Backend deployed to Railway (healthy)
+- Frontend deployed to Vercel (READY)
+- All tests passing (783 backend, 387 frontend)
+- 47 PDFs validated locally (47 SHA_MATCH, 0 MISMATCH)
+
+### Production Upload: BLOCKED
+
+**OWNER_ACTION_REQUIRED**: S3 storage credentials are not configured in
+Railway. The following environment variables must be set:
+
+```
+STORAGE_BACKEND=s3
+STORAGE_ENDPOINT=<endpoint>
+STORAGE_ACCESS_KEY=<access-key>
+STORAGE_SECRET_KEY=<secret-key>
+STORAGE_BUCKET=<private-bucket>
+STORAGE_REGION=<region>
+STORAGE_WATCH_URL_EXPIRATION=7200
+```
+
+Once configured, run:
+
+```bash
+# 1. Generate pg_dump backup
+# 2. Validate bucket is private
+# 3. Dry run
+python -m app.scripts.upload_wr_course_materials --dry-run \
+  --api-url https://wr-api-production.up.railway.app
+
+# 4. Apply
+python -m app.scripts.upload_wr_course_materials --apply \
+  --api-url https://wr-api-production.up.railway.app
+```
 - Enrollment status
 
 Materials are purely downloadable resources for enrolled students.
