@@ -31,6 +31,7 @@ router = APIRouter(include_in_schema=False)
 @router.post(
     "/assessments/courses/{course_id}/start",
     response_model=AssessmentStartResponse,
+    status_code=201,
 )
 async def guarded_start_assessment(
     course_id: UUID,
