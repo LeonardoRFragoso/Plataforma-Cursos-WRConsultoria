@@ -25,6 +25,10 @@ from app.models.compliance import (
     ProfessionalAssignmentRole,
     TrainingProfessional,
 )
+from app.models.compliance_retention import (
+    ComplianceRetentionPolicyVersion,
+    RetentionPolicyStatus,
+)
 from app.models.corporate import CorporateInvite, CorporateSeatAllocation, CorporateTrainingRequest
 from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course, CourseModality
@@ -76,6 +80,7 @@ __all__ = [
     "Class",
     "ClassStatus",
     "Company",
+    "ComplianceRetentionPolicyVersion",
     "ComplianceStatus",
     "CorporateEnrollmentBatch",
     "CorporateInvite",
@@ -116,6 +121,7 @@ __all__ = [
     "PrivacyRequest",
     "ProfessionalAssignmentRole",
     "RegulatoryCompletionState",
+    "RetentionPolicyStatus",
     "ReviewStatus",
     "SigningJobStatus",
     "Student",
