@@ -1,0 +1,565 @@
+{
+  "tenant": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "slug": "wr",
+    "name": "WR Consultoria e Soluções em QSMS"
+  },
+  "courses": [
+    {
+      "id": "b9010c0e-baaf-4216-a2c4-4b7ab01f0061",
+      "code": "BV-F",
+      "name": "Brigada Voluntária",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "a769e673-22c5-4a3d-bd56-eb99137666c1",
+      "code": "DD-F",
+      "name": "Direção Defensiva",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "8e43ad54-1d79-4ea7-b3eb-66f2c458157e",
+      "code": "GL-F",
+      "name": "Ginástica Laboral",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "4ee87fdc-d4cf-4021-aeda-cce10f8a22cc",
+      "code": "NR-01-F",
+      "name": "NR 1 - Disposições Gerais e Gerenciamento de Riscos Ocupacionais",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "d80c524b-4b4b-4c6b-8650-231663e12c44",
+      "code": "NR-05-F",
+      "name": "NR 5 - CIPA - Comissão Interna de Prevenção de Acidentes",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "code": "NR-06-F",
+      "name": "NR 6 - Equipamento de Proteção Individual - EPI",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "83a5f71b-19b4-4b8e-8733-e9604825299b",
+      "code": "NR-10",
+      "name": "NR-10 Segurança em Instalações Elétricas",
+      "is_active": false,
+      "carga_horaria": 40
+    },
+    {
+      "id": "6b93fa38-f6f5-4e61-8e75-b5752241c339",
+      "code": "NR-10-B",
+      "name": "NR 10 - Segurança em Instalações e Serviços em Eletricidade - Básico",
+      "is_active": true,
+      "carga_horaria": 40
+    },
+    {
+      "id": "edd4e5cf-b123-45c0-a6eb-77bb9c4764a2",
+      "code": "NR-10-S",
+      "name": "NR 10 - Segurança no Sistema Elétrico de Potência - SEP",
+      "is_active": true,
+      "carga_horaria": 40
+    },
+    {
+      "id": "91c19531-057e-4cd2-8062-f51c879e0d41",
+      "code": "NR-11-EMP",
+      "name": "NR 11 - Operador de Empilhadeira",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "9ac7da6b-44a7-46e4-9055-87e35276fdcb",
+      "code": "NR-11-GUI",
+      "name": "NR 11 - Operador de Guindauto",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "820c83fa-85ba-4b1d-8e30-f4051f794d33",
+      "code": "NR-11-MIN",
+      "name": "NR 11 - Operador de Mini Carregadeira",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "32f505f0-4643-4994-9ab7-143aca73d720",
+      "code": "NR-11-PLA",
+      "name": "NR 11 - Operador de Plataforma Elevatória",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "95f233eb-c1de-434b-ab89-b9e4fb13b8eb",
+      "code": "NR-11-PON",
+      "name": "NR 11 - Operador de Ponte Rolante",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "b6457d7b-4eb0-437d-b9bc-27495c997292",
+      "code": "NR-11-RET",
+      "name": "NR 11 - Operador de Retroescavadeira",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "ef024fae-992d-464a-9ed5-ddfbcae2b963",
+      "code": "NR-12",
+      "name": "NR-12 Máquinas e Equipamentos",
+      "is_active": false,
+      "carga_horaria": 12
+    },
+    {
+      "id": "cdddf393-bbd0-46d6-9e80-2261d6abd2f6",
+      "code": "NR-12-F",
+      "name": "NR 12 - Máquinas e Equipamentos - Geral",
+      "is_active": true,
+      "carga_horaria": 12
+    },
+    {
+      "id": "938161bc-09f2-4f75-b965-4643b7ed289f",
+      "code": "NR-17-ADM",
+      "name": "NR 17 - Ergonomia para Atividades Administrativas",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "2c92d8c4-34b7-495b-b58d-789368de6468",
+      "code": "NR-17-CHK",
+      "name": "NR 17 - Ergonomia para Operador de Checkout",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "3cc2d459-38f8-4072-b9cb-65fb8591f74c",
+      "code": "NR-17-TEL",
+      "name": "NR 17 - Ergonomia para Operador de Telemarketing/Teleatendimento",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "9d24363c-8640-4915-9ea0-1c13e44b37b0",
+      "code": "NR-17-TRA",
+      "name": "NR 17 - Levantamento e Transporte Manual de Peso",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "4de78efa-4195-4339-9be2-24202daa7394",
+      "code": "NR-18-F",
+      "name": "NR 18 - Condições e Meio Ambiente na Indústria da Construção",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "295e97a4-6e73-438b-89ab-7c661c4c9bfe",
+      "code": "NR-20-AI",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Avançado I",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "8ee1bc8e-fa64-495c-9deb-99ed51846ffb",
+      "code": "NR-20-AII",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Avançado II",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "7dd20151-3abf-4b3e-9193-036fa37ddbce",
+      "code": "NR-20-BAS",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Básico",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "38b8d4e2-1ff6-4feb-a59e-f419715b97c7",
+      "code": "NR-20-ESP",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Específico",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "ef19cf25-1138-465a-aa3c-dc7af2a6a1a7",
+      "code": "NR-20-INI",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Inicial",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "6ecf7723-d6ef-4c2d-9a9e-6339a65f8e7a",
+      "code": "NR-20-INT",
+      "name": "NR 20 - Inflamáveis e Combustíveis - Intermediário",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "751a3666-6a99-416b-9d7e-715e7e15afe2",
+      "code": "NR-22-F",
+      "name": "NR 22 - CIPAMIN - Segurança e Saúde na Mineração",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "69eec7d4-2072-430e-9bfd-36c7acc19ab6",
+      "code": "NR-23-F",
+      "name": "NR 23 - Proteção Contra Incêndios",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "b6b560c0-d22a-4eef-a530-2b4d28393cee",
+      "code": "NR-26-F",
+      "name": "NR 26 - Sinalização de Segurança - Geral",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "470f5368-fddb-464d-966d-6f56e394ca0f",
+      "code": "NR-26-LAB",
+      "name": "NR 26 - Sinalização de Segurança para Laboratório",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "c00cbc64-4ef2-484d-a4fd-126ccf1fbdf4",
+      "code": "NR-29-CPATP",
+      "name": "NR 29 - CPATP - Comissão de Prevenção de Acidentes no Trabalho Portuário",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "1eba95fd-63c5-42b4-8e44-cb9ad359ef9e",
+      "code": "NR-29-POR",
+      "name": "NR 29 - Saúde e Segurança no Trabalho Portuário",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "5e187ca7-bf00-44e9-ab07-a9dc8d238606",
+      "code": "NR-29-SIN",
+      "name": "NR 29 - Sinaleiro - Sinalização Manual no Trabalho Portuário",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "2e231cc1-d753-4707-90b0-582ebb6c9002",
+      "code": "NR-31-AGR",
+      "name": "NR 31 - Saúde e Segurança com Produtos Agrotóxicos",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "af2cf98f-e455-4f01-a550-46ea7b4ba014",
+      "code": "NR-31-CIPATR",
+      "name": "NR 31 - CIPATR - Comissão Interna de Prevenção de Acidentes no Trabalho Rural",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "67882429-c716-45e8-bfa2-bf51332611ee",
+      "code": "NR-31-I",
+      "name": "NR 31 - Saúde e Segurança no Trabalho Rural - Admissional",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "c70d0c73-db94-492e-9850-ce69bd089a37",
+      "code": "NR-31-P",
+      "name": "NR 31 - Saúde e Segurança no Trabalho Rural - Periódico",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "15caf314-7c1b-4888-ad5f-208e54819f3d",
+      "code": "NR-32-F",
+      "name": "NR 32 - Segurança e Saúde no Serviço de Saúde / Biossegurança",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "ec1e7571-3ce0-487b-9226-809d6af027a3",
+      "code": "NR-33-AUT",
+      "name": "NR 33 - Espaços Confinados - Trabalhador Autorizado",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "1591ba1a-59fc-4e5b-b296-9e4ef0497654",
+      "code": "NR-33-SUP",
+      "name": "NR 33 - Espaços Confinados - Supervisor",
+      "is_active": true,
+      "carga_horaria": 16
+    },
+    {
+      "id": "79e6c5b1-83e0-46df-a769-4f2ab26db2ee",
+      "code": "NR-34-ADM",
+      "name": "NR 34 - Segurança e Saúde no Trabalho Naval - Admissional",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "0f893ae1-d635-4937-8a6f-1cc9c7c26854",
+      "code": "NR-34-PER",
+      "name": "NR 34 - Segurança e Saúde no Trabalho Naval - Periódico",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "09647700-05b8-4306-92b7-264fa9000d2e",
+      "code": "NR-35",
+      "name": "NR-35 Trabalho em Altura",
+      "is_active": false,
+      "carga_horaria": 8
+    },
+    {
+      "id": "72f2a3b0-a164-444f-a7de-5bf9423c6908",
+      "code": "NR-35-F",
+      "name": "NR 35 - Trabalho em Altura",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "f4a34de8-156c-414e-8cc1-7eb407beb02e",
+      "code": "NR-36-F",
+      "name": "NR 36 - Segurança e Saúde em Frigoríficos / Abate e Processamento de Carnes",
+      "is_active": true,
+      "carga_horaria": 8
+    },
+    {
+      "id": "f4e63fbb-0f6b-47a6-bafe-7c39c4e92c03",
+      "code": "PCA-F",
+      "name": "Programa de Conservação Auditiva - PCA",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "651320d2-a241-4f00-a73d-183d55a1f558",
+      "code": "PPR-F",
+      "name": "Programa de Proteção Respiratória - PPR",
+      "is_active": true,
+      "carga_horaria": 4
+    },
+    {
+      "id": "5e2ef371-82f3-4e96-a438-90fe2d2851f3",
+      "code": "PS-F",
+      "name": "Primeiros Socorros",
+      "is_active": true,
+      "carga_horaria": 8
+    }
+  ],
+  "lessons": [
+    {
+      "id": "c23bc597-0558-4a41-80ba-c549e4666750",
+      "course_id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "title": "Conceito de EPI, Certificado de Aprovação e Responsabilidades",
+      "order": 1,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/c23bc597-0558-4a41-80ba-c549e4666750/video/nr06-aula-01.mp4",
+      "duration_seconds": 258,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "0034e53f-ca26-42e4-8563-8ed3e24109c1",
+      "course_id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "title": "Proteção da Cabeça e Proteção de Olhos e Face",
+      "order": 2,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/0034e53f-ca26-42e4-8563-8ed3e24109c1/video/nr06-aula-02.mp4",
+      "duration_seconds": 313,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "0a897595-423f-4290-9b6d-52403369959f",
+      "course_id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "title": "Proteção Auditiva e Proteção das Vias Respiratórias",
+      "order": 3,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/0a897595-423f-4290-9b6d-52403369959f/video/nr06-aula-03.mp4",
+      "duration_seconds": 344,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "6997ef3b-83be-4abc-9dd1-fd49fe9de305",
+      "course_id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "title": "Proteção do Tronco e Membros Superiores",
+      "order": 4,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/6997ef3b-83be-4abc-9dd1-fd49fe9de305/video/nr06-aula-04.mp4",
+      "duration_seconds": 295,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "d8cbf5df-29cf-48c9-819f-aa15494e9f1e",
+      "course_id": "0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1",
+      "title": "Proteção dos Membros Inferiores, Corpo Inteiro e Quedas",
+      "order": 5,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/d8cbf5df-29cf-48c9-819f-aa15494e9f1e/video/nr06-aula-05.mp4",
+      "duration_seconds": 287,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "cd704f72-bad0-4a15-b635-cb5759618b49",
+      "course_id": "72f2a3b0-a164-444f-a7de-5bf9423c6908",
+      "title": "Introdução à NR 35, Legislação e Responsabilidades",
+      "order": 1,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/cd704f72-bad0-4a15-b635-cb5759618b49/video/nr35-aula-01.mp4",
+      "duration_seconds": 351,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "b6227b8a-f78d-4a85-a2b7-d1e74e05a211",
+      "course_id": "72f2a3b0-a164-444f-a7de-5bf9423c6908",
+      "title": "Riscos Ocupacionais e Avaliação",
+      "order": 2,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/b6227b8a-f78d-4a85-a2b7-d1e74e05a211/video/nr35-aula-02.mp4",
+      "duration_seconds": 345,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "1054518e-3901-402e-a61d-3b71b217a9db",
+      "course_id": "72f2a3b0-a164-444f-a7de-5bf9423c6908",
+      "title": "Medidas de Controle e EPI",
+      "order": 3,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/1054518e-3901-402e-a61d-3b71b217a9db/video/nr35-aula-03.mp4",
+      "duration_seconds": 354,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "2e50e9f7-bcf5-4e85-83ee-bfcd51490463",
+      "course_id": "72f2a3b0-a164-444f-a7de-5bf9423c6908",
+      "title": "Análise de Risco, Acidente, Ancoragem, PT e Emergência",
+      "order": 4,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/2e50e9f7-bcf5-4e85-83ee-bfcd51490463/video/nr35-aula-04.mp4",
+      "duration_seconds": 324,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "0e61ea11-1761-41af-8f87-9c1896638949",
+      "course_id": "cdddf393-bbd0-46d6-9e80-2261d6abd2f6",
+      "title": "Introdução, Responsabilidades e Instalações",
+      "order": 1,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/0e61ea11-1761-41af-8f87-9c1896638949/video/nr12-aula-01.mp4",
+      "duration_seconds": 252,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "7ede0a50-731d-4e9f-9712-966f30ce3fe3",
+      "course_id": "cdddf393-bbd0-46d6-9e80-2261d6abd2f6",
+      "title": "Estabilidade, Instalações Elétricas e Dispositivos de Partida",
+      "order": 2,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/7ede0a50-731d-4e9f-9712-966f30ce3fe3/video/nr12-aula-02.mp4",
+      "duration_seconds": 272,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "7b65cd75-47c7-4887-bf6a-285cb217ce2a",
+      "course_id": "cdddf393-bbd0-46d6-9e80-2261d6abd2f6",
+      "title": "Sistemas de Segurança, Meios de Acesso e Cuidados em Operações",
+      "order": 3,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/7b65cd75-47c7-4887-bf6a-285cb217ce2a/video/nr12-aula-03.mp4",
+      "duration_seconds": 273,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "f377d6f9-4bd5-4e14-b254-3d3da515442d",
+      "course_id": "cdddf393-bbd0-46d6-9e80-2261d6abd2f6",
+      "title": "Intervenções, Bloqueio, Sinalizações e Referências",
+      "order": 4,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/f377d6f9-4bd5-4e14-b254-3d3da515442d/video/nr12-aula-04.mp4",
+      "duration_seconds": 283,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "c642001d-8c44-4542-b1ce-d89a76b02aa7",
+      "course_id": "ec1e7571-3ce0-487b-9226-809d6af027a3",
+      "title": "Conceitos, Tipos e Papéis em Espaços Confinados",
+      "order": 1,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/c642001d-8c44-4542-b1ce-d89a76b02aa7/video/nr33-autorizado-aula-01.mp4",
+      "duration_seconds": 245,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "4f250862-e37d-4bbb-b578-74b84b7f5ac0",
+      "course_id": "ec1e7571-3ce0-487b-9226-809d6af027a3",
+      "title": "Reconhecimento dos Riscos e Atmosferas Perigosas",
+      "order": 2,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/4f250862-e37d-4bbb-b578-74b84b7f5ac0/video/nr33-autorizado-aula-02.mp4",
+      "duration_seconds": 288,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "29d26e49-87cd-4c63-ae4c-7aec796aeb88",
+      "course_id": "ec1e7571-3ce0-487b-9226-809d6af027a3",
+      "title": "Controle de Riscos, EPI e Equipamentos de Medição",
+      "order": 3,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/29d26e49-87cd-4c63-ae4c-7aec796aeb88/video/nr33-autorizado-aula-03.mp4",
+      "duration_seconds": 277,
+      "is_free_preview": false,
+      "is_required": true
+    },
+    {
+      "id": "8bca8b92-eebf-4b74-b332-a2361a998d91",
+      "course_id": "ec1e7571-3ce0-487b-9226-809d6af027a3",
+      "title": "Acidente do Trabalho, CAT e Procedimentos de Emergência",
+      "order": 4,
+      "content_type": "UPLOAD",
+      "video_url": null,
+      "storage_key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/8bca8b92-eebf-4b74-b332-a2361a998d91/video/nr33-autorizado-aula-04.mp4",
+      "duration_seconds": 91,
+      "is_free_preview": false,
+      "is_required": true
+    }
+  ]
+}

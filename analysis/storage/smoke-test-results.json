@@ -1,0 +1,96 @@
+{
+  "sample_size": 7,
+  "results": [
+    {
+      "course_code": "NR-06-F",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/c23bc597-0558-4a41-80ba-c549e4666750/video/nr06-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/37971163",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/c23bc597-0558-4a41-80ba-c549e4666750/video/nr06-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-10-B",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/6b93fa38-f6f5-4e61-8e75-b5752241c339/lessons/65a1886b-5a37-4362-84b8-88e963654d4f/video/nr10-basico-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/49164352",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/6b93fa38-f6f5-4e61-8e75-b5752241c339/lessons/65a1886b-5a37-4362-84b8-88e963654d4f/video/nr10-basico-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-11-EMP",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/91c19531-057e-4cd2-8062-f51c879e0d41/lessons/7bb4a6f5-9379-468d-abed-eeab1498b77e/video/nr11-empilhadeira-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/58242424",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/91c19531-057e-4cd2-8062-f51c879e0d41/lessons/7bb4a6f5-9379-468d-abed-eeab1498b77e/video/nr11-empilhadeira-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-12-F",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/0e61ea11-1761-41af-8f87-9c1896638949/video/nr12-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/42154225",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/0e61ea11-1761-41af-8f87-9c1896638949/video/nr12-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-18-F",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/4de78efa-4195-4339-9be2-24202daa7394/lessons/b5c98c9d-0190-4829-886a-ff1bbf2167af/video/nr18-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/45414770",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/4de78efa-4195-4339-9be2-24202daa7394/lessons/b5c98c9d-0190-4829-886a-ff1bbf2167af/video/nr18-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-33-AUT",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/c642001d-8c44-4542-b1ce-d89a76b02aa7/video/nr33-autorizado-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/43499859",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/c642001d-8c44-4542-b1ce-d89a76b02aa7/video/nr33-autorizado-aula-01.mp4?<REDACTED_TOKEN>"
+    },
+    {
+      "course_code": "NR-35-F",
+      "lesson_number": 1,
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/cd704f72-bad0-4a15-b635-cb5759618b49/video/nr35-aula-01.mp4",
+      "get_status": 206,
+      "content_type": "video/mp4",
+      "content_length": "1024",
+      "content_range": "bytes 0-1023/56840576",
+      "range_status": 206,
+      "range_bytes_received": 1024,
+      "range_support": true,
+      "url_redacted": "https://t3.storageapi.dev/wr-course-assets-rr3in3p0/tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/cd704f72-bad0-4a15-b635-cb5759618b49/video/nr35-aula-01.mp4?<REDACTED_TOKEN>"
+    }
+  ]
+}

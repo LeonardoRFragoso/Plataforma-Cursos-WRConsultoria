@@ -1,0 +1,445 @@
+{
+  "bucket": "wr-course-assets-rr3in3p0",
+  "endpoint": "https://t3.storageapi.dev",
+  "region": "iad",
+  "prefix": "tenants/",
+  "total_objects": 64,
+  "video_objects": 17,
+  "objects": [
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/0034e53f-ca26-42e4-8563-8ed3e24109c1/video/nr06-aula-02.mp4",
+      "size": 45028254,
+      "etag": "5762ef0513046972602af7efeba905d7",
+      "last_modified": "2026-08-27T12:29:39+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 45028254
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/0a897595-423f-4290-9b6d-52403369959f/video/nr06-aula-03.mp4",
+      "size": 48104911,
+      "etag": "f3402337d1b787e91c13b8094411af26",
+      "last_modified": "2026-08-27T12:29:56+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 48104911
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/6997ef3b-83be-4abc-9dd1-fd49fe9de305/video/nr06-aula-04.mp4",
+      "size": 42281763,
+      "etag": "ac5fea9df9ee684d5331a0e303242056",
+      "last_modified": "2026-08-27T12:30:08+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 42281763
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/c23bc597-0558-4a41-80ba-c549e4666750/video/nr06-aula-01.mp4",
+      "size": 37971163,
+      "etag": "5c060bde6a34eb898b1e4ef9cb316abb",
+      "last_modified": "2026-08-27T12:29:27+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 37971163
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/lessons/d8cbf5df-29cf-48c9-819f-aa15494e9f1e/video/nr06-aula-05.mp4",
+      "size": 41677108,
+      "etag": "21c735f783ba46bab682606addcc296b",
+      "last_modified": "2026-08-27T12:30:19+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 41677108
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0194a7f6-85c0-4aaf-87b0-1f26ddbd6cb1/materials/7ce74f09bfd50d15/nr6.pdf",
+      "size": 8865736,
+      "etag": "6cea934720887df06977da28277a4d4d",
+      "last_modified": "2026-08-27T12:00:12+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/0f893ae1-d635-4937-8a6f-1cc9c7c26854/materials/6e66318ea318aea7/nr34periodico.pdf",
+      "size": 6154519,
+      "etag": "a3d7e2f6994a59a28363a6fe79dcfbe4",
+      "last_modified": "2026-08-27T12:00:25+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/1591ba1a-59fc-4e5b-b296-9e4ef0497654/materials/d8bad6104d51ba3d/nr33supervisor.pdf",
+      "size": 4167683,
+      "etag": "9346636f81465069a1cbd3cb09f1092a",
+      "last_modified": "2026-08-27T11:59:54+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/15caf314-7c1b-4888-ad5f-208e54819f3d/materials/a973b758384e57a0/nr32.pdf",
+      "size": 3607471,
+      "etag": "b80de56e52f74e46b9700890b1241472",
+      "last_modified": "2026-08-27T11:59:33+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/1eba95fd-63c5-42b4-8e44-cb9ad359ef9e/materials/495680411a805512/nr29portuario.pdf",
+      "size": 8015524,
+      "etag": "fa3fb3d1ca6852bcb7672353fdcfd6c5",
+      "last_modified": "2026-08-27T12:04:39+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/295e97a4-6e73-438b-89ab-7c661c4c9bfe/materials/161ea52b9f0706d9/nr20avancadoi.pdf",
+      "size": 5967761,
+      "etag": "f1e1d3ad3d926fc742cb18958401be6d",
+      "last_modified": "2026-08-27T11:59:29+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/2c92d8c4-34b7-495b-b58d-789368de6468/materials/c3071a1aead1986b/nr17checkout.pdf",
+      "size": 3449322,
+      "etag": "c65c11b44f3c2cd7f5d3fc58fdf572b2",
+      "last_modified": "2026-08-27T12:05:09+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/2e231cc1-d753-4707-90b0-582ebb6c9002/materials/8eeb71a28c1a053f/nr31agrotoxicos.pdf",
+      "size": 7482617,
+      "etag": "56f2ad03a587f567896f18df856ea702",
+      "last_modified": "2026-08-27T12:00:02+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/32f505f0-4643-4994-9ab7-143aca73d720/materials/c869516b9536ddaf/nr11plataforma.pdf",
+      "size": 7080149,
+      "etag": "f746ca842007f86953d477e2379551fa",
+      "last_modified": "2026-08-27T12:04:52+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/38b8d4e2-1ff6-4feb-a59e-f419715b97c7/materials/a16d054b9cfa830a/nr20especifico.pdf",
+      "size": 2466830,
+      "etag": "06b146d31a3b22dff88ee41efdc7846e",
+      "last_modified": "2026-08-27T12:05:36+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/3cc2d459-38f8-4072-b9cb-65fb8591f74c/materials/6904ff45c6e16d19/nr17telemarketing.pdf",
+      "size": 3034411,
+      "etag": "e6d18440887a6620fd78da221affa481",
+      "last_modified": "2026-08-27T12:00:14+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/470f5368-fddb-464d-966d-6f56e394ca0f/materials/863d64625bccc0ff/nr26laboratorio.pdf",
+      "size": 5538105,
+      "etag": "d5cadb813706b19da900385d85728a48",
+      "last_modified": "2026-08-27T12:00:16+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/4de78efa-4195-4339-9be2-24202daa7394/materials/6a4769e0da7b3fdb/nr18.pdf",
+      "size": 8174881,
+      "etag": "1c70be5c44ed91cf600a84b29d397b5f",
+      "last_modified": "2026-08-27T12:04:48+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/4ee87fdc-d4cf-4021-aeda-cce10f8a22cc/materials/0400c3cdab93282f/nr1.pdf",
+      "size": 9941333,
+      "etag": "d7632aeb857424133b7d7c2f173f643e",
+      "last_modified": "2026-08-27T12:05:23+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/5e187ca7-bf00-44e9-ab07-a9dc8d238606/materials/66a16c9b87453773/nr29sinaleiro.pdf",
+      "size": 6151684,
+      "etag": "68703b1312e5861124ec07cbe8a2e960",
+      "last_modified": "2026-08-27T12:00:09+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/5e2ef371-82f3-4e96-a438-90fe2d2851f3/materials/d37933823c4e0247/primeirossocorros.pdf",
+      "size": 4883438,
+      "etag": "10057113c0c2a431d0d44604e63f486b",
+      "last_modified": "2026-08-27T12:05:07+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/651320d2-a241-4f00-a73d-183d55a1f558/materials/c92036bf74d1b61d/ppr.pdf",
+      "size": 3502853,
+      "etag": "9acb8a32842316f12817baba3f06d797",
+      "last_modified": "2026-08-27T11:59:38+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/67882429-c716-45e8-bfa2-bf51332611ee/materials/08ffbe2f4ab45da3/nr31inicial.pdf",
+      "size": 7115573,
+      "etag": "5b2d26e55121126b36b4fab5ce5ca534",
+      "last_modified": "2026-08-27T12:05:33+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/69eec7d4-2072-430e-9bfd-36c7acc19ab6/materials/e87f7f3c8f0069fc/nr23.pdf",
+      "size": 5696608,
+      "etag": "a5e1e2e631d8ddfeb7657e21976ee2ce",
+      "last_modified": "2026-08-27T11:59:41+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/6b93fa38-f6f5-4e61-8e75-b5752241c339/materials/403c7fd382084663/nr10basico.pdf",
+      "size": 16439508,
+      "etag": "3f31ac1a0f4a08262daa0336dd846f8e",
+      "last_modified": "2026-08-27T11:59:21+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/6ecf7723-d6ef-4c2d-9a9e-6339a65f8e7a/materials/11f2f692e5f13207/nr20intermediario.pdf",
+      "size": 5886616,
+      "etag": "e66d90903e11c1edcaecf88bb63eddc4",
+      "last_modified": "2026-08-27T12:05:25+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/1054518e-3901-402e-a61d-3b71b217a9db/video/nr35-aula-03.mp4",
+      "size": 58539618,
+      "etag": "a8ad2f6de9d77182078a44014ade72c4",
+      "last_modified": "2026-08-27T12:48:53+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 58539618
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/2e50e9f7-bcf5-4e85-83ee-bfcd51490463/video/nr35-aula-04.mp4",
+      "size": 52822768,
+      "etag": "9a82e0a2e5f4cefb7c40a5c4f575703a",
+      "last_modified": "2026-08-27T12:49:07+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 52822768
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/b6227b8a-f78d-4a85-a2b7-d1e74e05a211/video/nr35-aula-02.mp4",
+      "size": 56178948,
+      "etag": "3103beb1fd9ddccb6ef0f6cc5bd28c7a",
+      "last_modified": "2026-08-27T12:48:37+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 56178948
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/lessons/cd704f72-bad0-4a15-b635-cb5759618b49/video/nr35-aula-01.mp4",
+      "size": 56840576,
+      "etag": "243c808a6010980353deab664364a27e",
+      "last_modified": "2026-08-27T12:48:23+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 56840576
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/72f2a3b0-a164-444f-a7de-5bf9423c6908/materials/4a1e5464223b3ef0/nr35.pdf",
+      "size": 6987192,
+      "etag": "1e5566b3c924edad7b17db3c4eca4cd8",
+      "last_modified": "2026-08-27T12:00:07+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/751a3666-6a99-416b-9d7e-715e7e15afe2/materials/f5373d06c3894724/nr22.pdf",
+      "size": 18740875,
+      "etag": "79b0299a19a0d0e323a903d83452e688",
+      "last_modified": "2026-08-27T12:00:00+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/79e6c5b1-83e0-46df-a769-4f2ab26db2ee/materials/1b1623f5dfeae826/nr34admissional.pdf",
+      "size": 6363078,
+      "etag": "3ec117d94e759b9997b09c3cbf0874b0",
+      "last_modified": "2026-08-27T12:05:41+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/7dd20151-3abf-4b3e-9193-036fa37ddbce/materials/90423ee5b51cf107/nr20basico.pdf",
+      "size": 5198636,
+      "etag": "0d90b39050134547fce85a367bc98516",
+      "last_modified": "2026-08-27T12:00:22+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/820c83fa-85ba-4b1d-8e30-f4051f794d33/materials/e328110b0efc3f75/nr11minicarregadeira.pdf",
+      "size": 6268938,
+      "etag": "987da1cceec08a6b4eae4838515c6f6c",
+      "last_modified": "2026-08-27T12:00:29+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/8e43ad54-1d79-4ea7-b3eb-66f2c458157e/materials/0ee8e63249ef760f/ginasticalaboral.pdf",
+      "size": 3017173,
+      "etag": "c7ecf3650f5c86b3f8c65a1c76c69971",
+      "last_modified": "2026-08-27T11:59:22+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/8ee1bc8e-fa64-495c-9deb-99ed51846ffb/materials/83fa4d5ebe7e3367/nr20avancadoii.pdf",
+      "size": 6083567,
+      "etag": "9c7ff78b13d521b571433ea5c91ffb14",
+      "last_modified": "2026-08-27T11:59:11+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/91c19531-057e-4cd2-8062-f51c879e0d41/materials/ddf7bb8381750256/nr11empilhadeira.pdf",
+      "size": 8607947,
+      "etag": "578d78e18abb9a96c222abca99aad59b",
+      "last_modified": "2026-08-27T11:59:16+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/938161bc-09f2-4f75-b965-4643b7ed289f/materials/91d8b946f87378d1/nr17administrativas.pdf",
+      "size": 3409688,
+      "etag": "5464fbd7a54ebabd497b7342cd96f063",
+      "last_modified": "2026-08-27T11:59:39+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/95f233eb-c1de-434b-ab89-b9e4fb13b8eb/materials/a95cfd7806e4f242/nr11ponte.pdf",
+      "size": 6869598,
+      "etag": "2d315c971f4b7adedfbe037b728c2ead",
+      "last_modified": "2026-08-27T11:59:32+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/9ac7da6b-44a7-46e4-9055-87e35276fdcb/materials/4e8d2efd15a194eb/nr11guindauto.pdf",
+      "size": 8441584,
+      "etag": "c9d2f148231d5daaa728769c6fd3ce6b",
+      "last_modified": "2026-08-27T11:59:36+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/9d24363c-8640-4915-9ea0-1c13e44b37b0/materials/0b0d2eacf215a6b4/nr17transporte.pdf",
+      "size": 2767225,
+      "etag": "31ac1c531b30ebb921e602414fe7d7d2",
+      "last_modified": "2026-08-27T11:59:46+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/a769e673-22c5-4a3d-bd56-eb99137666c1/materials/b869d409ed9ed12f/direcaodefensiva.pdf",
+      "size": 6917641,
+      "etag": "746b2fe891f20d812273e65748cb4b7b",
+      "last_modified": "2026-08-27T12:04:34+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/af2cf98f-e455-4f01-a550-46ea7b4ba014/materials/a4f484ce9f5f78fa/nr31cipatr.pdf",
+      "size": 16192958,
+      "etag": "e7ade95fe88d72c4c96c9d55242231a2",
+      "last_modified": "2026-08-27T11:59:52+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/b6457d7b-4eb0-437d-b9bc-27495c997292/materials/23dd951fa05d5a1f/nr11retroescavadeira.pdf",
+      "size": 7722150,
+      "etag": "ffebb943824f730ce23e775fccda0c55",
+      "last_modified": "2026-08-27T12:04:44+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/b6b560c0-d22a-4eef-a530-2b4d28393cee/materials/59d2dc4d7589c1f8/nr26.pdf",
+      "size": 5112584,
+      "etag": "820f7f4dec14a96695f849b188ffd83a",
+      "last_modified": "2026-08-27T11:59:13+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/b9010c0e-baaf-4216-a2c4-4b7ab01f0061/materials/6d8652fc87d4e2c4/brigadavoluntaria.pdf",
+      "size": 5090044,
+      "etag": "6e7dfae393435159fec821751ee2915e",
+      "last_modified": "2026-08-27T11:59:27+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/c00cbc64-4ef2-484d-a4fd-126ccf1fbdf4/materials/050c47d5277268e2/nr29cpatp.pdf",
+      "size": 15540576,
+      "etag": "720d3ec9f07d738fa45c0eb1fd5055c6",
+      "last_modified": "2026-08-27T12:00:20+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/c70d0c73-db94-492e-9850-ce69bd089a37/materials/5eede8b2f2e739fc/nr31periodico.pdf",
+      "size": 7355284,
+      "etag": "8740237f0eb27d14b5d0f7cf1931bb33",
+      "last_modified": "2026-08-27T11:59:44+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/0e61ea11-1761-41af-8f87-9c1896638949/video/nr12-aula-01.mp4",
+      "size": 42154225,
+      "etag": "227d6e92971aaed939e97a724ed7f14f",
+      "last_modified": "2026-08-27T12:36:05+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 42154225
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/7b65cd75-47c7-4887-bf6a-285cb217ce2a/video/nr12-aula-03.mp4",
+      "size": 44221562,
+      "etag": "a3f0aea610aba926c5e4a2845663b60f",
+      "last_modified": "2026-08-27T12:36:34+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 44221562
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/7ede0a50-731d-4e9f-9712-966f30ce3fe3/video/nr12-aula-02.mp4",
+      "size": 44362812,
+      "etag": "29cd1193b9cb85703960132720ce8c0c",
+      "last_modified": "2026-08-27T12:36:17+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 44362812
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/lessons/f377d6f9-4bd5-4e14-b254-3d3da515442d/video/nr12-aula-04.mp4",
+      "size": 45342178,
+      "etag": "253a823489ae22cae5de92586fbe2391",
+      "last_modified": "2026-08-27T12:36:55+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 45342178
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/cdddf393-bbd0-46d6-9e80-2261d6abd2f6/materials/ebba3c717ad2c53e/nr12.pdf",
+      "size": 3956228,
+      "etag": "3eedc4b5660537ca168d5458734b61fc",
+      "last_modified": "2026-08-27T12:00:27+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/d80c524b-4b4b-4c6b-8650-231663e12c44/materials/468d56b9ca4c4045/nr5.pdf",
+      "size": 20184170,
+      "etag": "b87b425d2e021743bbbbd460563054b8",
+      "last_modified": "2026-08-27T12:05:18+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/29d26e49-87cd-4c63-ae4c-7aec796aeb88/video/nr33-autorizado-aula-03.mp4",
+      "size": 47298760,
+      "etag": "afff6d8cd99c706c125121c7a23ac6aa",
+      "last_modified": "2026-08-27T12:40:51+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 47298760
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/4f250862-e37d-4bbb-b578-74b84b7f5ac0/video/nr33-autorizado-aula-02.mp4",
+      "size": 48527685,
+      "etag": "df18e2ffb0283535d9b6de73d8995f70",
+      "last_modified": "2026-08-27T12:40:33+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 48527685
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/8bca8b92-eebf-4b74-b332-a2361a998d91/video/nr33-autorizado-aula-04.mp4",
+      "size": 24368335,
+      "etag": "d7a8274e41bb572f5221e2b823af9257",
+      "last_modified": "2026-08-27T12:41:04+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 24368335
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/lessons/c642001d-8c44-4542-b1ce-d89a76b02aa7/video/nr33-autorizado-aula-01.mp4",
+      "size": 43499859,
+      "etag": "fe666104e46e98940f2f254ff8ede969",
+      "last_modified": "2026-08-27T12:40:12+00:00",
+      "content_type": "video/mp4",
+      "metadata": {},
+      "content_length": 43499859
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ec1e7571-3ce0-487b-9226-809d6af027a3/materials/7661f18d78899cf4/nr33autorizado.pdf",
+      "size": 4846481,
+      "etag": "f53e4df24f59b4f1e2afb0b73ea2f0dd",
+      "last_modified": "2026-08-27T12:00:31+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/edd4e5cf-b123-45c0-a6eb-77bb9c4764a2/materials/69318e55ede17a60/nr10sep.pdf",
+      "size": 10578698,
+      "etag": "d3346ab73bf42fc0523bd018082b077e",
+      "last_modified": "2026-08-27T12:05:03+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/ef19cf25-1138-465a-aa3c-dc7af2a6a1a7/materials/d4ea97b38bd06c48/nr20.pdf",
+      "size": 5184722,
+      "etag": "4060b0dc38a73a006a9757f016ad5514",
+      "last_modified": "2026-08-27T11:59:48+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/f4a34de8-156c-414e-8cc1-7eb407beb02e/materials/d9de7efbb9f86a5f/nr36.pdf",
+      "size": 6263463,
+      "etag": "dff1cda5f3f921a20c87149add3a6179",
+      "last_modified": "2026-08-27T11:59:25+00:00"
+    },
+    {
+      "key": "tenants/11111111-1111-1111-1111-111111111111/courses/f4e63fbb-0f6b-47a6-bafe-7c39c4e92c03/materials/602fc7203b88faea/pca.pdf",
+      "size": 3613914,
+      "etag": "28d152428d87f6eab84d2b0e38b98b00",
+      "last_modified": "2026-08-27T12:00:04+00:00"
+    }
+  ]
+}
