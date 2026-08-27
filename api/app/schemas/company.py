@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.core.normalization import validate_cnpj
 
 
 class CompanyBase(BaseModel):
@@ -19,6 +21,11 @@ class CompanyBase(BaseModel):
     city: str | None = None
     state: str | None = None
     zip_code: str | None = None
+
+    @field_validator("cnpj")
+    @classmethod
+    def validate_company_cnpj(cls, value: str) -> str:
+        return validate_cnpj(value)
 
 
 class CompanyCreate(CompanyBase):
@@ -40,6 +47,11 @@ class CompanyUpdate(BaseModel):
     city: str | None = None
     state: str | None = None
     zip_code: str | None = None
+
+    @field_validator("cnpj")
+    @classmethod
+    def validate_company_cnpj(cls, value: str | None) -> str | None:
+        return validate_cnpj(value) if value else value
 
 
 class CompanyResponse(CompanyBase):
