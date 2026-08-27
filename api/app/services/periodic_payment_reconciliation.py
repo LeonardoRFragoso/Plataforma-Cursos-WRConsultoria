@@ -126,7 +126,12 @@ async def reconcile_tenant_payments(
     *,
     limit: int = 250,
 ) -> dict:
-    """Poll canonical provider state for financially relevant payments."""
+    """Poll canonical provider state for financially relevant payments.
+
+    Rows never reconciled are processed first, then the least-recently polled.
+    Each payment uses a database savepoint so one malformed historical record
+    cannot roll back successful reconciliation of the rest of the batch.
+    """
     if limit < 1 or limit > 1000:
         raise ValueError("limit must be between 1 and 1000")
 
@@ -149,7 +154,10 @@ async def reconcile_tenant_payments(
                     Payment.mercado_pago_id.is_not(None),
                 ),
             )
-            .order_by(Payment.updated_at.asc())
+            .order_by(
+                Payment.last_reconciled_at.asc().nullsfirst(),
+                Payment.updated_at.asc(),
+            )
             .limit(limit)
         )
     ).scalars().all()
@@ -170,87 +178,94 @@ async def reconcile_tenant_payments(
             summary["ignored"] += 1
             continue
 
+        had_review = bool(payment.review_required)
         try:
-            provider = providers.get(payment.provider)
-            if provider is None:
-                provider = await _provider_for_payment(db, tenant, payment.provider)
-                providers[payment.provider] = provider
+            async with db.begin_nested():
+                provider = providers.get(payment.provider)
+                if provider is None:
+                    provider = await _provider_for_payment(db, tenant, payment.provider)
+                    providers[payment.provider] = provider
 
-            info = await provider.get_payment_info(lookup_id)
-            summary["reconciled"] += 1
+                info = await provider.get_payment_info(lookup_id)
+                summary["reconciled"] += 1
+                payment.last_reconciled_at = utc_now()
+                payment.last_provider_status = (info.status or "UNKNOWN")[:64]
 
-            if info.external_reference and info.external_reference != str(payment.id):
-                payment.review_required = True
-                payment.review_reason = "periodic_reconciliation_external_reference_mismatch"
-                await ensure_payment_review(db, payment, source="periodic_reconciliation")
-                summary["reviews_opened"] += 1
-                continue
+                if info.external_reference and info.external_reference != str(payment.id):
+                    payment.review_required = True
+                    payment.review_reason = "periodic_reconciliation_external_reference_mismatch"
+                    await ensure_payment_review(db, payment, source="periodic_reconciliation")
+                    if not had_review:
+                        summary["reviews_opened"] += 1
+                    continue
 
-            if info.amount is not None and abs(float(info.amount) - float(payment.amount)) >= 0.01:
-                payment.review_required = True
-                payment.review_reason = "periodic_reconciliation_amount_mismatch"
-                await ensure_payment_review(db, payment, source="periodic_reconciliation")
-                summary["reviews_opened"] += 1
-                continue
+                if info.amount is not None and abs(float(info.amount) - float(payment.amount)) >= 0.01:
+                    payment.review_required = True
+                    payment.review_reason = "periodic_reconciliation_amount_mismatch"
+                    await ensure_payment_review(db, payment, source="periodic_reconciliation")
+                    if not had_review:
+                        summary["reviews_opened"] += 1
+                    continue
 
-            enrollment = None
-            if payment.enrollment_id:
-                enrollment = (
-                    await db.execute(
-                        select(Enrollment).where(
-                            Enrollment.id == payment.enrollment_id,
-                            Enrollment.tenant_id == tenant_id,
+                enrollment = None
+                if payment.enrollment_id:
+                    enrollment = (
+                        await db.execute(
+                            select(Enrollment).where(
+                                Enrollment.id == payment.enrollment_id,
+                                Enrollment.tenant_id == tenant_id,
+                            )
                         )
+                    ).scalar_one_or_none()
+
+                action = provider_status_action(
+                    payment.provider,
+                    info.status,
+                    (info.raw or {}).get("status_detail") if info.raw else None,
+                )
+                previous_status = payment.status
+                previous_enrollment_status = enrollment.status if enrollment else None
+
+                if action.kind == "normal":
+                    target = action.value
+                    if not isinstance(target, PaymentStatus):
+                        summary["ignored"] += 1
+                        continue
+                    if enrollment:
+                        await reconcile_payment_status(payment, enrollment, target)
+                    else:
+                        payment.status = target
+                        if target == PaymentStatus.APROVADO:
+                            payment.paid_at = payment.paid_at or utc_now()
+                elif action.kind == "special":
+                    await reconcile_special_financial_event(
+                        db,
+                        payment,
+                        enrollment,
+                        str(action.value),
                     )
-                ).scalar_one_or_none()
-
-            action = provider_status_action(
-                payment.provider,
-                info.status,
-                (info.raw or {}).get("status_detail") if info.raw else None,
-            )
-            previous_status = payment.status
-            previous_enrollment_status = enrollment.status if enrollment else None
-            previous_review = bool(payment.review_required)
-
-            if action.kind == "normal":
-                target = action.value
-                if not isinstance(target, PaymentStatus):
+                else:
+                    # Unknown future provider statuses are recorded but never
+                    # guessed into an internal state transition.
                     summary["ignored"] += 1
                     continue
-                if enrollment:
-                    await reconcile_payment_status(payment, enrollment, target)
-                else:
-                    payment.status = target
-                    if target == PaymentStatus.APROVADO:
-                        payment.paid_at = payment.paid_at or utc_now()
-            elif action.kind == "special":
-                await reconcile_special_financial_event(
-                    db,
-                    payment,
-                    enrollment,
-                    str(action.value),
-                )
-            else:
-                summary["ignored"] += 1
-                continue
 
-            # Explicit consistency alert independent from webhook processing.
-            if (
-                enrollment
-                and payment.status == PaymentStatus.APROVADO
-                and enrollment.status == EnrollmentStatus.PENDENTE
-            ):
-                payment.review_required = True
-                payment.review_reason = "approved_without_confirmed_enrollment"
-                await ensure_payment_review(db, payment, source="periodic_reconciliation")
+                # Explicit consistency alert independent from webhook processing.
+                if (
+                    enrollment
+                    and payment.status == PaymentStatus.APROVADO
+                    and enrollment.status == EnrollmentStatus.PENDENTE
+                ):
+                    payment.review_required = True
+                    payment.review_reason = "approved_without_confirmed_enrollment"
+                    await ensure_payment_review(db, payment, source="periodic_reconciliation")
 
-            if payment.review_required and not previous_review:
-                summary["reviews_opened"] += 1
-            if payment.status != previous_status or (
-                enrollment and enrollment.status != previous_enrollment_status
-            ):
-                summary["changed"] += 1
+                if payment.review_required and not had_review:
+                    summary["reviews_opened"] += 1
+                if payment.status != previous_status or (
+                    enrollment and enrollment.status != previous_enrollment_status
+                ):
+                    summary["changed"] += 1
         except PaymentProviderError as exc:
             summary["failed"] += 1
             logger.warning(
