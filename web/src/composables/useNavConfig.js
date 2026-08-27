@@ -28,6 +28,7 @@ export function useNavConfig() {
           { to: '/operations/corporate', label: 'Corporativo B2B', testid: 'corporate-operations', icon: 'briefcase' },
           { to: '/operations/finance', label: 'Reconciliação financeira', testid: 'financial-reconciliation', icon: 'chart' },
           { to: '/operations/certificates', label: 'Certificados confiáveis', testid: 'certificate-operations', icon: 'shield' },
+          { to: '/operations/compliance', label: 'Compliance NR', testid: 'compliance-operations', icon: 'shield' },
         ]},
         { label: 'Certificados', testid: 'certificates-group', icon: 'cert', items: [
           { to: '/certificates', label: 'Certificados', testid: 'certificates', icon: 'cert' },

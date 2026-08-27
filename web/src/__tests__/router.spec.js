@@ -114,6 +114,28 @@ describe('Navigation guards', () => {
     expect(router.currentRoute.value.path).toBe('/operations/certificate-studio')
   })
 
+  it('impede aluno de acessar a operação de Compliance NR', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'student'
+    auth.user = { role: 'student' }
+
+    await router.push('/operations/compliance')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
+  it('permite admin acessar a operação de Compliance NR', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'admin'
+    auth.user = { role: 'admin' }
+
+    await router.push('/operations/compliance')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/operations/compliance')
+  })
+
   it('redireciona student para /dashboard ao acessar rota super_admin', async () => {
     const auth = useAuthStore()
     auth.token = 'fake-token'

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import exists, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -21,6 +22,7 @@ from app.models.compliance_retention import (
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.governance import AdminAuditLog
+from app.models.tenant import Tenant
 from app.models.training_evidence import EnrollmentComplianceProgress, TrainingAccessEvent
 from app.schemas.compliance_operations import (
     ComplianceClassReport,
@@ -331,26 +333,68 @@ async def create_retention_policy_version(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    # Serialize version allocation on the tenant's existing policy rows when
-    # possible. The unique constraint remains the final race-safety boundary.
+    # Serialize version allocation per tenant by locking the tenant row. This
+    # guarantees that even the FIRST version (which has no existing policy row
+    # to SELECT ... FOR UPDATE) cannot be allocated twice concurrently: every
+    # creator contends on the same tenant row before computing the next
+    # version. The unique constraint remains the final race-safety boundary.
+    await db.execute(
+        select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+    )
     latest = (
         await db.execute(
             select(ComplianceRetentionPolicyVersion)
             .where(ComplianceRetentionPolicyVersion.tenant_id == tenant_id)
             .order_by(ComplianceRetentionPolicyVersion.version.desc())
             .limit(1)
-            .with_for_update()
         )
     ).scalar_one_or_none()
+    next_version = (latest.version + 1 if latest else 1)
     item = ComplianceRetentionPolicyVersion(
         tenant_id=tenant_id,
-        version=(latest.version + 1 if latest else 1),
+        version=next_version,
         status=RetentionPolicyStatus.DRAFT,
         created_by=_actor(current_user),
         **payload.model_dump(),
     )
     db.add(item)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Defensive fallback for any residual race (e.g. a version inserted
+        # by a path that bypassed the tenant lock). Re-read the latest
+        # version once and retry; never surface a raw 500 to the caller.
+        await db.rollback()
+        await db.execute(
+            select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+        )
+        latest = (
+            await db.execute(
+                select(ComplianceRetentionPolicyVersion)
+                .where(
+                    ComplianceRetentionPolicyVersion.tenant_id == tenant_id
+                )
+                .order_by(ComplianceRetentionPolicyVersion.version.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        retry_version = (latest.version + 1 if latest else 1)
+        item = ComplianceRetentionPolicyVersion(
+            tenant_id=tenant_id,
+            version=retry_version,
+            status=RetentionPolicyStatus.DRAFT,
+            created_by=_actor(current_user),
+            **payload.model_dump(),
+        )
+        db.add(item)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Retention policy version could not be allocated; retry the request.",
+            )
     await db.refresh(item)
     return item
 
