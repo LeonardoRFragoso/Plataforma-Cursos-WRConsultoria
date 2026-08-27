@@ -1,0 +1,131 @@
+{
+  "audit_date": "2026-08-27T21:00:00Z",
+  "audit_type": "read-only new video location investigation",
+  "changes_made": false,
+  "conclusion": "NEW VIDEOS NOT FOUND IN ANY LOCATION",
+
+  "production_bucket": {
+    "name": "wr-course-assets-rr3in3p0",
+    "endpoint": "https://t3.storageapi.dev",
+    "region": "iad",
+    "total_objects": 132,
+    "video_objects": 85,
+    "pdf_objects": 47,
+    "baseline_total": 132,
+    "identical_to_baseline": 132,
+    "new_videos": 0,
+    "changed_existing": 0,
+    "duplicates": 0,
+    "missing_baseline_keys": 0,
+    "all_prefixes_audited": true,
+    "non_tenants_prefix_objects": 0,
+    "most_recent_upload": "2026-08-27T20:28:16Z (nr33-supervisor-aula-05.mp4 — part of baseline upload)",
+    "oldest_object": "2026-08-27T11:59:11Z (nr20avancado.pdf)"
+  },
+
+  "alternate_buckets": {
+    "list_buckets_accessible": false,
+    "list_buckets_error": "AccessDenied",
+    "candidates_checked": [
+      "wr-videos", "wr-materials", "wr-assets", "wr-media", "wr-upload",
+      "wr-staging", "wr-course-assets", "wr-course-videos", "wr-cursos",
+      "course-assets", "wr-course-assets-staging", "wr-course-assets-upload",
+      "wr-course-assets-new", "wr-course-assets-dev", "wr-course-assets-test"
+    ],
+    "alternate_buckets_found": 0
+  },
+
+  "railway_config": {
+    "project": "wr-white-label-ceo-demo",
+    "environment": "production",
+    "services_checked": ["wr-api", "Postgres", "Redis"],
+    "storage_vars_on_wr-api": [
+      "STORAGE_BACKEND", "STORAGE_BUCKET", "STORAGE_ENDPOINT",
+      "STORAGE_REGION", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY",
+      "STORAGE_WATCH_URL_EXPIRATION"
+    ],
+    "alternate_storage_configs": 0,
+    "second_bucket_config": false,
+    "staging_bucket_config": false,
+    "default_config_bucket": "wr-videos (code default, overridden in production to wr-course-assets-rr3in3p0)",
+    "other_railway_projects": ["independent-respect (no storage config found)"]
+  },
+
+  "git_history_search": {
+    "repo": "LeonardoRFragosto/Plataforma-Cursos-WRConsultoria",
+    "alternate_bucket_references_found": 0,
+    "default_bucket_in_code": "wr-videos (api/app/core/config.py:117, overridden by env)",
+    "test_buckets": ["wr-videos", "wr-materials", "bucket (unit tests only)"]
+  },
+
+  "local_workspace": {
+    "path": "/home/leonardo/dev/Cursos-WR/output",
+    "repo": "LeonardoRFragosto/WR-Course-Video-Generator",
+    "repo_head": "f62ecf1 (feat: complete all 14 priority courses with full audiovisual production)",
+    "total_local_videos": 87,
+    "priority_videos": 85,
+    "nr01_baseline_videos": 1,
+    "preview_derivatives": 1,
+    "sha256_comparison": {
+      "checked": 86,
+      "exact_match": 86,
+      "mismatches": 0,
+      "new_files": 0
+    },
+    "new_local_videos_not_in_baseline": 0,
+    "preview_file": {
+      "filename": "nr01-aula-01-preview.mp4",
+      "path": "/home/leonardo/dev/Cursos-WR/output/preview/nr01-aula-01-preview.mp4",
+      "size_bytes": 23437884,
+      "note": "derivative preview of NR-01 baseline, not a new course video"
+    }
+  },
+
+  "other_directories_searched": [
+    "/home/leonardo/dev/WR-Plataforma-Cursos-cert-demo (worktree, 0 videos)",
+    "/home/leonardo/dev/WR-Plataforma-Cursos-cert-merge (worktree, 0 videos)",
+    "/tmp/wr-compliance-worktree (worktree, 0 videos)",
+    "/home/leonardo/dev/Fundativa (unrelated project, 6 generic videos)",
+    "/home/leonardo/dev/Focon-Engenharia (0 videos)",
+    "/home/leonardo/dev/Leo (0 videos)",
+    "/home/leonardo/dev/Downloads (0 videos)",
+    "/home/leonardo/dev/Desktop (0 videos)",
+    "/home/leonardo/dev/Documents (0 videos)",
+    "/tmp (1 temp render file: react-motion-renderNzRsUs/pre-encode.mp4, not a course video)"
+  ],
+
+  "content_manifests": {
+    "courses": 14,
+    "total_planned_lessons": 85,
+    "courses_with_videos": 14,
+    "lessons_without_videos": 0,
+    "planned_courses_without_videos": 0,
+    "all_manifests_match_bucket_and_db": true
+  },
+
+  "db_state": {
+    "checked_via": "production API (admin token)",
+    "total_courses": 50,
+    "total_lessons": 85,
+    "lessons_with_storage_key": 85,
+    "lessons_without_storage_key": 0,
+    "content_type_upload": 85,
+    "bucket_videos_linked_to_lesson": 85,
+    "orphan_bucket_videos": 0,
+    "db_storage_keys_missing_from_bucket": 0
+  },
+
+  "cross_comparison": {
+    "LOCAL_AND_BUCKET_BASELINE": 85,
+    "LOCAL_NR01_BASELINE_NOT_IN_BUCKET": 1,
+    "LOCAL_NEW_NOT_UPLOADED": 0,
+    "NEW_ALREADY_IN_OTHER_BUCKET": 0,
+    "DUPLICATE_CONTENT": 0,
+    "UNKNOWN": 0,
+    "PREVIEW_DERIVATIVE": 1
+  },
+
+  "new_videos_found": [],
+  "unmapped_videos": [],
+  "conflicts": []
+}
