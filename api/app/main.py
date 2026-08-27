@@ -28,6 +28,7 @@ from app.api.routes import (
     partner_leads,
     payments,
     plans,
+    regulated_learning,
     reports,
     storage,
     students,
@@ -185,6 +186,9 @@ app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["ce
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(corporate.router, prefix="/api/v1/corporate", tags=["corporate"])
 app.include_router(corporate_invites.router, prefix="/api/v1/corporate", tags=["corporate-invites"])
+# Guarded routes are mounted before legacy lesson/assessment routers so the
+# first matching route enforces sequencing and real video completion.
+app.include_router(regulated_learning.router, prefix="/api/v1", tags=["regulated-learning"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
 app.include_router(assessments.router, prefix="/api/v1/assessments", tags=["assessments"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["compliance"])
