@@ -26,7 +26,9 @@ from app.schemas.certificate import (
     CertificateValidationResponse,
     StudentCertificateResponse,
 )
-from app.services.certificate_document_service import CertificateDocumentService
+from app.services.certificate_studio_service import (
+    StudioCertificateDocumentService as CertificateDocumentService,
+)
 from app.services.certificate_service import is_demo_certificate
 
 router = APIRouter(include_in_schema=False)
@@ -53,8 +55,6 @@ async def guarded_validate_certificate(
     if row:
         certificate, document = row
         if certificate.status == "PENDING_SIGNATURE":
-            # Pending artifacts are not public credentials yet. Do not expose
-            # holder/course data or the private pre-signature PDF hash.
             return CertificateValidationResponse(
                 valid=False,
                 status="PENDING_SIGNATURE",
@@ -128,8 +128,6 @@ async def guarded_download_certificate(
         )
     ).scalar_one_or_none()
     if document:
-        # The trusted path always returns persisted bytes. Never regenerate a
-        # signed certificate at download time.
         return await document_routes._download(
             certificate_id=certificate_id,
             original=False,

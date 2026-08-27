@@ -16,3 +16,9 @@ exclude = ["venv"]
 # argumentos; esta é a prática canônica do framework, portanto ignoramos a
 # regra B008 para evitar ruído de falsos positivos.
 lint.ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# ReportLab receives page callbacks as callables; the Studio keeps the local
+# lambda next to `doc.build` so the frozen visual config is explicit at the
+# rendering boundary.
+"app/services/certificate_studio_service.py" = ["E731"]

@@ -70,6 +70,17 @@ describe('Navigation guards', () => {
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
+  it('impede aluno de acessar o Certificate Studio', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'student'
+    auth.user = { role: 'student' }
+
+    await router.push('/operations/certificate-studio')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
   it('permite admin acessar rota admin', async () => {
     const auth = useAuthStore()
     auth.token = 'fake-token'
@@ -90,6 +101,17 @@ describe('Navigation guards', () => {
     await router.push('/operations/finance')
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/operations/finance')
+  })
+
+  it('permite admin acessar o Certificate Studio', async () => {
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'admin'
+    auth.user = { role: 'admin' }
+
+    await router.push('/operations/certificate-studio')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/operations/certificate-studio')
   })
 
   it('redireciona student para /dashboard ao acessar rota super_admin', async () => {

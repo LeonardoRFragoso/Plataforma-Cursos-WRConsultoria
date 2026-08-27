@@ -21,6 +21,7 @@ export const routes = [
   { path: '/operations/corporate', name: 'CorporateOperations', component: () => import('../views/CorporateOperations.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },
   { path: '/operations/finance', name: 'FinancialReconciliation', component: () => import('../views/FinancialReconciliation.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },
   { path: '/operations/certificates', name: 'CertificateOperations', component: () => import('../views/CertificateOperations.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },
+  { path: '/operations/certificate-studio', name: 'CertificateStudio', component: () => import('../views/CertificateStudio.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },
   { path: '/courses', name: 'Courses', component: () => import('../views/Courses.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },
   { path: '/courses/:id/learn', name: 'CourseLearn', component: () => import('../views/CourseLearn.vue'), meta: { requiresAuth: true, layout: 'authenticated' } },
   { path: '/courses/:id/lessons', name: 'CourseLessons', component: () => import('../views/CourseLessons.vue'), meta: { requiresAuth: true, requiresAdmin: true, layout: 'authenticated' } },

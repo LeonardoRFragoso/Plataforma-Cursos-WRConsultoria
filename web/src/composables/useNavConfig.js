@@ -31,6 +31,7 @@ export function useNavConfig() {
         ]},
         { label: 'Certificados', testid: 'certificates-group', icon: 'cert', items: [
           { to: '/certificates', label: 'Certificados', testid: 'certificates', icon: 'cert' },
+          { to: '/operations/certificate-studio', label: 'Certificate Studio', testid: 'certificate-studio', icon: 'palette' },
         ]},
         { label: 'Configurações', testid: 'customization', icon: 'settings', items: [
           { to: '/settings/white-label', label: 'White Label', testid: 'white-label', icon: 'palette' },

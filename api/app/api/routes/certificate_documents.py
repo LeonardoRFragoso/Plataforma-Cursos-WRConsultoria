@@ -19,7 +19,9 @@ from app.schemas.certificate_document import (
     CertificateDocumentResponse,
     CertificateDocumentSnapshotResponse,
 )
-from app.services.certificate_document_service import CertificateDocumentService
+from app.services.certificate_studio_service import (
+    StudioCertificateDocumentService as CertificateDocumentService,
+)
 
 router = APIRouter()
 
@@ -70,7 +72,7 @@ async def prepare_certificate_document(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Freeze the regulatory snapshot and persist the exact pre-signature PDF."""
+    """Freeze the regulatory snapshot, visual template and exact pre-signature PDF."""
     tenant_id = get_current_tenant_id()
     try:
         prepared = await CertificateDocumentService.prepare_document(
@@ -290,3 +292,10 @@ async def download_original_certificate_document(
         db=db,
         current_user=current_user,
     )
+
+
+# Certificate Studio is intentionally mounted under the trusted-document domain.
+# It is admin-only and cannot edit regulatory/academic snapshot facts.
+from app.api.routes import certificate_studio as _certificate_studio  # noqa: E402
+
+router.include_router(_certificate_studio.router, prefix="/studio")

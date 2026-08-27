@@ -8,6 +8,12 @@ from app.models.certificate_signing import (
     CertificateSigningProfile,
     SigningJobStatus,
 )
+from app.models.certificate_template import (
+    CertificateTemplate,
+    CertificateTemplateVersion,
+    CertificateTemplateVersionStatus,
+    CourseCertificateTemplateAssignment,
+)
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
 from app.models.compliance import (
@@ -64,6 +70,9 @@ __all__ = [
     "CertificateSigningEvent",
     "CertificateSigningJob",
     "CertificateSigningProfile",
+    "CertificateTemplate",
+    "CertificateTemplateVersion",
+    "CertificateTemplateVersionStatus",
     "Class",
     "ClassStatus",
     "Company",
@@ -73,6 +82,7 @@ __all__ = [
     "CorporateSeatAllocation",
     "CorporateTrainingRequest",
     "Course",
+    "CourseCertificateTemplateAssignment",
     "CourseComplianceProfile",
     "CourseContentProfile",
     "CourseMaterial",
