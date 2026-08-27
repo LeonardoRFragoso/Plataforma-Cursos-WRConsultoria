@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -38,7 +38,11 @@ class PracticalTrainingRecordCreate(BaseModel):
     @field_validator("performed_at")
     @classmethod
     def reject_future_performance(cls, value: datetime) -> datetime:
-        normalized = value.replace(tzinfo=None) if value.tzinfo is not None else value
+        normalized = (
+            value.astimezone(UTC).replace(tzinfo=None)
+            if value.tzinfo is not None
+            else value
+        )
         if normalized > utc_now():
             raise ValueError("performed_at cannot be in the future")
         return normalized
