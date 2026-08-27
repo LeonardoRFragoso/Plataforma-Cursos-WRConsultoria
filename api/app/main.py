@@ -38,6 +38,7 @@ from app.api.routes import (
     tenant_secrets,
     tenant_subscriptions,
     tenants,
+    training_evidence,
 )
 from app.core.audit import AdminAuditMiddleware
 from app.core.config import settings
@@ -205,6 +206,7 @@ app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliati
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-compliance"])
+app.include_router(training_evidence.router, prefix="/api/v1/training-evidence", tags=["training-evidence"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
