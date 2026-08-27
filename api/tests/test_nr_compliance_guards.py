@@ -1,8 +1,11 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
+from app.core.database import AsyncSessionLocal
 from app.core.utils import utc_now
+from app.models.compliance import CourseComplianceProfile
 from tests.conftest import make_valid_cpf
 
 
@@ -142,7 +145,7 @@ async def test_ready_course_pins_approved_project_when_class_is_created(client, 
 
 
 @pytest.mark.asyncio
-async def test_class_creation_blocks_if_technical_responsible_changes_after_review(client, admin_headers):
+async def test_professional_change_reopens_review_and_blocks_new_class(client, admin_headers):
     course = await _create_regulatory_course(client, admin_headers)
     professional = await _create_professional(client, admin_headers)
     project = await _create_and_approve_project(client, admin_headers, course["id"])
@@ -162,37 +165,87 @@ async def test_class_creation_blocks_if_technical_responsible_changes_after_revi
     )
     assert changed.status_code == 200, changed.text
 
+    readiness = await client.get(
+        f"/api/v1/compliance/courses/{course['id']}/readiness",
+        headers=admin_headers,
+    )
+    assert readiness.status_code == 200
+    assert readiness.json()["ready"] is False
+    assert readiness.json()["status"] == "REVIEW_REQUIRED"
+
     blocked = await client.post(
         "/api/v1/classes/",
         json=await _class_payload(client, admin_headers, course["id"]),
         headers=admin_headers,
     )
     assert blocked.status_code == 409
-    assert "changed after the last compliance review" in blocked.json()["detail"]
+    assert "compliance-ready" in blocked.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_readiness_surfaces_expired_review_as_not_ready(client, admin_headers):
+async def test_expired_review_is_not_ready_and_blocks_new_class(client, admin_headers):
     course = await _create_regulatory_course(client, admin_headers)
     professional = await _create_professional(client, admin_headers)
     project = await _create_and_approve_project(client, admin_headers, course["id"])
-
-    # Store a future review, mark ready, then the response contract is tested
-    # independently by moving the stored timestamp through the profile API is
-    # deliberately not allowed here. Runtime expiration is enforced at class
-    # opening and readiness serialization.
     await _mark_ready(
         client,
         admin_headers,
         course_id=course["id"],
         professional_id=professional["id"],
         project_id=project["id"],
-        next_review=utc_now() + timedelta(days=1),
+        next_review=utc_now() + timedelta(days=180),
     )
+
+    # Simulate time passing after an originally valid approval. The input API
+    # rejects dates already expired, so runtime expiry is exercised directly.
+    async with AsyncSessionLocal() as session:
+        profile = (
+            await session.execute(
+                select(CourseComplianceProfile).where(
+                    CourseComplianceProfile.course_id == course["id"]
+                )
+            )
+        ).scalar_one()
+        profile.next_compliance_review_at = utc_now() - timedelta(seconds=1)
+        await session.commit()
 
     readiness = await client.get(
         f"/api/v1/compliance/courses/{course['id']}/readiness",
         headers=admin_headers,
     )
     assert readiness.status_code == 200
-    assert readiness.json()["ready"] is True
+    assert readiness.json()["ready"] is False
+    assert "Compliance review date has expired" in readiness.json()["blockers"]
+
+    blocked = await client.post(
+        "/api/v1/classes/",
+        json=await _class_payload(client, admin_headers, course["id"]),
+        headers=admin_headers,
+    )
+    assert blocked.status_code == 409
+    assert "missing or expired" in blocked.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_profile_rejects_review_date_already_expired(client, admin_headers):
+    course = await _create_regulatory_course(client, admin_headers)
+    professional = await _create_professional(client, admin_headers)
+    project = await _create_and_approve_project(client, admin_headers, course["id"])
+
+    response = await client.put(
+        f"/api/v1/compliance/courses/{course['id']}/profile",
+        json={
+            "regulatory_standard": "NR-06",
+            "regulatory_version": "homologacao-v1",
+            "delivery_mode": "EAD",
+            "requires_practical_component": False,
+            "requires_final_assessment": True,
+            "minimum_score": 60,
+            "certificate_required_fields": ["student_name"],
+            "technical_responsible_id": professional["id"],
+            "pedagogical_project_version_id": project["id"],
+            "next_compliance_review_at": (utc_now() - timedelta(days=1)).isoformat(),
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
