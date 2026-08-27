@@ -90,6 +90,7 @@ class CertificateSigningJob(Base):
         index=True,
     )
     provider = Column(String(64), nullable=False, index=True)
+    profile_snapshot = Column(JSONB, nullable=False, default=dict)
     status = Column(String(32), nullable=False, default=SigningJobStatus.QUEUED, index=True)
     provider_job_id = Column(String(512), nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0)
