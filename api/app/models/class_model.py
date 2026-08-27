@@ -14,6 +14,7 @@ class ClassStatus(str, PyEnum):
     CONCLUIDA = "CONCLUIDA"
     CANCELADA = "CANCELADA"
 
+
 class Class(Base):
     __tablename__ = "classes"
 
@@ -21,12 +22,20 @@ class Class(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        
         nullable=False,
         index=True,
     )
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False)
     responsible_admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Regulatory pin: a class uses the exact pedagogical project version that
+    # was valid when the training was delivered. Historical classes must not
+    # silently inherit a newer project version.
+    pedagogical_project_version_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("pedagogical_project_versions.id"),
+        nullable=True,
+        index=True,
+    )
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     max_students = Column(Integer, nullable=False)
