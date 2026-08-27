@@ -92,6 +92,24 @@ class CorporateOffboardRequest(BaseModel):
     cancel_active_corporate_enrollments: bool = True
 
 
+class CorporateLinkEventAnnotation(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=2000)
+
+
+class CorporateLinkEventResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    student_id: UUID
+    previous_company_id: UUID | None = None
+    company_id: UUID | None = None
+    action: str
+    reason: str | None = None
+    actor_user_id: UUID | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CorporateSeatAllocationCreate(BaseModel):
     class_id: UUID
     seats_reserved: int = Field(..., ge=1)
