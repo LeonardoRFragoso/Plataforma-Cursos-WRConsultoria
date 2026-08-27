@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.database import Base
@@ -20,7 +20,7 @@ class AssessmentAttempt(Base):
     answers = Column(JSONB, nullable=True)
     correct_answers = Column(Integer, nullable=True)
     total_questions = Column(Integer, nullable=False)
-    minimum_score = Column(Float, nullable=False, default=70.0)
+    minimum_score = Column(Float, nullable=False, default=60.0)
     score = Column(Float, nullable=True)
     passed = Column(Boolean, nullable=False, default=False)
     started_at = Column(DateTime, default=utc_now, nullable=False)
@@ -44,5 +44,9 @@ class StudentSignatureEvidence(Base):
     assessment_attempt_id = Column(UUID(as_uuid=True), ForeignKey("assessment_attempts.id"), nullable=False)
     declaration_version = Column(String, nullable=False, default="nr1-demo-v1")
     auth_method = Column(String, nullable=False, default="PASSWORD_REAUTH")
+    declaration_text_hash = Column(String, nullable=True)
+    evidence_payload_hash = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
     accepted_at = Column(DateTime, default=utc_now, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
