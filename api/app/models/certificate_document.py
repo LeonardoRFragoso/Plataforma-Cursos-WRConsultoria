@@ -54,7 +54,6 @@ class CertificateDocument(Base):
         UUID(as_uuid=True),
         ForeignKey("certificates.id", ondelete="RESTRICT"),
         nullable=False,
-        unique=True,
         index=True,
     )
     enrollment_id = Column(
