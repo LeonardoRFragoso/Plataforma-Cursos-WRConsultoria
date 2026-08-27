@@ -6,7 +6,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 
 from app.api.routes import (
     asaas_integration,
@@ -103,6 +103,26 @@ async def _get_tenant_subscription_status(tenant_id) -> str | None:
         )
         subscription = result.scalar_one_or_none()
         return subscription.status if subscription else None
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(_request: Request, exc: IntegrityError):
+    """Expose known business conflicts without leaking database internals.
+
+    The company table already enforces ``(tenant_id, cnpj)`` uniqueness at the
+    database layer. This handler makes the constraint race-safe for both create
+    and update paths: even when two concurrent requests bypass a pre-check, the
+    API returns a deterministic conflict instead of an internal-server error.
+    """
+    if "uq_company_tenant_cnpj" in str(exc.orig):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Company with this CNPJ already exists"},
+        )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Database integrity error"},
+    )
 
 
 @app.middleware("http")

@@ -17,6 +17,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.constants import WR_TENANT_ID
+from tests.cnpj_utils import make_valid_cnpj
 from tests.conftest import make_valid_cpf
 
 
@@ -27,7 +28,7 @@ async def _create_company(client: AsyncClient, headers: dict, name: str = "Empre
         json={
             "legal_name": name,
             "trade_name": name,
-            "cnpj": f"{uuid.uuid4().int % 10**14:014d}",
+            "cnpj": make_valid_cnpj(),
             "rh_name": "RH Teste",
             "rh_email": f"rh_{uuid.uuid4().hex[:8]}@teste.com",
             "rh_phone": "(11) 99999-9999",
@@ -114,7 +115,7 @@ class TestCompanyTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_company_duplicate_cnpj_rejected(self, client, admin_headers):
-        cnpj = f"{uuid.uuid4().int % 10**14:014d}"
+        cnpj = make_valid_cnpj()
         response = await client.post(
             "/api/v1/companies/",
             json={"legal_name": "Empresa A", "cnpj": cnpj},

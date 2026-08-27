@@ -2,13 +2,15 @@ import uuid
 
 import pytest
 
+from tests.cnpj_utils import make_valid_cnpj
+
 
 @pytest.mark.asyncio
 async def test_company_persists_corporate_billing_and_contract_metadata(client, admin_headers):
     payload = {
         "legal_name": f"Empresa B2B {uuid.uuid4().hex[:8]}",
         "trade_name": "Empresa B2B",
-        "cnpj": f"{uuid.uuid4().int % 10**14:014d}",
+        "cnpj": make_valid_cnpj(),
         "rh_name": "Responsável RH",
         "rh_email": f"rh-{uuid.uuid4().hex[:8]}@example.com",
         "billing_email": f"financeiro-{uuid.uuid4().hex[:8]}@example.com",
@@ -37,7 +39,7 @@ async def test_company_update_normalizes_corporate_status_and_billing_email(clie
         "/api/v1/companies/",
         json={
             "legal_name": f"Empresa Update {uuid.uuid4().hex[:8]}",
-            "cnpj": f"{uuid.uuid4().int % 10**14:014d}",
+            "cnpj": make_valid_cnpj(),
         },
         headers=admin_headers,
     )
