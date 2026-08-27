@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -40,6 +40,15 @@ class PrivacyRequest(Base):
     __table_args__ = (
         Index("ix_privacy_requests_tenant_status", "tenant_id", "status"),
         Index("ix_privacy_requests_user_created", "user_id", "created_at"),
+        Index(
+            "uq_privacy_request_open_type",
+            "tenant_id",
+            "user_id",
+            "request_type",
+            unique=True,
+            postgresql_where=text("status IN ('OPEN', 'IN_REVIEW')"),
+            sqlite_where=text("status IN ('OPEN', 'IN_REVIEW')"),
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
