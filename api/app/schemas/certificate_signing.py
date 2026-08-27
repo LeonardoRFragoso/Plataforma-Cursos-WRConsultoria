@@ -105,6 +105,7 @@ class CertificateSigningJobResponse(BaseModel):
     certificate_id: UUID
     profile_id: UUID
     provider: str
+    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
     status: str
     provider_job_id: str | None = None
     attempt_count: int
