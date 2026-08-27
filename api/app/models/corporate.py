@@ -74,3 +74,19 @@ class CorporateSeatAllocation(Base):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class CorporateEmployeeLinkEvent(Base):
+    """Immutable audit record for company ↔ student membership changes."""
+
+    __tablename__ = "corporate_employee_link_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False, index=True)
+    previous_company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    reason = Column(Text, nullable=True)
+    actor_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
