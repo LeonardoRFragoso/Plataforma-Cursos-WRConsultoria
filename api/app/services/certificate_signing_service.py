@@ -52,7 +52,7 @@ def _sanitized_error(exc: Exception) -> str:
 def _profile_snapshot(profile: CertificateSigningProfile) -> dict:
     return {
         "profile_id": str(profile.id),
-        "provider": profile.provider,
+        "provider": profile.provider.strip().upper(),
         "signer_display_name": profile.signer_display_name,
         "signer_identifier": profile.signer_identifier,
         "certificate_fingerprint_sha256": profile.certificate_fingerprint_sha256,
@@ -62,6 +62,8 @@ def _profile_snapshot(profile: CertificateSigningProfile) -> dict:
         "certificate_not_before": profile.certificate_not_before.isoformat() if profile.certificate_not_before else None,
         "certificate_not_after": profile.certificate_not_after.isoformat() if profile.certificate_not_after else None,
         "key_reference": profile.key_reference,
+        # Schema validation guarantees this contains no credentials/private-key material.
+        "provider_metadata": dict(profile.provider_metadata or {}),
     }
 
 
@@ -108,18 +110,25 @@ async def _event(
     )
 
 
-async def _provider_for_profile(
+async def _provider_for_snapshot(
     db: AsyncSession,
     *,
     tenant_id: uuid.UUID,
-    profile: CertificateSigningProfile,
+    snapshot: dict,
 ) -> CertificateSigningProvider:
-    validate_signing_profile(profile)
-    provider = profile.provider.strip().upper()
+    provider = str(snapshot.get("provider") or "").strip().upper()
+    signer_name = str(snapshot.get("signer_display_name") or "").strip()
+    fingerprint = snapshot.get("certificate_fingerprint_sha256")
     if provider == "MOCK":
+        if settings.ENVIRONMENT.lower() == "production":
+            raise SigningProviderError(
+                "Mock certificate signing is forbidden in production",
+                code="mock_forbidden_in_production",
+                retryable=False,
+            )
         return MockPadesSigningProvider(
-            signer_name=profile.signer_display_name,
-            fingerprint_sha256=profile.certificate_fingerprint_sha256,
+            signer_name=signer_name,
+            fingerprint_sha256=fingerprint,
         )
     if provider == "EXTERNAL_PADES_GATEWAY":
         token = await get_tenant_secret(db, tenant_id, CERTIFICATE_SIGNING_API_TOKEN_KEY)
@@ -129,7 +138,7 @@ async def _provider_for_profile(
                 code="missing_api_token",
                 retryable=False,
             )
-        metadata = profile.provider_metadata or {}
+        metadata = snapshot.get("provider_metadata") or {}
         return ExternalPadesGatewayProvider(
             base_url=str(metadata.get("base_url") or ""),
             api_token=token,
@@ -198,6 +207,7 @@ async def enqueue_signing_job(
     if not profile:
         raise ValueError("Certificate signing profile is not configured")
     validate_signing_profile(profile)
+    snapshot = _profile_snapshot(profile)
 
     existing = (
         await db.execute(
@@ -208,6 +218,26 @@ async def enqueue_signing_job(
         )
     ).scalar_one_or_none()
     if existing:
+        # A terminal job that never reached a provider can be safely reset to
+        # the tenant's current profile. If a provider_job_id exists, preserve
+        # that identity to avoid two external signatures for one document.
+        if (
+            existing.status in {SigningJobStatus.FAILED, SigningJobStatus.CANCELLED}
+            and not existing.provider_job_id
+        ):
+            existing.profile_id = profile.id
+            existing.provider = snapshot["provider"]
+            existing.profile_snapshot = snapshot
+            existing.status = SigningJobStatus.QUEUED
+            existing.attempt_count = 0
+            existing.max_attempts = min(max(int((profile.provider_metadata or {}).get("max_attempts") or 5), 1), 20)
+            existing.next_attempt_at = utc_now()
+            existing.last_attempt_at = None
+            existing.last_error_code = None
+            existing.last_error_message = None
+            await _event(db, job=existing, event_type="REQUEUED_WITH_CURRENT_PROFILE", actor_id=actor_id)
+            await db.commit()
+            await db.refresh(existing)
         return existing
 
     max_attempts = int((profile.provider_metadata or {}).get("max_attempts") or 5)
@@ -217,7 +247,8 @@ async def enqueue_signing_job(
         document_id=document.id,
         certificate_id=certificate.id,
         profile_id=profile.id,
-        provider=profile.provider.strip().upper(),
+        provider=snapshot["provider"],
+        profile_snapshot=snapshot,
         status=SigningJobStatus.QUEUED,
         attempt_count=0,
         max_attempts=max_attempts,
@@ -332,7 +363,6 @@ async def process_signing_job(
             return SigningProcessResult(job_id=job.id, status=job.status, changed=False, detail="submission_in_progress")
 
     try:
-        validate_signing_profile(profile)
         original_pdf = await load_certificate_pdf(document.original_storage_key)
         if sha256_bytes(original_pdf) != document.original_pdf_sha256:
             raise SigningProviderError(
@@ -340,8 +370,16 @@ async def process_signing_job(
                 code="original_integrity_failed",
                 retryable=False,
             )
-        provider = await _provider_for_profile(db, tenant_id=tenant_id, profile=profile)
         provider_job_id = job.provider_job_id
+        if not provider_job_id:
+            # Before submission, the tenant must still explicitly have signing
+            # enabled and a currently valid certificate configuration.
+            validate_signing_profile(profile)
+        provider = await _provider_for_snapshot(
+            db,
+            tenant_id=tenant_id,
+            snapshot=job.profile_snapshot or {},
+        )
 
         if not provider_job_id:
             job.attempt_count += 1
@@ -410,13 +448,14 @@ async def process_signing_job(
                 code="unknown_provider_status",
             )
 
+        frozen_fingerprint = (job.profile_snapshot or {}).get("certificate_fingerprint_sha256")
         verification = provider.validate_signed_result(
             result=result,
             original_pdf=original_pdf,
-            expected_fingerprint_sha256=profile.certificate_fingerprint_sha256,
+            expected_fingerprint_sha256=frozen_fingerprint,
         )
         signature_metadata = {
-            "profile": _profile_snapshot(profile),
+            "profile": dict(job.profile_snapshot or {}),
             "verification": verification,
             "provider_result": result.metadata,
         }
