@@ -69,3 +69,28 @@ def test_corporate_request_schema_rejects_bad_check_digits():
             contact_name="Responsável",
             contact_email="rh@example.com",
         )
+
+
+@pytest.mark.asyncio
+async def test_company_update_duplicate_cnpj_returns_conflict(client, admin_headers):
+    first = await client.post(
+        "/api/v1/companies/",
+        json={"legal_name": "Empresa CNPJ A", "cnpj": "04.252.011/0001-10"},
+        headers=admin_headers,
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        "/api/v1/companies/",
+        json={"legal_name": "Empresa CNPJ B", "cnpj": "11.222.333/0001-81"},
+        headers=admin_headers,
+    )
+    assert second.status_code == 201, second.text
+
+    duplicated = await client.put(
+        f"/api/v1/companies/{second.json()['id']}",
+        json={"cnpj": "04.252.011/0001-10"},
+        headers=admin_headers,
+    )
+    assert duplicated.status_code == 409, duplicated.text
+    assert "CNPJ" in duplicated.json()["detail"]
