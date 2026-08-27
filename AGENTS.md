@@ -1,4 +1,108 @@
-# AGENTS.md — Certificate QR Validation & Demo Mode
+# AGENTS.md — WR Plataforma Cursos
+
+## Project Commands
+
+### Frontend (web/)
+
+```bash
+cd web
+npx vitest run                              # unit tests
+npx playwright test --project=ui-mocked     # E2E mocked tests
+npm run lint && npm run build               # lint + build gates
+```
+
+### Backend (api/)
+
+```bash
+cd api
+# Lint
+venv/bin/python -m ruff check app/ tests/
+# Alembic heads check (must be exactly 1 head)
+venv/bin/python -m alembic heads
+# Tests (use isolated DB to avoid concurrent test races)
+WR_TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test_cert" \
+  venv/bin/python -m pytest tests/ -q --no-cov
+```
+
+### Production Deploy
+
+- **Frontend**: Vercel auto-deploys `main` to production. Verify with
+  `vercel ls wr-cursos-demo` and check the production alias is the latest SHA.
+- **Backend**: Railway auto-deploys `main` to `wr-api` service. The run
+  command is `alembic upgrade head && uvicorn app.main:app`. Verify with
+  `railway status` and `curl https://wr-api-production.up.railway.app/health/ready`.
+- **DB access**: `railway connect Postgres` (opens psql via SSH tunnel).
+- **Container exec**: `railway ssh --service wr-api "<command>"`.
+
+### Tutor NR Knowledge Ingestion
+
+```bash
+# In the Railway container (via railway ssh --service wr-api):
+cd /app && TUTOR_KNOWLEDGE_DIR=/tmp/tutor-knowledge \
+  DATABASE_URL='postgresql+asyncpg://postgres:...@postgres.railway.internal:5432/railway' \
+  python -m app.scripts.ingest_nr_tutor_knowledge --apply
+```
+
+The knowledge files (15 NR `extracted-text.md`) live in
+`/home/leonardo/dev/Cursos-WR/analysis/<nr-slug>/extracted-text.md` and
+must be piped into the container via SSH (no volume mount in production).
+
+## P0 Production Boot Fix (PR #41 + idempotent migrations)
+
+### White Screen Root Cause
+
+The router guard in `web/src/router/index.js` awaited
+`authStore.initializeUser()` (which calls `/auth/me`) for **all** routes,
+including public ones. With a stale token in localStorage, this blocked
+the entire SPA boot for up to 16 seconds (token refresh retries + timeout).
+
+### White Screen Fix
+
+1. **Router guard**: only `await initializeUser()` for authenticated routes;
+   public routes render immediately and session restoration runs in the
+   background (`web/src/App.vue`).
+2. **Axios client** (`web/src/api/client.js`): 15s `REQUEST_TIMEOUT`,
+   no recursive token refresh on `/auth/refresh` itself.
+3. **Boot state** (`web/index.html`): inline spinner + non-blocking Google
+   Fonts so the user sees content immediately on first paint.
+4. **Result**: white screen with stale token dropped from ~16s to <0.4s.
+
+### Backend Crash Root Cause
+
+Alembic detected two head revisions branching from `h6c7d8e9f0a1`:
+`i7c8d9e0f1a2` (compliance) and `i9d0e1f2a3b4` (tutor RAG). Railway's
+`alembic upgrade head` failed with "Multiple head revisions" and the
+service crashed on every deploy.
+
+### Backend Crash Fix
+
+1. **Merge migration** `3f273adccf42` unifies the two heads.
+2. **Idempotent migrations**: the tutor RAG and compliance migrations now
+   use `DO $$ ... $$` blocks for enum creation (checkfirst=True is
+   unreliable with asyncpg), `has_table()` checks before `create_table`,
+   and `DROP IF EXISTS` before `CREATE` for triggers/policies. This
+   handles the production DB's partially-applied state (enum type existed
+   but tables/migration record were missing from a previous crashed deploy).
+
+### Regression Tests
+
+- `web/src/__tests__/router.spec.js` — public routes don't block on `/auth/me`
+- `web/src/__tests__/api/client.spec.js` — timeout + no recursive refresh
+- `web/e2e/ui-mocked/boot-white-screen.spec.js` — boot time under slow API
+
+## Known Vulnerabilities (npm audit, dev-only)
+
+13 vulnerabilities in dev dependencies — all require breaking upgrades:
+- `esbuild <=0.24.2` (moderate) → needs vite@8 major
+- `happy-dom <=20.8.8` (critical) → needs happy-dom@20.11.12 major
+- `minimatch 9.0.0-9.0.6` (high) → transitive via @typescript-eslint
+
+None affect the production build output. Scheduled for a future dependency
+upgrade cycle.
+
+---
+
+## Certificate QR Validation & Demo Mode
 
 ## STATUS
 
