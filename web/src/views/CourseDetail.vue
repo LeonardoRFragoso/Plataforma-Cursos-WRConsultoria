@@ -127,13 +127,72 @@
                         </svg>
                         <span class="text-sm font-medium text-gray-700">{{ material.title }}</span>
                       </div>
-                      <button
-                        @click="downloadMaterial(material)"
-                        class="text-sm font-semibold text-primary-600 hover:text-primary-700"
-                      >
-                        Visualizar / Baixar
-                      </button>
+                      <div class="flex items-center gap-3">
+                        <button
+                          v-if="isAdmin"
+                          @click="deleteMaterial(material)"
+                          class="text-sm font-semibold text-red-600 hover:text-red-700"
+                        >
+                          Remover
+                        </button>
+                        <button
+                          @click="downloadMaterial(material)"
+                          class="text-sm font-semibold text-primary-600 hover:text-primary-700"
+                        >
+                          Visualizar / Baixar
+                        </button>
+                      </div>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Admin: Upload new material -->
+                <div v-if="isAdmin" class="mb-8 p-4 bg-primary-50 rounded-lg border border-primary-200">
+                  <h3 class="text-lg font-semibold text-secondary-900 mb-3">Adicionar material (Admin)</h3>
+                  <div v-if="uploadError" class="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">{{ uploadError }}</div>
+                  <div v-if="uploadSuccess" class="mb-3 text-sm text-green-700 bg-green-50 p-2 rounded">{{ uploadSuccess }}</div>
+
+                  <div class="space-y-3">
+                    <input
+                      v-model="newMaterialTitle"
+                      type="text"
+                      placeholder="Título do material (ex: Apostila NR-10)"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    />
+                    <select
+                      v-model="newMaterialType"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="APOSTILA">Apostila</option>
+                      <option value="MATERIAL_COMPLEMENTAR">Material Complementar</option>
+                      <option value="MANUAL">Manual</option>
+                      <option value="REFERENCIA">Referência</option>
+                      <option value="OUTRO">Outro</option>
+                    </select>
+                    <input
+                      ref="fileInputRef"
+                      type="file"
+                      accept="application/pdf"
+                      @change="onFileSelected"
+                      class="w-full text-sm text-gray-600"
+                      :disabled="uploading"
+                    />
+
+                    <div v-if="uploading" class="flex items-center gap-2 text-sm text-gray-600">
+                      <svg class="animate-spin h-4 w-4 text-primary-600" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Enviando... {{ uploadProgress }}%
+                    </div>
+
+                    <button
+                      v-if="selectedFile && !uploading"
+                      @click="uploadMaterial"
+                      class="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-semibold hover:bg-primary-700 transition-colors"
+                    >
+                      Enviar material
+                    </button>
                   </div>
                 </div>
               </div>
@@ -210,7 +269,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
-import { fetchCourse, fetchCourseContentProfile, fetchCourseMaterials, downloadCourseMaterial } from '../api/courses'
+import { fetchCourse, fetchCourseContentProfile, fetchCourseMaterials, downloadCourseMaterial, requestMaterialUploadUrl, completeMaterialUpload, deleteCourseMaterial } from '../api/courses'
 import { purchaseCourse, getMyEnrollments, createCheckout } from '../api/enrollments'
 import AppNavbar from '../components/AppNavbar.vue'
 import CourseCover from '../components/CourseCover.vue'
@@ -233,6 +292,21 @@ const enrollments = ref([])
 const enrollmentLoading = ref(false)
 const contentProfile = ref(null)
 const materials = ref([])
+
+// Admin upload state
+const isAdmin = computed(() => {
+  const role = authStore.userRole?.toLowerCase()
+  return role === 'admin' || role === 'super_admin'
+})
+const newMaterialTitle = ref('')
+const newMaterialType = ref('APOSTILA')
+const selectedFile = ref(null)
+const selectedFileSha = ref('')
+const uploading = ref(false)
+const uploadProgress = ref(0)
+const uploadError = ref('')
+const uploadSuccess = ref('')
+const fileInputRef = ref(null)
 
 const redirectPath = computed(() => route.fullPath)
 const loginWithRedirect = computed(() => ({ path: '/login', query: { redirect: redirectPath.value } }))
@@ -284,10 +358,113 @@ async function downloadMaterial(material) {
       window.open(data.download_url, '_blank')
     }
   } catch (err) {
-    // If not authorized, redirect to login
     if (err.response?.status === 401) {
       router.push({ path: '/login', query: { redirect: route.fullPath } })
     }
+  }
+}
+
+async function computeSha256(file) {
+  const buffer = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function onFileSelected(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  uploadError.value = ''
+  uploadSuccess.value = ''
+  if (file.type !== 'application/pdf') {
+    uploadError.value = 'Apenas arquivos PDF são permitidos'
+    selectedFile.value = null
+    return
+  }
+  if (file.size > 100 * 1024 * 1024) {
+    uploadError.value = 'Arquivo excede o limite de 100 MB'
+    selectedFile.value = null
+    return
+  }
+  selectedFile.value = file
+  if (!newMaterialTitle.value) {
+    newMaterialTitle.value = file.name.replace(/\.pdf$/i, '')
+  }
+  selectedFileSha.value = await computeSha256(file)
+}
+
+async function uploadMaterial() {
+  if (!selectedFile.value || !selectedFileSha.value) return
+  if (!newMaterialTitle.value.trim()) {
+    uploadError.value = 'Título é obrigatório'
+    return
+  }
+  uploading.value = true
+  uploadProgress.value = 0
+  uploadError.value = ''
+  uploadSuccess.value = ''
+
+  try {
+    // Step 1: Request presigned upload URL
+    const { data: uploadData } = await requestMaterialUploadUrl(course.value.id, {
+      filename: selectedFile.value.name,
+      mime_type: 'application/pdf',
+      size_bytes: selectedFile.value.size,
+      sha256: selectedFileSha.value,
+    })
+
+    // Step 2: PUT file directly to storage
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          uploadProgress.value = Math.round((e.loaded / e.total) * 100)
+        }
+      })
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else reject(new Error(`Upload failed: ${xhr.status}`))
+      })
+      xhr.addEventListener('error', () => reject(new Error('Network error')))
+      xhr.open('PUT', uploadData.upload_url)
+      xhr.setRequestHeader('Content-Type', 'application/pdf')
+      xhr.send(selectedFile.value)
+    })
+
+    // Step 3: Complete upload
+    await completeMaterialUpload(course.value.id, {
+      storage_key: uploadData.storage_key,
+      title: newMaterialTitle.value,
+      mime_type: 'application/pdf',
+      size_bytes: selectedFile.value.size,
+      sha256: selectedFileSha.value,
+      document_type: newMaterialType.value,
+    })
+
+    uploadSuccess.value = 'Material enviado com sucesso!'
+    selectedFile.value = null
+    selectedFileSha.value = ''
+    newMaterialTitle.value = ''
+    if (fileInputRef.value) fileInputRef.value.value = ''
+
+    // Reload materials
+    const { data: mats } = await fetchCourseMaterials(course.value.id)
+    materials.value = mats
+  } catch (err) {
+    uploadError.value = err.response?.data?.detail || err.message || 'Erro ao enviar material'
+  } finally {
+    uploading.value = false
+    uploadProgress.value = 0
+  }
+}
+
+async function deleteMaterial(material) {
+  if (!confirm(`Remover "${material.title}"?`)) return
+  try {
+    await deleteCourseMaterial(course.value.id, material.id)
+    materials.value = materials.value.filter(m => m.id !== material.id)
+  } catch (err) {
+    uploadError.value = err.response?.data?.detail || 'Erro ao remover material'
   }
 }
 
