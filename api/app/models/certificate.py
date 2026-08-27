@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.database import Base
 from app.core.utils import utc_now
@@ -36,7 +36,19 @@ class Certificate(Base):
     revoked_at = Column(DateTime, nullable=True)
     revoked_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     revocation_reason = Column(Text, nullable=True)
+    # Registry hash retained for backwards compatibility.
     content_hash = Column(String, nullable=True, index=True)
+    # Immutable issuance snapshot and original PDF artifact. Official
+    # certificates must always be downloaded from this stored artifact.
+    snapshot_json = Column(JSONB, nullable=True)
+    pdf_storage_key = Column(String, nullable=True)
+    pdf_sha256 = Column(String(64), nullable=True, index=True)
+    pdf_generated_at = Column(DateTime, nullable=True)
+    signature_status = Column(String, nullable=False, default="NOT_REQUIRED", index=True)
+    signature_method = Column(String, nullable=True)
+    signature_fingerprint = Column(String, nullable=True)
+    signed_at = Column(DateTime, nullable=True)
+    # Legacy local path kept while old certificates are migrated.
     pdf_path = Column(String, nullable=True)
     validation_code = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
