@@ -5,13 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.normalization import validate_cnpj
 from app.core.security import get_current_admin, get_current_tenant_id
 from app.core.utils import utc_now
-from app.models.corporate import CorporateInvite
+from app.models.company import Company
+from app.models.corporate import CorporateInvite, CorporateTrainingRequest
 from app.models.one_time_token import OneTimeToken
 from app.models.student import Student
 from app.models.user import User
-from app.schemas.corporate import CorporateInviteResponse
+from app.schemas.corporate import (
+    CorporateInviteResponse,
+    CorporateRequestConvert,
+    CorporateRequestConvertResponse,
+)
 
 router = APIRouter()
 
@@ -45,6 +51,86 @@ def _response(invite: CorporateInvite) -> CorporateInviteResponse:
         created_at=invite.created_at,
         activation_token=None,
         activation_email_sent=False,
+    )
+
+
+@router.post(
+    "/requests/{request_id}/convert",
+    response_model=CorporateRequestConvertResponse,
+)
+async def convert_training_request_to_company(
+    request_id: UUID,
+    payload: CorporateRequestConvert,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """Convert a qualified B2B request into the canonical Company record.
+
+    Conversion is tenant-scoped and idempotent by normalized CNPJ. A request
+    without CNPJ cannot be contracted because Company and real B2B payment
+    flows require a valid corporate identity document.
+    """
+    tenant_id = get_current_tenant_id()
+    lead = (
+        await db.execute(
+            select(CorporateTrainingRequest).where(
+                CorporateTrainingRequest.id == request_id,
+                CorporateTrainingRequest.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Corporate request not found")
+    if not lead.cnpj:
+        raise HTTPException(
+            status_code=409,
+            detail="Informe um CNPJ válido antes de converter a solicitação em empresa.",
+        )
+
+    try:
+        normalized_cnpj = validate_cnpj(lead.cnpj)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="CNPJ inválido") from None
+
+    company = (
+        await db.execute(
+            select(Company).where(
+                Company.tenant_id == tenant_id,
+                Company.cnpj == normalized_cnpj,
+            )
+        )
+    ).scalar_one_or_none()
+    created = False
+    if company is None:
+        company = Company(
+            tenant_id=tenant_id,
+            legal_name=lead.company_name.strip(),
+            trade_name=payload.trade_name,
+            cnpj=normalized_cnpj,
+            rh_name=lead.contact_name,
+            rh_email=lead.contact_email,
+            rh_phone=lead.contact_phone,
+            billing_email=str(payload.billing_email) if payload.billing_email else lead.contact_email,
+            contract_reference=payload.contract_reference,
+            status="ACTIVE",
+            notes=payload.notes or lead.admin_notes or lead.message,
+        )
+        db.add(company)
+        await db.flush()
+        created = True
+
+    lead.cnpj = normalized_cnpj
+    lead.status = "WON"
+    if payload.notes:
+        lead.admin_notes = payload.notes
+    await db.commit()
+    await db.refresh(company)
+
+    return CorporateRequestConvertResponse(
+        request_id=lead.id,
+        company_id=company.id,
+        created=created,
+        status=lead.status,
     )
 
 
