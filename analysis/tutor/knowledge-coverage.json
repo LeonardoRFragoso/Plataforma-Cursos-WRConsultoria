@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-08-27T18:18:55",
+  "total_sources": 15,
+  "total_chunks": 237,
+  "sources": [
+    {"slug": "nr01", "nr_code": "NR-01", "course_variant": "", "title": "NR-01 — Disposições Gerais e Gerenciamento de Riscos Ocupacionais", "chars": 52797, "headings": 40, "chunks": 13, "status": "PASS"},
+    {"slug": "nr06", "nr_code": "NR-06", "course_variant": "", "title": "NR-06 — Equipamento de Proteção Individual (EPI)", "chars": 33348, "headings": 35, "chunks": 8, "status": "PASS"},
+    {"slug": "nr10-basico", "nr_code": "NR-10", "course_variant": "Básico", "title": "NR-10 Básico — Segurança em Instalações e Serviços em Eletricidade", "chars": 109647, "headings": 91, "chunks": 27, "status": "PASS"},
+    {"slug": "nr10-sep", "nr_code": "NR-10", "course_variant": "SEP", "title": "NR-10 SEP — Sistema Elétrico de Potência", "chars": 148596, "headings": 146, "chunks": 35, "status": "PASS"},
+    {"slug": "nr11-empilhadeira", "nr_code": "NR-11", "course_variant": "Empilhadeira", "title": "NR-11 — Empilhadeira", "chars": 80682, "headings": 79, "chunks": 19, "status": "PASS"},
+    {"slug": "nr11-guindauto", "nr_code": "NR-11", "course_variant": "Guindauto", "title": "NR-11 — Guindauto", "chars": 86910, "headings": 84, "chunks": 20, "status": "PASS"},
+    {"slug": "nr11-minicarregadeira", "nr_code": "NR-11", "course_variant": "Minicarregadeira", "title": "NR-11 — Minicarregadeira", "chars": 61515, "headings": 60, "chunks": 15, "status": "PASS"},
+    {"slug": "nr11-plataforma", "nr_code": "NR-11", "course_variant": "Plataforma Elevatória", "title": "NR-11 — Plataforma", "chars": 63368, "headings": 66, "chunks": 16, "status": "PASS"},
+    {"slug": "nr11-ponte", "nr_code": "NR-11", "course_variant": "Ponte Rolante", "title": "NR-11 — Ponte Rolante", "chars": 70764, "headings": 70, "chunks": 17, "status": "PASS"},
+    {"slug": "nr11-retroescavadeira", "nr_code": "NR-11", "course_variant": "Retroescavadeira", "title": "NR-11 — Retroescavadeira", "chars": 66859, "headings": 67, "chunks": 16, "status": "PASS"},
+    {"slug": "nr12", "nr_code": "NR-12", "course_variant": "", "title": "NR-12 — Segurança no Trabalho em Máquinas e Equipamentos", "chars": 13026, "headings": 14, "chunks": 3, "status": "PASS"},
+    {"slug": "nr18", "nr_code": "NR-18", "course_variant": "", "title": "NR-18 — Segurança e Saúde no Trabalho na Indústria da Construção", "chars": 70912, "headings": 68, "chunks": 17, "status": "PASS"},
+    {"slug": "nr33-autorizado", "nr_code": "NR-33", "course_variant": "Trabalhador Autorizado", "title": "NR-33 — Trabalhador Autorizado em Espaços Confinados", "chars": 22189, "headings": 26, "chunks": 5, "status": "PASS"},
+    {"slug": "nr33-supervisor", "nr_code": "NR-33", "course_variant": "Supervisor", "title": "NR-33 — Supervisor de Entrada em Espaços Confinados", "chars": 28373, "headings": 34, "chunks": 7, "status": "PASS"},
+    {"slug": "nr35", "nr_code": "NR-35", "course_variant": "", "title": "NR-35 — Trabalho em Altura", "chars": 74442, "headings": 71, "chunks": 19, "status": "PASS"}
+  ]
+}

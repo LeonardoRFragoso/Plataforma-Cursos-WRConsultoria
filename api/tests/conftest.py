@@ -95,6 +95,44 @@ async def setup_db():
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_user_tenant_email_lower "
             "ON users (tenant_id, lower(email))"
         ))
+        # Tutor NR knowledge: create FTS trigger + GIN index (create_all
+        # doesn't create DB-level triggers/functions from migrations).
+        await conn.execute(text("""
+            CREATE OR REPLACE FUNCTION tutor_chunk_search_vector_update() RETURNS trigger AS $$
+            BEGIN
+                NEW.search_vector :=
+                    setweight(to_tsvector('portuguese', coalesce(NEW.heading, '')), 'A') ||
+                    setweight(to_tsvector('portuguese', coalesce(NEW.heading_path, '')), 'B') ||
+                    setweight(to_tsvector('portuguese', coalesce(NEW.content, '')), 'C');
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        await conn.execute(text("""
+            CREATE TRIGGER tutor_chunk_search_vector_trigger
+            BEFORE INSERT OR UPDATE ON tutor_knowledge_chunks
+            FOR EACH ROW EXECUTE FUNCTION tutor_chunk_search_vector_update();
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_tutor_chunk_search_vector "
+            "ON tutor_knowledge_chunks USING gin(search_vector)"
+        ))
+        # Tutor tables RLS policies (mirrors i9d0e1f2a3b4 migration)
+        for table in ('tutor_knowledge_documents', 'tutor_knowledge_chunks'):
+            await conn.execute(text(
+                f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"
+            ))
+            await conn.execute(text(
+                f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"
+            ))
+            await conn.execute(text(
+                f"DROP POLICY IF EXISTS tenant_isolation_{table} ON {table}"
+            ))
+            await conn.execute(text(
+                f"CREATE POLICY tenant_isolation_{table} ON {table} "
+                f"FOR ALL TO public "
+                f"USING (tenant_id = current_setting('app.current_tenant', true)::UUID)"
+            ))
     await _insert_master_tenant()
     yield
     async with engine.begin() as conn:

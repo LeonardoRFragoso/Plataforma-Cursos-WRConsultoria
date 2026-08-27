@@ -56,6 +56,11 @@ from app.models.training_evidence import (
     TrainingAccessEvent,
     TrainingEventType,
 )
+from app.models.tutor_knowledge import (
+    TutorKnowledgeChunk,
+    TutorKnowledgeDocument,
+    TutorKnowledgeStatus,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -128,6 +133,9 @@ __all__ = [
     "TrainingAccessEvent",
     "TrainingEventType",
     "TrainingProfessional",
+    "TutorKnowledgeChunk",
+    "TutorKnowledgeDocument",
+    "TutorKnowledgeStatus",
     "User",
     "UserRole",
 ]

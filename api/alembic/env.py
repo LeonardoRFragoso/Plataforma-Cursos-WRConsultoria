@@ -29,6 +29,7 @@ from app.models.student import Student  # noqa: F401
 from app.models.tenant import PartnerLead, Tenant  # noqa: F401
 from app.models.tenant_secret import TenantSecret  # noqa: F401
 from app.models.tenant_subscription import TenantSubscription  # noqa: F401
+from app.models.tutor_knowledge import TutorKnowledgeChunk, TutorKnowledgeDocument  # noqa: F401
 from app.models.user import User  # noqa: F401
 
 # this is the Alembic Config object, which provides
