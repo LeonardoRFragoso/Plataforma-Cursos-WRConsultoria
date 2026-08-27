@@ -181,6 +181,9 @@ class ExternalPadesGatewayProvider:
             "Content-Type": "application/pdf",
             "X-Certificate-Id": str(certificate_id),
             "X-Original-SHA256": original_sha256,
+            # Stable across retries/restarts for the same certificate version.
+            # A compliant gateway must treat this key idempotently.
+            "Idempotency-Key": f"certificate-signature-{certificate_id}",
         }
         if callback_url:
             headers["X-Callback-Url"] = callback_url
