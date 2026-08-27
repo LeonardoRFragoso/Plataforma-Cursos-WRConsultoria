@@ -1,4 +1,4 @@
-"""P1 governance audit trail and privacy request workflow.
+"""P1 governance, privacy workflow and reconciliation metadata.
 
 Revision ID: b0c1d2e3f4a5
 Revises: a0b1c2d3e4f5
@@ -27,6 +27,10 @@ def _enable_rls(table: str) -> None:
 
 
 def upgrade() -> None:
+    op.add_column("payments", sa.Column("last_reconciled_at", sa.DateTime(), nullable=True))
+    op.add_column("payments", sa.Column("last_provider_status", sa.String(length=64), nullable=True))
+    op.create_index("ix_payments_last_reconciled_at", "payments", ["last_reconciled_at"])
+
     op.create_table(
         "admin_audit_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -85,3 +89,6 @@ def downgrade() -> None:
         op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
     op.drop_table("privacy_requests")
     op.drop_table("admin_audit_logs")
+    op.drop_index("ix_payments_last_reconciled_at", table_name="payments")
+    op.drop_column("payments", "last_provider_status")
+    op.drop_column("payments", "last_reconciled_at")
