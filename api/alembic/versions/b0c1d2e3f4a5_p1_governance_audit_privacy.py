@@ -77,6 +77,13 @@ def upgrade() -> None:
     op.create_index("ix_privacy_requests_status", "privacy_requests", ["status"])
     op.create_index("ix_privacy_requests_tenant_status", "privacy_requests", ["tenant_id", "status"])
     op.create_index("ix_privacy_requests_user_created", "privacy_requests", ["user_id", "created_at"])
+    op.create_index(
+        "uq_privacy_request_open_type",
+        "privacy_requests",
+        ["tenant_id", "user_id", "request_type"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('OPEN', 'IN_REVIEW')"),
+    )
 
     _enable_rls("admin_audit_logs")
     _enable_rls("privacy_requests")
