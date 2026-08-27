@@ -113,10 +113,14 @@ class ComplianceProfileUpsert(BaseModel):
     @field_validator("next_compliance_review_at")
     @classmethod
     def normalize_review_datetime(cls, value: datetime | None):
-        """Store review timestamps as UTC-naive, matching the platform DB contract."""
-        if value is None or value.tzinfo is None:
-            return value
-        return value.astimezone(UTC).replace(tzinfo=None)
+        """Normalize to UTC-naive and reject a review date already expired."""
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        if value <= utc_now():
+            raise ValueError("next_compliance_review_at must be in the future")
+        return value
 
     @model_validator(mode="after")
     def validate_assessment_policy(self):
