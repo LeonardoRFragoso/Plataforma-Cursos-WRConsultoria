@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -9,12 +9,18 @@ from app.core.normalization import validate_cnpj
 from app.core.security import get_current_admin, get_current_tenant_id
 from app.core.utils import utc_now
 from app.models.company import Company
-from app.models.corporate import CorporateInvite, CorporateTrainingRequest
+from app.models.corporate import (
+    CorporateEmployeeLinkEvent,
+    CorporateInvite,
+    CorporateTrainingRequest,
+)
 from app.models.one_time_token import OneTimeToken
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.corporate import (
     CorporateInviteResponse,
+    CorporateLinkEventAnnotation,
+    CorporateLinkEventResponse,
     CorporateRequestConvert,
     CorporateRequestConvertResponse,
 )
@@ -64,12 +70,7 @@ async def convert_training_request_to_company(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
-    """Convert a qualified B2B request into the canonical Company record.
-
-    Conversion is tenant-scoped and idempotent by normalized CNPJ. A request
-    without CNPJ cannot be contracted because Company and real B2B payment
-    flows require a valid corporate identity document.
-    """
+    """Convert a qualified B2B request into the canonical Company record."""
     tenant_id = get_current_tenant_id()
     lead = (
         await db.execute(
@@ -132,6 +133,93 @@ async def convert_training_request_to_company(
         created=created,
         status=lead.status,
     )
+
+
+@router.get(
+    "/companies/{company_id}/link-events",
+    response_model=list[CorporateLinkEventResponse],
+)
+async def list_company_link_events(
+    company_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    tenant_id = get_current_tenant_id()
+    events = (
+        await db.execute(
+            select(CorporateEmployeeLinkEvent)
+            .where(
+                CorporateEmployeeLinkEvent.tenant_id == tenant_id,
+                or_(
+                    CorporateEmployeeLinkEvent.company_id == company_id,
+                    CorporateEmployeeLinkEvent.previous_company_id == company_id,
+                ),
+            )
+            .order_by(CorporateEmployeeLinkEvent.created_at.desc())
+        )
+    ).scalars().all()
+    return events
+
+
+@router.patch(
+    "/companies/{company_id}/employees/{student_id}/link-events/latest",
+    response_model=CorporateLinkEventResponse,
+)
+async def annotate_latest_company_link_event(
+    company_id: UUID,
+    student_id: UUID,
+    payload: CorporateLinkEventAnnotation,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """Attach the operational reason/actor to the latest membership change.
+
+    PostgreSQL production deployments generate the event with a DB trigger.
+    Test/create_all environments do not install triggers, so this endpoint
+    also creates the missing UNLINKED audit record after an offboarding call.
+    """
+    tenant_id = get_current_tenant_id()
+    event = (
+        await db.execute(
+            select(CorporateEmployeeLinkEvent)
+            .where(
+                CorporateEmployeeLinkEvent.tenant_id == tenant_id,
+                CorporateEmployeeLinkEvent.student_id == student_id,
+                or_(
+                    CorporateEmployeeLinkEvent.company_id == company_id,
+                    CorporateEmployeeLinkEvent.previous_company_id == company_id,
+                ),
+            )
+            .order_by(CorporateEmployeeLinkEvent.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if event is None:
+        student = (
+            await db.execute(
+                select(Student).where(
+                    Student.id == student_id,
+                    Student.tenant_id == tenant_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        event = CorporateEmployeeLinkEvent(
+            tenant_id=tenant_id,
+            student_id=student_id,
+            previous_company_id=company_id,
+            company_id=student.company_id,
+            action="UNLINKED" if student.company_id is None else "TRANSFERRED",
+        )
+        db.add(event)
+
+    event.reason = payload.reason.strip()
+    event.actor_user_id = UUID(current_user["user_id"])
+    await db.commit()
+    await db.refresh(event)
+    return event
 
 
 @router.get("/companies/{company_id}/invites", response_model=list[CorporateInviteResponse])
