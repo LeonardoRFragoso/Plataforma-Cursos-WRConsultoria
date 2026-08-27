@@ -3,7 +3,9 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import './lesson-sequence.css'
 import { useTenantStore } from './stores/tenant'
+import { installLessonSequenceGuard } from './utils/lessonSequenceGuard'
 import { TENANT_SLUG } from './utils/tenantSlug'
 
 const app = createApp(App)
@@ -23,3 +25,4 @@ tenantStore.loadBranding(TENANT_SLUG).then(() => {
 app.use(router)
 
 app.mount('#app')
+installLessonSequenceGuard()
