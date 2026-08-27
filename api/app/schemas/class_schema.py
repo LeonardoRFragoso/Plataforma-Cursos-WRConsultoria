@@ -17,8 +17,10 @@ class ClassBase(BaseModel):
     description: str | None = None
     status: ClassStatus = ClassStatus.ABERTA
 
+
 class ClassCreate(ClassBase):
     pass
+
 
 class ClassUpdate(BaseModel):
     start_date: date | None = None
@@ -29,8 +31,10 @@ class ClassUpdate(BaseModel):
     description: str | None = None
     status: ClassStatus | None = None
 
+
 class ClassResponse(ClassBase):
     id: UUID
+    pedagogical_project_version_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
