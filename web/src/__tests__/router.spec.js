@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import { navigationGuard, routes } from '../router/index.js'
@@ -156,5 +156,169 @@ describe('Navigation guards', () => {
     await router.push('/super-admin')
     await router.isReady()
     expect(router.currentRoute.value.path).toBe('/super-admin')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// P0 white-screen regression tests
+//
+// The original bug: the router guard awaited initializeUser() (→ /auth/me)
+// for EVERY route when a token existed in localStorage. A slow/down API
+// produced a 16+ second white screen even on public pages like / or /login.
+// These tests verify that public routes never block on session restoration.
+// ---------------------------------------------------------------------------
+
+describe('P0 white-screen: public routes must not block on /auth/me', () => {
+  let router
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    router = createRouter({ history: createMemoryHistory(), routes })
+    router.beforeEach(navigationGuard)
+  })
+
+  it('rota pública + sem token: não chama initializeUser', async () => {
+    const auth = useAuthStore()
+    auth.token = null
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser')
+
+    await router.push('/')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rota pública + token velho: não bloqueia em initializeUser', async () => {
+    const auth = useAuthStore()
+    auth.token = 'stale-token'
+    auth.initialized = false
+    // initializeUser would block if called — we verify it is NOT called
+    const spy = vi.spyOn(auth, 'initializeUser').mockResolvedValue()
+
+    await router.push('/')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rota pública /login + token velho: não bloqueia', async () => {
+    const auth = useAuthStore()
+    auth.token = 'stale-token'
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser').mockResolvedValue()
+
+    await router.push('/login')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rota pública /validar-certificado + token velho: não bloqueia', async () => {
+    const auth = useAuthStore()
+    auth.token = 'stale-token'
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser').mockResolvedValue()
+
+    await router.push('/validar-certificado')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/validar-certificado')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rota pública /cursos/:id + token velho: não bloqueia', async () => {
+    const auth = useAuthStore()
+    auth.token = 'stale-token'
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser').mockResolvedValue()
+
+    await router.push('/cursos/abc-123')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/cursos/abc-123')
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('P0 white-screen: protected routes', () => {
+  let router
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    router = createRouter({ history: createMemoryHistory(), routes })
+    router.beforeEach(navigationGuard)
+  })
+
+  it('rota protegida + sem token: redirect imediato para /login', async () => {
+    const auth = useAuthStore()
+    auth.token = null
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser')
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rota protegida + token válido: inicializa sessão e permite', async () => {
+    const auth = useAuthStore()
+    auth.token = 'valid-token'
+    auth.initialized = false
+    const spy = vi.spyOn(auth, 'initializeUser').mockImplementation(() => {
+      auth.user = { role: 'student' }
+      auth.userRole = 'student'
+      auth.initialized = true
+      return Promise.resolve()
+    })
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('rota protegida + token inválido: limpa sessão e redireciona', async () => {
+    const auth = useAuthStore()
+    auth.token = 'invalid-token'
+    auth.initialized = false
+    // Simulate initializeUser failing and clearing the session (as the
+    // interceptor would do on a 401 that can't be refreshed)
+    const spy = vi.spyOn(auth, 'initializeUser').mockImplementation(() => {
+      auth.token = null
+      auth.user = null
+      auth.userRole = null
+      auth.initialized = true
+      return Promise.resolve()
+    })
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('rota protegida admin + token válido admin: inicializa e permite', async () => {
+    const auth = useAuthStore()
+    auth.token = 'valid-admin-token'
+    auth.initialized = false
+    vi.spyOn(auth, 'initializeUser').mockImplementation(() => {
+      auth.user = { role: 'admin' }
+      auth.userRole = 'admin'
+      auth.initialized = true
+      return Promise.resolve()
+    })
+
+    await router.push('/operations/compliance')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/operations/compliance')
   })
 })

@@ -43,7 +43,7 @@ async def test_mock_signing_queue_completes_document_without_real_icp_claim(
             "provider": "MOCK",
             "enabled": True,
             "signer_display_name": "Responsável Técnico de Teste",
-            "certificate_fingerprint_sha256": hashlib.sha256(b"mock:Responsável Técnico de Teste").hexdigest(),
+            "certificate_fingerprint_sha256": hashlib.sha256("mock:Responsável Técnico de Teste".encode()).hexdigest(),
             "certificate_not_after": (utc_now() + timedelta(days=30)).isoformat() + "Z",
             "provider_metadata": {"max_attempts": 3},
         },
