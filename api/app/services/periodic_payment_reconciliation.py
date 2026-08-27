@@ -28,6 +28,7 @@ from app.services.tenant_secret_service import (
     get_asaas_api_key,
     get_mercado_pago_access_token,
 )
+from app.services.transactional_notifications import send_course_access_notification
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,7 @@ async def reconcile_tenant_payments(
     ).scalars().all()
 
     providers: dict[PaymentProvider, object] = {}
+    newly_confirmed_enrollments: list[Enrollment] = []
     summary = {
         "scanned": len(payments),
         "reconciled": 0,
@@ -170,6 +172,7 @@ async def reconcile_tenant_payments(
         "reviews_opened": 0,
         "ignored": 0,
         "failed": 0,
+        "access_notifications_sent": 0,
     }
 
     for payment in payments:
@@ -232,7 +235,9 @@ async def reconcile_tenant_payments(
                         summary["ignored"] += 1
                         continue
                     if enrollment:
-                        await reconcile_payment_status(payment, enrollment, target)
+                        reconcile_result = await reconcile_payment_status(payment, enrollment, target)
+                        if reconcile_result.get("enrollment_newly_confirmed"):
+                            newly_confirmed_enrollments.append(enrollment)
                     else:
                         payment.status = target
                         if target == PaymentStatus.APROVADO:
@@ -288,4 +293,15 @@ async def reconcile_tenant_payments(
     tenant_settings["last_periodic_payment_reconciliation_at"] = utc_now().isoformat()
     tenant.settings = tenant_settings
     await db.commit()
+
+    # Mirror the B2C webhook contract: notification is an after-commit side
+    # effect and can never roll back payment/enrollment state.
+    seen_enrollments: set[UUID] = set()
+    for enrollment in newly_confirmed_enrollments:
+        if enrollment.id in seen_enrollments:
+            continue
+        seen_enrollments.add(enrollment.id)
+        if await send_course_access_notification(db, enrollment):
+            summary["access_notifications_sent"] += 1
+
     return summary
