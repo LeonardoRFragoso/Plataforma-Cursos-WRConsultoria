@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.core.utils import utc_now
 from app.models.certificate import Certificate, CertificateEvent
-from app.models.certificate_document import CertificateDocument, CertificateDocumentStatus
+from app.models.certificate_document import CertificateDocument
 from app.models.class_model import Class
 from app.models.compliance import CourseComplianceProfile
 from app.models.course import Course
