@@ -44,7 +44,13 @@
 | **GitHub Actions** | Desativado intencionalmente pelo owner (controle de custo) |
 | **Deploy verificado** | ❌ Não verificado nesta fase |
 | **Asaas conta real conectada** | ❌ Não conectada ainda (deferida para Launch Gate) |
-| **Próxima macrofase dev** | Business Journeys & Contracting Hardening (em andamento) |
+| **Próxima macrofase dev** | Compliance Operations & Retention Governance (em andamento) |
+|| **NR Compliance Foundation (PR #34)** | ✅ IMPLEMENTED / MERGED |
+|| **Training Evidence Runtime (PR #35)** | ✅ IMPLEMENTED / MERGED |
+|| **Trusted Certificate Pipeline (PR #36)** | ✅ IMPLEMENTED / MERGED |
+|| **PAdES Signing Orchestration (PR #37)** | ✅ IMPLEMENTED / MERGED |
+|| **Certificate Studio (PR #38)** | ✅ IMPLEMENTED / MERGED |
+|| **Compliance Operations & Retention Governance** | 🟡 IMPLEMENTED / PENDING MERGE |
 
 ---
 

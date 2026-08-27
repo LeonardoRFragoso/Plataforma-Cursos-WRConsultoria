@@ -6,6 +6,26 @@
 >
 > Este documento é de engenharia/produto e não substitui validação jurídica ou técnica do responsável de SST da WR para cada NR específica.
 
+## Estado atual dos macrofases
+
+> Atualizado em 27/08/2026 — reconciliação pós-PR #34 a PR #38 e início de `feat/compliance-operations-closure`.
+
+| Macrofase | PR | Status real | O que existe | O que ainda falta |
+|-----------|----|-------------|--------------|-------------------|
+| NR Compliance Foundation | #34 | IMPLEMENTED / MERGED | `CourseComplianceProfile`, profissionais, matriz por curso, `COMPLIANCE_READY` blocker | Final de aprovação real do responsável técnico da WR; matriz preenchida com dados reais de cada NR |
+| Regulatory Training Evidence Runtime | #35 | IMPLEMENTED / MERGED | `EnrollmentComplianceProgress`, `TrainingAccessEvent`, state machine, aula/log de acesso, confirmação do aluno, componente prático | Validação de manifestação juridicamente aceita; critérios por NR específica |
+| Trusted Certificate Document Pipeline | #36 | IMPLEMENTED / MERGED | Certificado imutável, snapshot, `CertificatePDFContext`, storage/hash, QR/validação pública | Campos regulatórios pendentes de auditoria NR-01 Anexo II |
+| PAdES Signing Orchestration | #37 | IMPLEMENTED / MERGED | Fila de assinatura, `CertificateSigningProfile`, MOCK provider, webhook flow | Conexão real com provedor ICP-Brasil/PAdES; credenciais reais |
+| Certificate Studio | #38 | IMPLEMENTED / MERGED | Templates versionados, atribuição por curso, reemissão regulatória | Definição de template regulatoriamente completo; aprovação de layout |
+| Compliance Operations & Retention Governance | — | IMPLEMENTED / PENDING MERGE | Dashboard `ComplianceOperations.vue`, política versionada de retenção, RLS, concorrência, testes | Go-live e decisão jurídica/LGPD sobre prazos reais |
+
+### Legenda dos status
+
+- **IMPLEMENTED / MERGED**: código implementado e mergeado em `main`.
+- **IMPLEMENTED / PENDING OPERATIONAL VALIDATION**: código implementado, mas precisa de validação em ambiente real (dados, credenciais, aprovações).
+- **EXTERNAL / OWNER ACTION**: depende de decisão ou dado externo (SST, jurídico, credenciais).
+- **LEGAL / REGULATORY INPUT REQUIRED**: depende de validação normativa/jurídica antes de ser considerado apto.
+
 ## Princípio
 
 A plataforma não deve adicionar biometria, reconhecimento facial, gravação por câmera ou proctoring remoto sem necessidade regulatória real.

@@ -55,6 +55,7 @@ describe('useNavConfig', () => {
       '/operations/corporate',
       '/operations/finance',
       '/operations/certificates',
+      '/operations/compliance',
     ])
 
     const certificates = navItems.value.groups.find((g) => g.testid === 'certificates-group')

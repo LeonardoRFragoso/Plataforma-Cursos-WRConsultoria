@@ -18,6 +18,7 @@ from app.api.routes import (
     classes,
     companies,
     compliance,
+    compliance_operations,
     corporate,
     corporate_invites,
     course_content,
@@ -206,6 +207,11 @@ app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliati
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-compliance"])
+app.include_router(
+    compliance_operations.router,
+    prefix="/api/v1/compliance/operations",
+    tags=["compliance-operations"],
+)
 app.include_router(training_evidence.router, prefix="/api/v1/training-evidence", tags=["training-evidence"])
 # Compatibility guards are registered before the legacy routers so existing
 # clients keep their URLs while regulated enrollments cannot bypass the new
