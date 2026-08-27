@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.utils import utc_now
 from app.services.assessment_service import MINIMUM_SCORE
 
 
@@ -111,20 +112,16 @@ class ComplianceProfileUpsert(BaseModel):
 
     @model_validator(mode="after")
     def validate_assessment_policy(self):
-        """Keep compliance metadata aligned with the assessment engine in this slice.
-
-        The existing assessment journey currently uses a 60% policy. Until the
-        engine resolves thresholds per approved compliance profile, a course
-        cannot claim a different enforceable threshold. The model still keeps
-        the field explicit so a later slice can remove this temporary guard
-        without changing the database contract.
-        """
+        """Keep compliance metadata aligned with the assessment engine in this slice."""
         if self.requires_final_assessment:
             if self.minimum_score is None:
-                raise ValueError("minimum_score is required when final assessment is required")
+                raise ValueError(
+                    "minimum_score is required when final assessment is required"
+                )
             if abs(float(self.minimum_score) - float(MINIMUM_SCORE)) >= 0.01:
                 raise ValueError(
-                    f"minimum_score must be {MINIMUM_SCORE:g} while the current assessment engine uses the existing policy"
+                    "minimum_score must match the active assessment policy "
+                    f"({MINIMUM_SCORE:g})"
                 )
         return self
 
@@ -174,3 +171,17 @@ class ComplianceReadinessResponse(BaseModel):
     status: str
     blockers: list[str]
     profile: ComplianceProfileResponse
+
+    @model_validator(mode="after")
+    def surface_expired_review(self):
+        """Never present an expired review date as currently ready."""
+        next_review = self.profile.next_compliance_review_at
+        if next_review is not None:
+            if next_review.tzinfo is not None:
+                next_review = next_review.replace(tzinfo=None)
+            if next_review <= utc_now():
+                self.ready = False
+                blocker = "Compliance review date has expired"
+                if blocker not in self.blockers:
+                    self.blockers.append(blocker)
+        return self
