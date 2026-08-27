@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -37,6 +38,20 @@ def _normalize_request_type(value: str) -> str:
             detail=f"Invalid privacy request type. Allowed: {', '.join(sorted(_REQUEST_TYPES))}",
         )
     return normalized
+
+
+async def _commit_privacy_change(db: AsyncSession) -> None:
+    """Commit privacy state while mapping the known uniqueness race to 409."""
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "uq_privacy_request_open_type" in str(exc.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An open privacy request of this type already exists",
+            ) from exc
+        raise
 
 
 @router.post("/requests", response_model=PrivacyRequestResponse, status_code=status.HTTP_201_CREATED)
@@ -74,7 +89,7 @@ async def create_privacy_request(
         details=payload.details.strip() if payload.details else None,
     )
     db.add(privacy_request)
-    await db.commit()
+    await _commit_privacy_change(db)
     await db.refresh(privacy_request)
     return privacy_request
 
@@ -150,7 +165,7 @@ async def update_privacy_request(
         privacy_request.resolved_by = None
         privacy_request.resolved_at = None
 
-    await db.commit()
+    await _commit_privacy_change(db)
     await db.refresh(privacy_request)
     return privacy_request
 
