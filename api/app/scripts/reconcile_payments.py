@@ -15,13 +15,17 @@ import json
 
 from sqlalchemy import select, text
 
+from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.models.tenant import Tenant, TenantStatus
 from app.services.periodic_payment_reconciliation import reconcile_tenant_payments
 
 
 async def _active_tenant_ids():
+    """Read all active tenants through the same privileged RLS contract used by the API."""
     async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
         await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
         tenants = (
             await db.execute(select(Tenant.id).where(Tenant.status == TenantStatus.ACTIVE))
