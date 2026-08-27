@@ -75,6 +75,7 @@ def upgrade() -> None:
         sa.Column("certificate_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("certificates.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("profile_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("certificate_signing_profiles.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("provider", sa.String(length=64), nullable=False),
+        sa.Column("profile_snapshot", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("status", sa.String(length=32), nullable=False, server_default="QUEUED"),
         sa.Column("provider_job_id", sa.String(length=512), nullable=True),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
