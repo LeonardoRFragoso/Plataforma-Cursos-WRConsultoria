@@ -18,6 +18,7 @@ describe('useNavConfig', () => {
     expect(navItems.value.groups).toEqual([])
     const routes = flat.map((l) => l.to)
     expect(new Set(routes).size).toBe(routes.length)
+    expect(routes).not.toContain('/operations/certificate-studio')
   })
 
   it('admin gets Dashboard/Central Operacional flat + operational groups', () => {
@@ -56,6 +57,12 @@ describe('useNavConfig', () => {
       '/operations/certificates',
     ])
 
+    const certificates = navItems.value.groups.find((g) => g.testid === 'certificates-group')
+    expect(certificates.items.map((i) => i.to)).toEqual([
+      '/certificates',
+      '/operations/certificate-studio',
+    ])
+
     const config = navItems.value.groups.find((g) => g.testid === 'customization')
     expect(config.items.map((i) => i.to)).toEqual([
       '/settings/white-label',
@@ -78,6 +85,7 @@ describe('useNavConfig', () => {
       ...studentNav.value.groups.flatMap((g) => g.items.map((i) => i.to)),
     ]
     expect(allStudentLinks).not.toContain('/settings/financial')
+    expect(allStudentLinks).not.toContain('/operations/certificate-studio')
   })
 
   it('super_admin gets Gestão Global only — no tenant-admin groups', () => {
