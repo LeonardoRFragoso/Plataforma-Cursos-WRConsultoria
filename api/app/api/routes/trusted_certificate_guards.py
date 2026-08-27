@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.core.utils import utc_now
 from app.models.certificate import Certificate, CertificateEvent
-from app.models.certificate_document import CertificateDocument
+from app.models.certificate_document import CertificateDocument, CertificateDocumentStatus
 from app.models.class_model import Class
 from app.models.compliance import CourseComplianceProfile
 from app.models.course import Course
@@ -40,21 +40,42 @@ async def guarded_validate_certificate(
     payload: CertificateValidationRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    certificate = (
+    row = (
         await db.execute(
-            select(Certificate).where(
-                Certificate.validation_code == payload.validation_code
+            select(Certificate, CertificateDocument)
+            .outerjoin(
+                CertificateDocument,
+                CertificateDocument.certificate_id == Certificate.id,
             )
+            .where(Certificate.validation_code == payload.validation_code)
         )
-    ).scalar_one_or_none()
-    if certificate and certificate.status == "PENDING_SIGNATURE":
-        # Pending artifacts are not public credentials yet. Do not expose the
-        # holder/course payload until a signing provider activates the record.
-        return CertificateValidationResponse(
-            valid=False,
-            status="PENDING_SIGNATURE",
-            is_demo=is_demo_certificate(certificate),
+    ).first()
+    if row:
+        certificate, document = row
+        if certificate.status == "PENDING_SIGNATURE":
+            # Pending artifacts are not public credentials yet. Do not expose
+            # holder/course data or the private pre-signature PDF hash.
+            return CertificateValidationResponse(
+                valid=False,
+                status="PENDING_SIGNATURE",
+                is_demo=is_demo_certificate(certificate),
+                document_status=(document.status if document else "PENDING_SIGNATURE"),
+                pdf_sha256=None,
+            )
+
+        response = await legacy_certificates.validate_certificate(
+            payload=payload,
+            db=db,
         )
+        if document:
+            response.document_status = document.status
+            if document.status == CertificateDocumentStatus.SIGNED:
+                response.pdf_sha256 = document.signed_pdf_sha256
+                if response.certificate:
+                    response.certificate.document_status = document.status
+                    response.certificate.pdf_sha256 = document.signed_pdf_sha256
+        return response
+
     return await legacy_certificates.validate_certificate(payload=payload, db=db)
 
 
