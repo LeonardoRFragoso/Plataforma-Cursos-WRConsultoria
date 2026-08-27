@@ -10,6 +10,7 @@ from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial, MaterialDocumentType
 from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
 from app.models.financial_review import FinancialReview, FinancialReviewEvent
+from app.models.governance import AdminAuditLog, PrivacyRequest
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
 from app.models.one_time_token import OneTimeToken
 from app.models.payment import (
@@ -28,6 +29,7 @@ from app.models.tenant_subscription import SubscriptionStatus, TenantSubscriptio
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AdminAuditLog",
     "AssessmentAttempt",
     "Attendance",
     "BillingCycle",
@@ -64,6 +66,7 @@ __all__ = [
     "PaymentStatus",
     "PaymentWebhookEvent",
     "Plan",
+    "PrivacyRequest",
     "ReviewStatus",
     "Student",
     "StudentSignatureEvidence",
