@@ -35,6 +35,7 @@ from app.schemas.compliance import (
     TrainingProfessionalResponse,
     TrainingProfessionalUpdate,
 )
+from app.services.assessment_service import course_requires_assessment
 
 router = APIRouter()
 _DELIVERY_MODES = frozenset(item.value for item in CourseModality)
@@ -64,6 +65,10 @@ def _normalize_delivery_mode(value: str) -> str:
             detail=f"Invalid delivery mode. Allowed: {', '.join(sorted(_DELIVERY_MODES))}",
         )
     return normalized
+
+
+def _is_constraint(exc: IntegrityError, name: str) -> bool:
+    return name in str(exc.orig)
 
 
 async def _load_course(
@@ -138,6 +143,56 @@ async def _load_profile(
     return profile
 
 
+async def _ensure_assignment(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    course_id: UUID,
+    professional_id: UUID,
+    role: str,
+) -> CourseTrainingProfessional:
+    existing = (
+        await db.execute(
+            select(CourseTrainingProfessional).where(
+                CourseTrainingProfessional.tenant_id == tenant_id,
+                CourseTrainingProfessional.course_id == course_id,
+                CourseTrainingProfessional.professional_id == professional_id,
+                CourseTrainingProfessional.role == role,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        return existing
+
+    assignment = CourseTrainingProfessional(
+        tenant_id=tenant_id,
+        course_id=course_id,
+        professional_id=professional_id,
+        role=role,
+    )
+    try:
+        async with db.begin_nested():
+            db.add(assignment)
+            await db.flush()
+    except IntegrityError as exc:
+        if not _is_constraint(exc, "uq_course_training_professional_role"):
+            raise
+        existing = (
+            await db.execute(
+                select(CourseTrainingProfessional).where(
+                    CourseTrainingProfessional.tenant_id == tenant_id,
+                    CourseTrainingProfessional.course_id == course_id,
+                    CourseTrainingProfessional.professional_id == professional_id,
+                    CourseTrainingProfessional.role == role,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+        raise
+    return assignment
+
+
 @router.post(
     "/professionals",
     response_model=TrainingProfessionalResponse,
@@ -163,7 +218,10 @@ async def create_training_professional(
         )
     ).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=409, detail="Training professional with this CPF already exists")
+        raise HTTPException(
+            status_code=409,
+            detail="Training professional with this CPF already exists",
+        )
 
     professional = TrainingProfessional(
         tenant_id=tenant_id,
@@ -171,11 +229,15 @@ async def create_training_professional(
         cpf=cpf,
         qualification=_clean_required(payload.qualification, "qualification"),
         professional_registration=(
-            payload.professional_registration.strip() if payload.professional_registration else None
+            payload.professional_registration.strip()
+            if payload.professional_registration
+            else None
         ),
         council=payload.council.strip().upper() if payload.council else None,
         registration_state=(
-            payload.registration_state.strip().upper() if payload.registration_state else None
+            payload.registration_state.strip().upper()
+            if payload.registration_state
+            else None
         ),
         is_active=True,
     )
@@ -184,7 +246,7 @@ async def create_training_professional(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "uq_training_professional_tenant_cpf" in str(exc.orig):
+        if _is_constraint(exc, "uq_training_professional_tenant_cpf"):
             raise HTTPException(
                 status_code=409,
                 detail="Training professional with this CPF already exists",
@@ -201,7 +263,9 @@ async def list_training_professionals(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    stmt = select(TrainingProfessional).where(TrainingProfessional.tenant_id == tenant_id)
+    stmt = select(TrainingProfessional).where(
+        TrainingProfessional.tenant_id == tenant_id
+    )
     if active_only:
         stmt = stmt.where(TrainingProfessional.is_active.is_(True))
     return (
@@ -269,10 +333,16 @@ async def create_pedagogical_project(
         course_id=course_id,
         version=int(current_max or 0) + 1,
         status=PedagogicalProjectStatus.DRAFT,
-        general_objective=_clean_required(payload.general_objective, "general_objective"),
+        general_objective=_clean_required(
+            payload.general_objective,
+            "general_objective",
+        ),
         specific_objectives=payload.specific_objectives,
         target_audience=_clean_required(payload.target_audience, "target_audience"),
-        teaching_strategy=_clean_required(payload.teaching_strategy, "teaching_strategy"),
+        teaching_strategy=_clean_required(
+            payload.teaching_strategy,
+            "teaching_strategy",
+        ),
         syllabus=payload.syllabus,
         workload_hours=payload.workload_hours,
         delivery_mode=delivery_mode,
@@ -337,7 +407,10 @@ async def update_pedagogical_project(
         if requested_status not in _EDITABLE_PROJECT_STATUSES:
             raise HTTPException(
                 status_code=400,
-                detail="Project status can only move between DRAFT and IN_REVIEW before approval",
+                detail=(
+                    "Project status can only move between DRAFT and IN_REVIEW "
+                    "before approval"
+                ),
             )
         changes["status"] = requested_status
     if "delivery_mode" in changes and changes["delivery_mode"] is not None:
@@ -380,14 +453,18 @@ async def approve_pedagogical_project(
     if project.status == PedagogicalProjectStatus.APPROVED:
         return project
     if project.status == PedagogicalProjectStatus.ARCHIVED:
-        raise HTTPException(status_code=409, detail="Archived project version cannot be approved")
+        raise HTTPException(
+            status_code=409,
+            detail="Archived project version cannot be approved",
+        )
 
     previous = (
         await db.execute(
             select(PedagogicalProjectVersion).where(
                 PedagogicalProjectVersion.tenant_id == tenant_id,
                 PedagogicalProjectVersion.course_id == course_id,
-                PedagogicalProjectVersion.status == PedagogicalProjectStatus.APPROVED,
+                PedagogicalProjectVersion.status
+                == PedagogicalProjectStatus.APPROVED,
                 PedagogicalProjectVersion.id != project.id,
             )
         )
@@ -398,7 +475,9 @@ async def approve_pedagogical_project(
     project.status = PedagogicalProjectStatus.APPROVED
     project.approved_at = utc_now()
     project.approved_by = UUID(current_user["user_id"])
-    project.approval_notes = payload.approval_notes.strip() if payload.approval_notes else None
+    project.approval_notes = (
+        payload.approval_notes.strip() if payload.approval_notes else None
+    )
 
     profile = (
         await db.execute(
@@ -445,17 +524,12 @@ async def upsert_compliance_profile(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    course = await _load_course(db, tenant_id, course_id)
+    course = await _load_course(db, tenant_id, course_id, for_update=True)
     delivery_mode = _normalize_delivery_mode(payload.delivery_mode)
     if delivery_mode != course.modality.value:
         raise HTTPException(
             status_code=409,
             detail="Compliance delivery mode must match the course modality",
-        )
-    if payload.requires_final_assessment and payload.minimum_score is None:
-        raise HTTPException(
-            status_code=400,
-            detail="minimum_score is required when final assessment is required",
         )
 
     if payload.technical_responsible_id:
@@ -487,7 +561,9 @@ async def upsert_compliance_profile(
         "regulatory_version",
     )
     values["delivery_mode"] = delivery_mode
-    values["prerequisites"] = payload.prerequisites.strip() if payload.prerequisites else None
+    values["prerequisites"] = (
+        payload.prerequisites.strip() if payload.prerequisites else None
+    )
     values["certificate_required_fields"] = [
         item.strip() for item in payload.certificate_required_fields if item.strip()
     ]
@@ -507,25 +583,13 @@ async def upsert_compliance_profile(
             profile.status = ComplianceStatus.REVIEW_REQUIRED
 
     if payload.technical_responsible_id:
-        assignment = (
-            await db.execute(
-                select(CourseTrainingProfessional).where(
-                    CourseTrainingProfessional.tenant_id == tenant_id,
-                    CourseTrainingProfessional.course_id == course_id,
-                    CourseTrainingProfessional.professional_id == payload.technical_responsible_id,
-                    CourseTrainingProfessional.role == ProfessionalAssignmentRole.TECHNICAL_RESPONSIBLE,
-                )
-            )
-        ).scalar_one_or_none()
-        if not assignment:
-            db.add(
-                CourseTrainingProfessional(
-                    tenant_id=tenant_id,
-                    course_id=course_id,
-                    professional_id=payload.technical_responsible_id,
-                    role=ProfessionalAssignmentRole.TECHNICAL_RESPONSIBLE,
-                )
-            )
+        await _ensure_assignment(
+            db,
+            tenant_id=tenant_id,
+            course_id=course_id,
+            professional_id=payload.technical_responsible_id,
+            role=ProfessionalAssignmentRole.TECHNICAL_RESPONSIBLE,
+        )
 
     await db.commit()
     await db.refresh(profile)
@@ -541,14 +605,21 @@ async def _readiness_blockers(
     blockers: list[str] = []
     if profile.delivery_mode != course.modality.value:
         blockers.append("Compliance delivery mode does not match the course modality")
-    if profile.requires_final_assessment and profile.minimum_score is None:
-        blockers.append("Final assessment requires a configured minimum score")
+    if profile.requires_final_assessment:
+        if profile.minimum_score is None:
+            blockers.append("Final assessment requires a configured minimum score")
+        if not course_requires_assessment(course.code):
+            blockers.append(
+                "Final assessment is required but no assessment bank is configured for this course"
+            )
     if not profile.certificate_required_fields:
         blockers.append("Certificate required fields have not been defined")
     if profile.next_compliance_review_at is None:
         blockers.append("Next compliance review date has not been defined")
     if profile.requires_practical_component:
-        blockers.append("Practical component tracking must be implemented before this course can be marked ready")
+        blockers.append(
+            "Practical component tracking must be implemented before this course can be marked ready"
+        )
 
     if profile.technical_responsible_id is None:
         blockers.append("Technical responsible has not been assigned")
@@ -570,7 +641,8 @@ async def _readiness_blockers(
         project = (
             await db.execute(
                 select(PedagogicalProjectVersion).where(
-                    PedagogicalProjectVersion.id == profile.pedagogical_project_version_id,
+                    PedagogicalProjectVersion.id
+                    == profile.pedagogical_project_version_id,
                     PedagogicalProjectVersion.tenant_id == tenant_id,
                     PedagogicalProjectVersion.course_id == course.id,
                 )
@@ -579,9 +651,13 @@ async def _readiness_blockers(
         if not project or project.status != PedagogicalProjectStatus.APPROVED:
             blockers.append("Selected pedagogical project is not approved")
         elif abs(float(project.workload_hours) - float(course.carga_horaria)) >= 0.01:
-            blockers.append("Pedagogical project workload does not match the course workload")
+            blockers.append(
+                "Pedagogical project workload does not match the course workload"
+            )
         elif project.delivery_mode != course.modality.value:
-            blockers.append("Pedagogical project delivery mode does not match the course modality")
+            blockers.append(
+                "Pedagogical project delivery mode does not match the course modality"
+            )
 
     return blockers
 
@@ -658,31 +734,24 @@ async def assign_course_professional(
     await _load_course(db, tenant_id, course_id)
     professional = await _load_professional(db, tenant_id, payload.professional_id)
     if not professional.is_active:
-        raise HTTPException(status_code=409, detail="Inactive professional cannot be assigned")
+        raise HTTPException(
+            status_code=409,
+            detail="Inactive professional cannot be assigned",
+        )
     role = payload.role.strip().upper()
     if role not in _ASSIGNMENT_ROLES:
-        raise HTTPException(status_code=400, detail="Invalid professional assignment role")
-
-    existing = (
-        await db.execute(
-            select(CourseTrainingProfessional).where(
-                CourseTrainingProfessional.tenant_id == tenant_id,
-                CourseTrainingProfessional.course_id == course_id,
-                CourseTrainingProfessional.professional_id == professional.id,
-                CourseTrainingProfessional.role == role,
-            )
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid professional assignment role",
         )
-    ).scalar_one_or_none()
-    if existing:
-        return existing
 
-    assignment = CourseTrainingProfessional(
+    assignment = await _ensure_assignment(
+        db,
         tenant_id=tenant_id,
         course_id=course_id,
         professional_id=professional.id,
         role=role,
     )
-    db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
     return assignment
@@ -732,7 +801,10 @@ async def remove_course_professional(
         )
     ).scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Professional assignment not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Professional assignment not found",
+        )
 
     profile = (
         await db.execute(
@@ -749,7 +821,10 @@ async def remove_course_professional(
     ):
         raise HTTPException(
             status_code=409,
-            detail="Technical responsible assignment is referenced by the compliance profile",
+            detail=(
+                "Technical responsible assignment is referenced by the "
+                "compliance profile"
+            ),
         )
 
     await db.delete(assignment)
