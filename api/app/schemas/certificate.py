@@ -67,6 +67,8 @@ class CertificateSummary(BaseModel):
     issued_at: datetime
     expires_at: datetime | None = None
     content_hash: str | None = None
+    document_status: str | None = None
+    pdf_sha256: str | None = None
 
 
 class StudentSummary(BaseModel):
@@ -121,6 +123,8 @@ class CertificateValidationResponse(BaseModel):
     valid: bool
     status: str | None = None
     is_demo: bool = False
+    document_status: str | None = None
+    pdf_sha256: str | None = None
 
     # Nested, privacy-safe payloads.
     certificate: CertificateSummary | None = None
