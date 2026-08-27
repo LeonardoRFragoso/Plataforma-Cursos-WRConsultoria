@@ -1,0 +1,18 @@
+button[data-testid="lesson-row"][data-lesson-locked="true"] {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+button[data-testid="lesson-row"][data-lesson-locked="true"]::after {
+  content: "Bloqueada";
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgb(100 116 139);
+}
+
+button[data-lesson-next-locked="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
