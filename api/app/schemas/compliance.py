@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.services.assessment_service import MINIMUM_SCORE
 
 
 class TrainingProfessionalCreate(BaseModel):
@@ -106,6 +108,25 @@ class ComplianceProfileUpsert(BaseModel):
     technical_responsible_id: UUID | None = None
     pedagogical_project_version_id: UUID | None = None
     next_compliance_review_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_assessment_policy(self):
+        """Keep compliance metadata aligned with the assessment engine in this slice.
+
+        The existing assessment journey currently uses a 60% policy. Until the
+        engine resolves thresholds per approved compliance profile, a course
+        cannot claim a different enforceable threshold. The model still keeps
+        the field explicit so a later slice can remove this temporary guard
+        without changing the database contract.
+        """
+        if self.requires_final_assessment:
+            if self.minimum_score is None:
+                raise ValueError("minimum_score is required when final assessment is required")
+            if abs(float(self.minimum_score) - float(MINIMUM_SCORE)) >= 0.01:
+                raise ValueError(
+                    f"minimum_score must be {MINIMUM_SCORE:g} while the current assessment engine uses the existing policy"
+                )
+        return self
 
 
 class ComplianceProfileResponse(BaseModel):
