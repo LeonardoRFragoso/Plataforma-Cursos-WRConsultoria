@@ -1,27 +1,8 @@
 """Payment customer synchronization service.
 
-Handles the lookup → reuse → create flow for provider customer mappings.
-Works for both individual students and corporate companies.
-
-Flow:
-1. Look up existing PaymentCustomer by (tenant_id, student_id/company_id, provider).
-2. If found, reuse the stored provider_customer_id.
-3. If not found, call the provider to create/lookup a customer using
-   stable externalReference (never name-based identity).
-4. Persist the new mapping in PaymentCustomer.
-5. Return the provider_customer_id.
-
-Duplicate prevention:
-- PaymentCustomer has unique constraints on
-  (tenant, student, provider) and (tenant, company, provider).
-- The provider's create_or_update_customer also deduplicates via
-  externalReference before creating.
-- Under retry/concurrency, the DB unique constraint is the final guard.
-
-CPF/CNPJ validation:
-- For production charges, a valid CPF (student) or CNPJ (company) is
-  required. The service raises ValueError if missing/invalid when
-  not in mock mode.
+Handles tenant-scoped provider customer mappings for students and companies.
+Identity documents are mathematically validated before any non-mock provider
+call so malformed legacy data can never create a real customer/charge path.
 """
 
 from __future__ import annotations
@@ -31,14 +12,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.normalization import validate_cnpj, validate_cpf
 from app.models.company import Company
 from app.models.payment import PaymentCustomer, PaymentProvider
 from app.models.student import Student
 from app.models.user import User
-from app.services.payment_provider_base import (
-    CustomerResult,
-    PaymentProviderInterface,
-)
+from app.services.payment_provider_base import CustomerResult, PaymentProviderInterface
 
 
 async def get_or_create_student_customer(
@@ -49,11 +28,7 @@ async def get_or_create_student_customer(
     student_id: UUID,
     provider_name: PaymentProvider,
 ) -> str:
-    """Get or create a provider customer for a student.
-
-    Returns the provider_customer_id.
-    """
-    # 1. Check existing mapping
+    """Get or create a provider customer for a tenant-scoped student."""
     stmt = select(PaymentCustomer).where(
         PaymentCustomer.tenant_id == tenant_id,
         PaymentCustomer.student_id == student_id,
@@ -63,29 +38,34 @@ async def get_or_create_student_customer(
     if existing:
         return existing.provider_customer_id
 
-    # 2. Load student + user for customer data
-    stmt = (
+    student_stmt = (
         select(Student, User)
         .join(User, Student.user_id == User.id)
-        .where(
-            Student.id == student_id,
-            Student.tenant_id == tenant_id,
-        )
+        .where(Student.id == student_id, Student.tenant_id == tenant_id)
     )
-    row = (await db.execute(stmt)).first()
+    row = (await db.execute(student_stmt)).first()
     if not row:
         raise ValueError(f"Student {student_id} not found in tenant {tenant_id}")
 
     student, user = row
+    cpf = (student.cpf or "").strip()
+    if not _is_mock_provider(provider):
+        if not cpf:
+            raise ValueError(f"Student {student_id} has no CPF — required for production payment")
+        try:
+            cpf = validate_cpf(cpf)
+        except ValueError:
+            raise ValueError(
+                f"Student {student_id} has invalid CPF — production payment blocked"
+            ) from None
+    elif cpf:
+        # Keep mock paths compatible with historical fixtures while normalizing
+        # valid documents whenever possible.
+        try:
+            cpf = validate_cpf(cpf)
+        except ValueError:
+            cpf = "".join(ch for ch in cpf if ch.isdigit())
 
-    # 3. Validate CPF for production (non-mock) providers
-    cpf = (student.cpf or "").replace(".", "").replace("-", "").strip()
-    if not cpf and not _is_mock_provider(provider):
-        raise ValueError(
-            f"Student {student_id} has no CPF — required for production payment"
-        )
-
-    # 4. Create/lookup customer at provider using stable externalReference
     external_id = f"stu-{student_id}"
     result: CustomerResult = await provider.create_or_update_customer(
         name=user.full_name or user.email,
@@ -95,7 +75,6 @@ async def get_or_create_student_customer(
         external_id=external_id,
     )
 
-    # 5. Persist mapping
     mapping = PaymentCustomer(
         tenant_id=tenant_id,
         provider=provider_name,
@@ -106,7 +85,6 @@ async def get_or_create_student_customer(
     try:
         await db.flush()
     except Exception:
-        # Concurrency: another request may have created it. Re-fetch.
         await db.rollback()
         existing = (await db.execute(stmt)).scalar_one_or_none()
         if existing:
@@ -124,11 +102,7 @@ async def get_or_create_company_customer(
     company_id: UUID,
     provider_name: PaymentProvider,
 ) -> str:
-    """Get or create a provider customer for a company (corporate billing).
-
-    Returns the provider_customer_id.
-    """
-    # 1. Check existing mapping
+    """Get or create a provider customer for a tenant-scoped company."""
     stmt = select(PaymentCustomer).where(
         PaymentCustomer.tenant_id == tenant_id,
         PaymentCustomer.company_id == company_id,
@@ -138,29 +112,35 @@ async def get_or_create_company_customer(
     if existing:
         return existing.provider_customer_id
 
-    # 2. Load company
     company = await db.get(Company, company_id)
     if not company or company.tenant_id != tenant_id:
         raise ValueError(f"Company {company_id} not found in tenant {tenant_id}")
 
-    # 3. Validate CNPJ for production
-    cnpj = (company.cnpj or "").replace(".", "").replace("-", "").replace("/", "").strip()
-    if not cnpj and not _is_mock_provider(provider):
-        raise ValueError(
-            f"Company {company_id} has no CNPJ — required for production payment"
-        )
+    cnpj = (company.cnpj or "").strip()
+    if not _is_mock_provider(provider):
+        if not cnpj:
+            raise ValueError(f"Company {company_id} has no CNPJ — required for production payment")
+        try:
+            cnpj = validate_cnpj(cnpj)
+        except ValueError:
+            raise ValueError(
+                f"Company {company_id} has invalid CNPJ — production payment blocked"
+            ) from None
+    elif cnpj:
+        try:
+            cnpj = validate_cnpj(cnpj)
+        except ValueError:
+            cnpj = "".join(ch for ch in cnpj if ch.isdigit())
 
-    # 4. Create/lookup customer at provider
     external_id = f"com-{company_id}"
     result: CustomerResult = await provider.create_or_update_customer(
         name=company.legal_name,
-        email=company.rh_email or f"company-{company_id}@noreply.local",
+        email=company.billing_email or company.rh_email or f"company-{company_id}@noreply.local",
         cpf_cnpj=cnpj or None,
         phone=company.rh_phone,
         external_id=external_id,
     )
 
-    # 5. Persist mapping
     mapping = PaymentCustomer(
         tenant_id=tenant_id,
         provider=provider_name,
@@ -185,7 +165,4 @@ def _is_mock_provider(provider: PaymentProviderInterface) -> bool:
     return getattr(provider, "_mock", False) is True
 
 
-__all__ = [
-    "get_or_create_company_customer",
-    "get_or_create_student_customer",
-]
+__all__ = ["get_or_create_company_customer", "get_or_create_student_customer"]
