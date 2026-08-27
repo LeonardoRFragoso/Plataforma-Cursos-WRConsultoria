@@ -1,6 +1,7 @@
 from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
 from app.models.attendance import Attendance
 from app.models.certificate import Certificate, CertificateEvent
+from app.models.certificate_document import CertificateDocument, CertificateDocumentStatus
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
 from app.models.compliance import (
@@ -51,6 +52,8 @@ __all__ = [
     "Attendance",
     "BillingCycle",
     "Certificate",
+    "CertificateDocument",
+    "CertificateDocumentStatus",
     "CertificateEvent",
     "Class",
     "ClassStatus",

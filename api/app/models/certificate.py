@@ -17,6 +17,13 @@ class Certificate(Base):
             postgresql_where=text("status = 'ACTIVE'"),
             sqlite_where=text("status = 'ACTIVE'"),
         ),
+        Index(
+            "uq_certificate_pending_signature_per_enrollment",
+            "enrollment_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING_SIGNATURE'"),
+            sqlite_where=text("status = 'PENDING_SIGNATURE'"),
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
