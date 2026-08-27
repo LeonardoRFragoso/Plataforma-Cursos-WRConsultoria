@@ -265,7 +265,7 @@ async def test_regulatory_reissue_returns_to_pending_signature_pipeline(
     assert second["id"] != certificate_id
     assert second["status"] == "PENDING_SIGNATURE"
     assert second["supersedes_id"] == certificate_id
-    assert second["version"] == first["document"].get("version", second["version"] - 1) + 1 or second["version"] == 2
+    assert second["version"] == 2
 
     second_document = await client.get(
         f"/api/v1/certificate-documents/{second['id']}",
