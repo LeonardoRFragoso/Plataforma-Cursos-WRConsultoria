@@ -20,7 +20,9 @@ class AssessmentAttempt(Base):
     answers = Column(JSONB, nullable=True)
     correct_answers = Column(Integer, nullable=True)
     total_questions = Column(Integer, nullable=False)
-    minimum_score = Column(Float, nullable=False, default=70.0)
+    # WR homologation default. For a compliance-managed course the value is
+    # copied from CourseComplianceProfile at attempt creation time.
+    minimum_score = Column(Float, nullable=False, default=60.0)
     score = Column(Float, nullable=True)
     passed = Column(Boolean, nullable=False, default=False)
     started_at = Column(DateTime, default=utc_now, nullable=False)
@@ -44,5 +46,11 @@ class StudentSignatureEvidence(Base):
     assessment_attempt_id = Column(UUID(as_uuid=True), ForeignKey("assessment_attempts.id"), nullable=False)
     declaration_version = Column(String, nullable=False, default="nr1-demo-v1")
     auth_method = Column(String, nullable=False, default="PASSWORD_REAUTH")
+    # Audit evidence only. The password is verified and immediately discarded.
+    declaration_text_hash = Column(String(64), nullable=True)
+    certification_payload_hash = Column(String(64), nullable=True)
+    session_id = Column(String(128), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
     accepted_at = Column(DateTime, default=utc_now, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
