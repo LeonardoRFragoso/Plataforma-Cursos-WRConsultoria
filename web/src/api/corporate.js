@@ -3,6 +3,7 @@ import api from './client'
 export const createCorporateRequest = (payload) => api.post('/api/v1/corporate/requests', payload)
 export const listCorporateRequests = (params = {}) => api.get('/api/v1/corporate/requests', { params })
 export const updateCorporateRequest = (id, payload) => api.patch(`/api/v1/corporate/requests/${id}`, payload)
+export const convertCorporateRequest = (id, payload = {}) => api.post(`/api/v1/corporate/requests/${id}/convert`, payload)
 export const linkCompanyEmployee = (companyId, payload) => api.post(`/api/v1/corporate/companies/${companyId}/employees/link`, payload)
 export const inviteCompanyEmployee = (companyId, payload) => api.post(`/api/v1/corporate/companies/${companyId}/invites`, payload)
 export const resendCompanyActivation = (companyId, studentId) => api.post(`/api/v1/corporate/companies/${companyId}/employees/${studentId}/resend-activation`)
