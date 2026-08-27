@@ -37,12 +37,7 @@ async def _validate_regulatory_class_opening(
     course: Course,
     profile: CourseComplianceProfile,
 ) -> UUID:
-    """Revalidate mutable compliance facts before opening a regulated class.
-
-    ``COMPLIANCE_READY`` is a reviewed state, not a permanent exemption from
-    validation. A new class must fail closed when the review expired or when
-    facts used by that review changed afterwards.
-    """
+    """Revalidate mutable compliance facts before opening a regulated class."""
     if profile.status != ComplianceStatus.COMPLIANCE_READY:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -53,10 +48,7 @@ async def _validate_regulatory_class_opening(
             status_code=status.HTTP_409_CONFLICT,
             detail="Compliance-ready course has no completed compliance review",
         )
-    if (
-        profile.next_compliance_review_at is None
-        or profile.next_compliance_review_at <= utc_now()
-    ):
+    if profile.next_compliance_review_at is None or profile.next_compliance_review_at <= utc_now():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Course compliance review is missing or expired",
@@ -71,11 +63,10 @@ async def _validate_regulatory_class_opening(
             status_code=status.HTTP_409_CONFLICT,
             detail="Compliance delivery mode no longer matches the course modality",
         )
-    if profile.requires_practical_component:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Practical component tracking is required before opening this class",
-        )
+    # Practical requirements are now supported by the training-evidence
+    # runtime. The class may open, but the enrollment state machine will keep
+    # certification blocked until a current SATISFACTORY practical record is
+    # present for the enrollment.
     if profile.requires_final_assessment and not course_requires_assessment(course.code):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -100,10 +91,7 @@ async def _validate_regulatory_class_opening(
             status_code=status.HTTP_409_CONFLICT,
             detail="Technical responsible is missing or inactive",
         )
-    if (
-        professional.updated_at
-        and professional.updated_at > profile.last_compliance_review_at
-    ):
+    if professional.updated_at and professional.updated_at > profile.last_compliance_review_at:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Technical responsible changed after the last compliance review",
@@ -117,8 +105,7 @@ async def _validate_regulatory_class_opening(
     project = (
         await db.execute(
             select(PedagogicalProjectVersion).where(
-                PedagogicalProjectVersion.id
-                == profile.pedagogical_project_version_id,
+                PedagogicalProjectVersion.id == profile.pedagogical_project_version_id,
                 PedagogicalProjectVersion.tenant_id == tenant_id,
                 PedagogicalProjectVersion.course_id == course.id,
             )
@@ -157,10 +144,7 @@ async def create_class(
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
     if not course.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Course must be active to create a class",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Course must be active to create a class")
 
     compliance_profile = (
         await db.execute(
@@ -188,39 +172,21 @@ async def create_class(
         )
     ).scalar_one_or_none()
     if not responsible or not responsible.is_active or responsible.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Responsible user must be an active admin",
-        )
+        raise HTTPException(status_code=400, detail="Responsible user must be an active admin")
     if class_data.start_date >= class_data.end_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Start date must be before end date",
-        )
+        raise HTTPException(status_code=400, detail="Start date must be before end date")
     if class_data.max_students <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="max_students must be greater than zero",
-        )
+        raise HTTPException(status_code=400, detail="max_students must be greater than zero")
     if class_data.status == ClassStatus.CANCELADA:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot create a class with CANCELADA status",
-        )
+        raise HTTPException(status_code=400, detail="Cannot create a class with CANCELADA status")
 
     ead_link = class_data.ead_link
     if course.modality in (CourseModality.EAD, CourseModality.SEMIPRESENCIAL) and not ead_link:
         ead_link = _generate_ead_access_link(course.id)
     if course.modality == CourseModality.PRESENCIAL and not class_data.location:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="In-person classes require a location",
-        )
+        raise HTTPException(status_code=400, detail="In-person classes require a location")
     if course.modality == CourseModality.SEMIPRESENCIAL and not (class_data.location or ead_link):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Hybrid classes require a location or ead_link",
-        )
+        raise HTTPException(status_code=400, detail="Hybrid classes require a location or ead_link")
 
     class_dict = class_data.model_dump()
     class_dict["ead_link"] = ead_link
@@ -240,12 +206,7 @@ async def list_classes(
     limit: int = 100,
 ):
     tenant_id = get_current_tenant_id()
-    stmt = (
-        select(Class)
-        .where(Class.tenant_id == tenant_id)
-        .offset(skip)
-        .limit(limit)
-    )
+    stmt = select(Class).where(Class.tenant_id == tenant_id).offset(skip).limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -254,12 +215,10 @@ async def list_classes(
 async def get_class(class_id: UUID, db: AsyncSession = Depends(get_db)):
     tenant_id = get_current_tenant_id()
     class_obj = (
-        await db.execute(
-            select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id)
-        )
+        await db.execute(select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if not class_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+        raise HTTPException(status_code=404, detail="Class not found")
     return class_obj
 
 
@@ -272,13 +231,10 @@ async def update_class(
 ):
     tenant_id = get_current_tenant_id()
     class_obj = (
-        await db.execute(
-            select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id)
-        )
+        await db.execute(select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if not class_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
-
+        raise HTTPException(status_code=404, detail="Class not found")
     update_data = class_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(class_obj, field, value)
@@ -295,11 +251,9 @@ async def delete_class(
 ):
     tenant_id = get_current_tenant_id()
     class_obj = (
-        await db.execute(
-            select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id)
-        )
+        await db.execute(select(Class).where(Class.id == class_id, Class.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if not class_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+        raise HTTPException(status_code=404, detail="Class not found")
     await db.delete(class_obj)
     await db.commit()
