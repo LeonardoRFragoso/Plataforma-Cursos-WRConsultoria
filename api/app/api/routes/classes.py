@@ -6,8 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_admin
+from app.core.security import get_current_admin, get_current_tenant_id
 from app.models.class_model import Class, ClassStatus
+from app.models.compliance import (
+    ComplianceStatus,
+    CourseComplianceProfile,
+    PedagogicalProjectStatus,
+    PedagogicalProjectVersion,
+)
 from app.models.course import Course, CourseModality
 from app.models.user import User, UserRole
 from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
@@ -32,6 +38,7 @@ async def create_class(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
+    tenant_id = get_current_tenant_id()
     course = await db.get(Course, class_data.course_id)
     if not course:
         raise HTTPException(
@@ -43,6 +50,47 @@ async def create_class(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Course must be active to create a class",
         )
+
+    # A course only becomes regulated in the platform when an explicit
+    # compliance profile exists. Once it does, new classes cannot bypass the
+    # review workflow and must pin the approved pedagogical version that was
+    # current at class creation time.
+    compliance_profile = (
+        await db.execute(
+            select(CourseComplianceProfile).where(
+                CourseComplianceProfile.tenant_id == tenant_id,
+                CourseComplianceProfile.course_id == course.id,
+            )
+        )
+    ).scalar_one_or_none()
+    pinned_project_id = None
+    if compliance_profile:
+        if compliance_profile.status != ComplianceStatus.COMPLIANCE_READY:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Regulatory course must be compliance-ready before creating a class",
+            )
+        if not compliance_profile.pedagogical_project_version_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Compliance-ready course has no pedagogical project version",
+            )
+        project = (
+            await db.execute(
+                select(PedagogicalProjectVersion).where(
+                    PedagogicalProjectVersion.id
+                    == compliance_profile.pedagogical_project_version_id,
+                    PedagogicalProjectVersion.tenant_id == tenant_id,
+                    PedagogicalProjectVersion.course_id == course.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not project or project.status != PedagogicalProjectStatus.APPROVED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Compliance-ready course does not reference an approved pedagogical project",
+            )
+        pinned_project_id = project.id
 
     responsible = await db.get(User, class_data.responsible_admin_id)
     if not responsible or not responsible.is_active or responsible.role != UserRole.ADMIN:
@@ -89,14 +137,15 @@ async def create_class(
             detail="Hybrid classes require a location or ead_link",
         )
 
-    # Build the class with the auto-generated ead_link if applicable
     class_dict = class_data.model_dump()
     class_dict["ead_link"] = ead_link
+    class_dict["pedagogical_project_version_id"] = pinned_project_id
     class_obj = Class(**class_dict)
     db.add(class_obj)
     await db.commit()
     await db.refresh(class_obj)
     return class_obj
+
 
 @router.get("/", response_model=list[ClassResponse])
 async def list_classes(
@@ -109,19 +158,21 @@ async def list_classes(
     classes = result.scalars().all()
     return classes
 
+
 @router.get("/{class_id}", response_model=ClassResponse)
 async def get_class(class_id: UUID, db: AsyncSession = Depends(get_db)):
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
     class_obj = result.scalar_one_or_none()
-    
+
     if not class_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Class not found",
         )
-    
+
     return class_obj
+
 
 @router.put("/{class_id}", response_model=ClassResponse)
 async def update_class(
@@ -133,20 +184,21 @@ async def update_class(
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
     class_obj = result.scalar_one_or_none()
-    
+
     if not class_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Class not found",
         )
-    
+
     update_data = class_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(class_obj, field, value)
-    
+
     await db.commit()
     await db.refresh(class_obj)
     return class_obj
+
 
 @router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_class(
@@ -157,12 +209,12 @@ async def delete_class(
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
     class_obj = result.scalar_one_or_none()
-    
+
     if not class_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Class not found",
         )
-    
+
     await db.delete(class_obj)
     await db.commit()
