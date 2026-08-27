@@ -4,6 +4,7 @@ from datetime import timedelta
 import pytest
 
 from app.core.utils import utc_now
+from tests.cnpj_utils import make_valid_cnpj
 from tests.conftest import make_valid_cpf
 
 
@@ -50,7 +51,7 @@ async def _create_company(client, admin_headers):
         json={
             "legal_name": f"Empresa Operacional {uuid.uuid4().hex[:6]}",
             "trade_name": "Empresa OPS",
-            "cnpj": f"{uuid.uuid4().int % 10**14:014d}",
+            "cnpj": make_valid_cnpj(),
             "rh_name": "RH Operacional",
             "rh_email": f"rh-{uuid.uuid4().hex[:6]}@example.com",
             "rh_phone": "21999999999",
@@ -71,7 +72,7 @@ async def test_corporate_request_pipeline_and_company_operations(client, admin_h
         "/api/v1/corporate/requests",
         json={
             "company_name": "Indústria Teste",
-            "cnpj": "12345678000199",
+            "cnpj": make_valid_cnpj(),
             "contact_name": "Responsável RH",
             "contact_email": "rh.pipeline@example.com",
             "contact_phone": "21988887777",
