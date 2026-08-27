@@ -3,7 +3,12 @@ from app.models.attendance import Attendance
 from app.models.certificate import Certificate, CertificateEvent
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
-from app.models.corporate import CorporateInvite, CorporateSeatAllocation, CorporateTrainingRequest
+from app.models.corporate import (
+    CorporateEmployeeLinkEvent,
+    CorporateInvite,
+    CorporateSeatAllocation,
+    CorporateTrainingRequest,
+)
 from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course, CourseModality
 from app.models.course_content_profile import CourseContentProfile, ReviewStatus
@@ -36,6 +41,7 @@ __all__ = [
     "Class",
     "ClassStatus",
     "Company",
+    "CorporateEmployeeLinkEvent",
     "CorporateEnrollmentBatch",
     "CorporateInvite",
     "CorporateSeatAllocation",
