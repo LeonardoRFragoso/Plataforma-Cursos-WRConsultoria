@@ -35,6 +35,16 @@ def _enable_rls(table: str) -> None:
 
 
 def upgrade() -> None:
+    # A regulated course may explicitly not require a final assessment. The
+    # electronic completion declaration must therefore be able to exist
+    # without a fabricated AssessmentAttempt foreign key.
+    op.alter_column(
+        "student_signature_evidence",
+        "assessment_attempt_id",
+        existing_type=postgresql.UUID(as_uuid=True),
+        nullable=True,
+    )
+
     op.create_table(
         "enrollment_compliance_progress",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -133,30 +143,30 @@ def upgrade() -> None:
     for table in _TABLES:
         _enable_rls(table)
 
-    # The regulatory ledger is append-only. Corrections are represented by
-    # new events/records, never by rewriting historical evidence.
+    # Regulatory evidence is append-only. Corrections are represented by new
+    # ledger/practical rows, never by rewriting or deleting history.
     op.execute(
         """
-        CREATE OR REPLACE FUNCTION reject_training_access_event_mutation()
+        CREATE OR REPLACE FUNCTION reject_regulatory_evidence_mutation()
         RETURNS trigger AS $$
         BEGIN
-            RAISE EXCEPTION 'training_access_events is append-only';
+            RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
         END;
         $$ LANGUAGE plpgsql;
         """
     )
-    op.execute(
-        """
-        CREATE TRIGGER trg_training_access_events_append_only
-        BEFORE UPDATE OR DELETE ON training_access_events
-        FOR EACH ROW EXECUTE FUNCTION reject_training_access_event_mutation();
-        """
-    )
+    for table in ("training_access_events", "practical_training_records"):
+        op.execute(
+            f"CREATE TRIGGER trg_{table}_append_only "
+            f"BEFORE UPDATE OR DELETE ON {table} "
+            f"FOR EACH ROW EXECUTE FUNCTION reject_regulatory_evidence_mutation()"
+        )
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS trg_training_access_events_append_only ON training_access_events")
-    op.execute("DROP FUNCTION IF EXISTS reject_training_access_event_mutation()")
+    for table in ("training_access_events", "practical_training_records"):
+        op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only ON {table}")
+    op.execute("DROP FUNCTION IF EXISTS reject_regulatory_evidence_mutation()")
     for table in reversed(_TABLES):
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation_{table} ON {table}")
         op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
@@ -164,3 +174,24 @@ def downgrade() -> None:
     op.drop_table("training_access_events")
     op.drop_table("practical_training_records")
     op.drop_table("enrollment_compliance_progress")
+    # Refuse to silently lose no-assessment evidence on downgrade: null rows
+    # must be reconciled before restoring the older NOT NULL contract.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM student_signature_evidence
+                WHERE assessment_attempt_id IS NULL
+            ) THEN
+                RAISE EXCEPTION 'Cannot downgrade: signature evidence without assessment attempt exists';
+            END IF;
+        END $$;
+        """
+    )
+    op.alter_column(
+        "student_signature_evidence",
+        "assessment_attempt_id",
+        existing_type=postgresql.UUID(as_uuid=True),
+        nullable=False,
+    )
