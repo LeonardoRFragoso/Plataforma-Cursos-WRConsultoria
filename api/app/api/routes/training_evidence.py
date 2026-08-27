@@ -11,8 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.proxy import get_client_ip
-from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
+from app.core.security import (
+    get_current_admin,
+    get_current_tenant_id,
+    get_current_user,
+    verify_password,
+)
 from app.core.utils import utc_now
+from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
 from app.models.class_model import Class
 from app.models.compliance import (
     CourseComplianceProfile,
@@ -21,16 +27,20 @@ from app.models.compliance import (
     TrainingProfessional,
 )
 from app.models.course import Course
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.student import Student
 from app.models.training_evidence import (
     PracticalTrainingRecord,
+    RegulatoryCompletionState,
     TrainingAccessEvent,
     TrainingEventType,
 )
+from app.models.user import User
 from app.schemas.training_evidence import (
     PracticalTrainingRecordCreate,
     PracticalTrainingRecordResponse,
+    RegulatoryCompletionConfirmRequest,
+    RegulatoryCompletionConfirmResponse,
     RegulatoryStateResponse,
     TrainingAccessEventResponse,
     TrainingEvidenceExportResponse,
@@ -85,6 +95,11 @@ def _authorize_student_or_admin(student: Student, current_user: dict) -> None:
     raise HTTPException(status_code=403, detail="Cannot access this training evidence")
 
 
+def _require_student_owner(student: Student, current_user: dict) -> None:
+    if current_user.get("role") != "student" or str(student.user_id) != current_user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Student ownership required")
+
+
 def _state_response(evaluation) -> RegulatoryStateResponse:
     return RegulatoryStateResponse(
         enrollment_id=evaluation.enrollment_id,
@@ -97,6 +112,27 @@ def _state_response(evaluation) -> RegulatoryStateResponse:
     )
 
 
+async def _require_regulatory(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    enrollment_id: UUID,
+    persist: bool = False,
+):
+    evaluation = await evaluate_regulatory_state(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment_id,
+        persist=persist,
+    )
+    if not evaluation.regulatory:
+        raise HTTPException(
+            status_code=409,
+            detail="Regulatory training evidence is not enabled for this enrollment",
+        )
+    return evaluation
+
+
 @router.get(
     "/enrollments/{enrollment_id}/state",
     response_model=RegulatoryStateResponse,
@@ -107,9 +143,7 @@ async def get_regulatory_state(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    _enrollment, student, _class, _course = await _enrollment_context(
-        db, tenant_id, enrollment_id
-    )
+    _enrollment, student, _class, _course = await _enrollment_context(db, tenant_id, enrollment_id)
     _authorize_student_or_admin(student, current_user)
     evaluation = await evaluate_regulatory_state(
         db,
@@ -132,11 +166,14 @@ async def start_training_session(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    enrollment, student, _class, course = await _enrollment_context(
-        db, tenant_id, enrollment_id
+    enrollment, student, _class, course = await _enrollment_context(db, tenant_id, enrollment_id)
+    _require_student_owner(student, current_user)
+    await _require_regulatory(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        persist=False,
     )
-    if current_user.get("role") != "student" or str(student.user_id) != current_user.get("user_id"):
-        raise HTTPException(status_code=403, detail="Student ownership required")
 
     session_id = uuid4()
     event = await record_training_event(
@@ -176,11 +213,14 @@ async def end_training_session(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    enrollment, student, _class, course = await _enrollment_context(
-        db, tenant_id, enrollment_id
+    enrollment, student, _class, course = await _enrollment_context(db, tenant_id, enrollment_id)
+    _require_student_owner(student, current_user)
+    await _require_regulatory(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        persist=False,
     )
-    if current_user.get("role") != "student" or str(student.user_id) != current_user.get("user_id"):
-        raise HTTPException(status_code=403, detail="Student ownership required")
 
     started = (
         await db.execute(
@@ -224,6 +264,152 @@ async def end_training_session(
 
 
 @router.post(
+    "/enrollments/{enrollment_id}/confirm",
+    response_model=RegulatoryCompletionConfirmResponse,
+)
+async def confirm_regulatory_completion(
+    enrollment_id: UUID,
+    payload: RegulatoryCompletionConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Authenticated completion confirmation for all regulatory courses.
+
+    This route supports courses both with and without a final assessment. It
+    never issues a certificate directly; a successful confirmation advances
+    the state to CERTIFICATE_PENDING_SIGNATURE for the signed-document phase.
+    """
+    if not payload.declaration_accepted:
+        raise HTTPException(status_code=422, detail="Completion declaration must be accepted")
+
+    tenant_id = get_current_tenant_id()
+    enrollment, student, _class, course = await _enrollment_context(db, tenant_id, enrollment_id)
+    _require_student_owner(student, current_user)
+    evaluation = await _require_regulatory(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        persist=True,
+    )
+
+    user = (
+        await db.execute(
+            select(User).where(
+                User.id == student.user_id,
+                User.tenant_id == tenant_id,
+                User.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password confirmation")
+
+    existing = (
+        await db.execute(
+            select(StudentSignatureEvidence).where(
+                StudentSignatureEvidence.tenant_id == tenant_id,
+                StudentSignatureEvidence.enrollment_id == enrollment.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        if evaluation.state not in {
+            RegulatoryCompletionState.CERTIFICATE_PENDING_SIGNATURE,
+            RegulatoryCompletionState.CERTIFIED,
+        }:
+            await db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Completion was already confirmed but current regulatory facts require review",
+                    "state": evaluation.state,
+                    "blockers": evaluation.blockers,
+                },
+            )
+        await db.commit()
+        return RegulatoryCompletionConfirmResponse(
+            confirmed=True,
+            state=_state_response(evaluation),
+        )
+
+    if evaluation.state != RegulatoryCompletionState.STUDENT_CONFIRMATION_PENDING:
+        await db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Regulatory completion requirements are not satisfied",
+                "state": evaluation.state,
+                "blockers": evaluation.blockers,
+            },
+        )
+
+    profile = (
+        await db.execute(
+            select(CourseComplianceProfile).where(
+                CourseComplianceProfile.tenant_id == tenant_id,
+                CourseComplianceProfile.course_id == course.id,
+            )
+        )
+    ).scalar_one()
+    assessment_attempt_id = None
+    if profile.requires_final_assessment:
+        passed_attempt = (
+            await db.execute(
+                select(AssessmentAttempt)
+                .where(
+                    AssessmentAttempt.tenant_id == tenant_id,
+                    AssessmentAttempt.enrollment_id == enrollment.id,
+                    AssessmentAttempt.student_id == student.id,
+                    AssessmentAttempt.passed.is_(True),
+                    AssessmentAttempt.completed_at.is_not(None),
+                )
+                .order_by(AssessmentAttempt.attempt_number.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if not passed_attempt:
+            raise HTTPException(status_code=409, detail="Passing assessment evidence is missing")
+        assessment_attempt_id = passed_attempt.id
+
+    evidence = StudentSignatureEvidence(
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        student_id=student.id,
+        course_id=course.id,
+        assessment_attempt_id=assessment_attempt_id,
+        declaration_version="regulatory-completion-v1",
+        auth_method="PASSWORD_REAUTH",
+    )
+    db.add(evidence)
+    enrollment.status = EnrollmentStatus.CONCLUIDA
+    await db.flush()
+    await record_training_event(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+        student_id=student.id,
+        course_id=course.id,
+        actor_user_id=user.id,
+        event_type=TrainingEventType.STUDENT_CONFIRMATION,
+        details={
+            "assessment_attempt_id": str(assessment_attempt_id) if assessment_attempt_id else None,
+            "declaration_version": evidence.declaration_version,
+            "auth_method": evidence.auth_method,
+        },
+    )
+    evaluation = await evaluate_regulatory_state(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+    )
+    await db.commit()
+    return RegulatoryCompletionConfirmResponse(
+        confirmed=True,
+        state=_state_response(evaluation),
+    )
+
+
+@router.post(
     "/enrollments/{enrollment_id}/practical-records",
     response_model=PracticalTrainingRecordResponse,
     status_code=status.HTTP_201_CREATED,
@@ -235,9 +421,7 @@ async def record_practical_component(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    enrollment, student, _class, course = await _enrollment_context(
-        db, tenant_id, enrollment_id
-    )
+    enrollment, student, _class, course = await _enrollment_context(db, tenant_id, enrollment_id)
     profile = (
         await db.execute(
             select(CourseComplianceProfile).where(
@@ -247,10 +431,7 @@ async def record_practical_component(
         )
     ).scalar_one_or_none()
     if not profile or not profile.requires_practical_component:
-        raise HTTPException(
-            status_code=409,
-            detail="This enrollment does not require a practical component",
-        )
+        raise HTTPException(status_code=409, detail="This enrollment does not require a practical component")
 
     instructor = (
         await db.execute(
@@ -263,7 +444,6 @@ async def record_practical_component(
     ).scalar_one_or_none()
     if not instructor:
         raise HTTPException(status_code=404, detail="Active training professional not found")
-
     assignment = (
         await db.execute(
             select(CourseTrainingProfessional.id).where(
@@ -308,7 +488,7 @@ async def record_practical_component(
         result=payload.result,
         performed_at=payload.performed_at,
         duration_minutes=payload.duration_minutes,
-        location=payload.location.strip(),
+        location=payload.location,
         notes=payload.notes.strip() if payload.notes else None,
         instructor_snapshot={
             "id": str(instructor.id),
@@ -356,9 +536,7 @@ async def list_practical_records(
     current_user: dict = Depends(get_current_user),
 ):
     tenant_id = get_current_tenant_id()
-    _enrollment, student, _class, _course = await _enrollment_context(
-        db, tenant_id, enrollment_id
-    )
+    _enrollment, student, _class, _course = await _enrollment_context(db, tenant_id, enrollment_id)
     _authorize_student_or_admin(student, current_user)
     return (
         await db.execute(
@@ -368,8 +546,8 @@ async def list_practical_records(
                 PracticalTrainingRecord.enrollment_id == enrollment_id,
             )
             .order_by(
-                PracticalTrainingRecord.performed_at.desc(),
                 PracticalTrainingRecord.created_at.desc(),
+                PracticalTrainingRecord.performed_at.desc(),
             )
         )
     ).scalars().all()
@@ -385,13 +563,12 @@ async def export_training_evidence(
     current_user: dict = Depends(get_current_admin),
 ):
     tenant_id = get_current_tenant_id()
-    enrollment, student, _class, course = await _enrollment_context(
-        db, tenant_id, enrollment_id
-    )
-    evaluation = await evaluate_regulatory_state(
+    enrollment, student, _class, course = await _enrollment_context(db, tenant_id, enrollment_id)
+    evaluation = await _require_regulatory(
         db,
         tenant_id=tenant_id,
         enrollment_id=enrollment.id,
+        persist=True,
     )
     await record_training_event(
         db,
@@ -413,7 +590,7 @@ async def export_training_evidence(
                     PracticalTrainingRecord.tenant_id == tenant_id,
                     PracticalTrainingRecord.enrollment_id == enrollment.id,
                 )
-                .order_by(PracticalTrainingRecord.performed_at.asc())
+                .order_by(PracticalTrainingRecord.created_at.asc())
             )
         ).scalars().all()
     )
@@ -433,10 +610,7 @@ async def export_training_evidence(
     return TrainingEvidenceExportResponse(
         enrollment_id=enrollment.id,
         state=_state_response(evaluation),
-        practical_records=[
-            PracticalTrainingRecordResponse.model_validate(item)
-            for item in practical_records
-        ],
+        practical_records=[PracticalTrainingRecordResponse.model_validate(item) for item in practical_records],
         events=[TrainingAccessEventResponse.model_validate(item) for item in events],
         exported_at=utc_now(),
     )
