@@ -1,17 +1,10 @@
-"""Student final-assessment and demo completion routes.
-
-These endpoints provide the authenticated student journey for courses whose
-final assessment is configured in ``assessment_service``.  They deliberately
-persist lesson progress without invoking the legacy lesson auto-certificate
-path; certification happens only after a passing assessment and explicit
-password re-authentication/declaration confirmation.
-"""
+"""Authenticated final-assessment and regulatory completion routes."""
 
 from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -21,10 +14,12 @@ from app.core.utils import utc_now
 from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
 from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
+from app.models.compliance import CourseComplianceProfile
 from app.models.course import Course
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonProgress
 from app.models.student import Student
+from app.models.training_evidence import RegulatoryCompletionState, TrainingEventType
 from app.models.user import User, UserRole
 from app.schemas.assessment import (
     AssessmentResultResponse,
@@ -44,9 +39,12 @@ from app.services.assessment_service import (
     public_questions,
 )
 from app.services.certificate_service import CertificateService, is_demo_certificate
+from app.services.training_evidence_service import (
+    evaluate_regulatory_state,
+    record_training_event,
+)
 
 router = APIRouter()
-
 _DEMO_CLASS_LOCATION = "DEMO-EAD-ASSESSMENT"
 
 
@@ -61,37 +59,20 @@ async def _load_course(db: AsyncSession, course_id: UUID, tenant_id: UUID) -> Co
     return course
 
 
-async def _load_student(
-    db: AsyncSession,
-    tenant_id: UUID,
-    current_user: dict,
-) -> Student:
+async def _load_student(db: AsyncSession, tenant_id: UUID, current_user: dict) -> Student:
     if current_user.get("role") != "student":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Student access required",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student access required")
     try:
         user_id = UUID(current_user["user_id"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid student identity",
-        ) from exc
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid student identity") from exc
     student = (
         await db.execute(
-            select(Student).where(
-                Student.user_id == user_id,
-                Student.tenant_id == tenant_id,
-            )
+            select(Student).where(Student.user_id == user_id, Student.tenant_id == tenant_id)
         )
     ).scalar_one_or_none()
     if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student profile not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
     return student
 
 
@@ -111,9 +92,7 @@ async def _load_enrollment(
                 Enrollment.tenant_id == tenant_id,
                 Class.course_id == course_id,
                 Class.tenant_id == tenant_id,
-                Enrollment.status.in_(
-                    [EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA]
-                ),
+                Enrollment.status.in_([EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA]),
             )
             .order_by(
                 (Enrollment.status == EnrollmentStatus.CONFIRMADA).desc(),
@@ -155,7 +134,7 @@ async def _required_progress(
     course_id: UUID,
     tenant_id: UUID,
 ) -> tuple[int, int]:
-    required_total = (
+    required_total = int(
         await db.scalar(
             select(func.count(Lesson.id)).where(
                 Lesson.course_id == course_id,
@@ -165,7 +144,7 @@ async def _required_progress(
         )
         or 0
     )
-    completed_required = (
+    completed_required = int(
         await db.scalar(
             select(func.count(LessonProgress.id))
             .join(Lesson, LessonProgress.lesson_id == Lesson.id)
@@ -180,7 +159,7 @@ async def _required_progress(
         )
         or 0
     )
-    return int(required_total), int(completed_required)
+    return required_total, completed_required
 
 
 async def _load_attempt_for_student(
@@ -189,28 +168,38 @@ async def _load_attempt_for_student(
     attempt_id: UUID,
     tenant_id: UUID,
     student_id: UUID,
+    for_update: bool = False,
 ) -> AssessmentAttempt:
-    attempt = (
-        await db.execute(
-            select(AssessmentAttempt).where(
-                AssessmentAttempt.id == attempt_id,
-                AssessmentAttempt.tenant_id == tenant_id,
-                AssessmentAttempt.student_id == student_id,
-            )
-        )
-    ).scalar_one_or_none()
+    stmt = select(AssessmentAttempt).where(
+        AssessmentAttempt.id == attempt_id,
+        AssessmentAttempt.tenant_id == tenant_id,
+        AssessmentAttempt.student_id == student_id,
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    attempt = (await db.execute(stmt)).scalar_one_or_none()
     if not attempt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment attempt not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment attempt not found")
     return attempt
 
 
-@router.get(
-    "/courses/{course_id}/status",
-    response_model=AssessmentStatusResponse,
-)
+async def _compliance_profile(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    course_id: UUID,
+) -> CourseComplianceProfile | None:
+    return (
+        await db.execute(
+            select(CourseComplianceProfile).where(
+                CourseComplianceProfile.tenant_id == tenant_id,
+                CourseComplianceProfile.course_id == course_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+@router.get("/courses/{course_id}/status", response_model=AssessmentStatusResponse)
 async def assessment_status(
     course_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -223,7 +212,6 @@ async def assessment_status(
         tenant_id=tenant_id,
         current_user=current_user,
     )
-
     if not course_requires_assessment(course.code):
         return AssessmentStatusResponse(required=False, lessons_complete=False)
 
@@ -233,8 +221,6 @@ async def assessment_status(
         course_id=course.id,
         tenant_id=tenant_id,
     )
-    lessons_complete = required_total > 0 and completed_required >= required_total
-
     attempts = list(
         (
             await db.execute(
@@ -252,11 +238,7 @@ async def assessment_status(
     completed_attempts = [item for item in attempts if item.completed_at is not None]
     passed_attempts = [item for item in completed_attempts if item.passed]
     passed_attempt = passed_attempts[0] if passed_attempts else None
-    best_score = max(
-        (item.score for item in completed_attempts if item.score is not None),
-        default=None,
-    )
-
+    best_score = max((item.score for item in completed_attempts if item.score is not None), default=None)
     evidence = (
         await db.execute(
             select(StudentSignatureEvidence).where(
@@ -275,48 +257,54 @@ async def assessment_status(
             )
         )
     ).scalar_one_or_none()
-
-    passed = passed_attempt is not None
+    profile = await _compliance_profile(db, tenant_id=tenant_id, course_id=course.id)
+    evaluation = None
+    if profile:
+        evaluation = await evaluate_regulatory_state(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            persist=False,
+        )
+    minimum_score = (
+        attempts[0].minimum_score
+        if attempts
+        else (profile.minimum_score if profile and profile.minimum_score is not None else MINIMUM_SCORE)
+    )
     return AssessmentStatusResponse(
         required=True,
-        lessons_complete=lessons_complete,
-        minimum_score=MINIMUM_SCORE,
+        lessons_complete=required_total > 0 and completed_required >= required_total,
+        minimum_score=minimum_score,
         attempts=len(attempts),
-        passed=passed,
+        passed=passed_attempt is not None,
         passed_attempt_id=passed_attempt.id if passed_attempt else None,
         best_score=best_score,
-        confirmation_required=passed and evidence is None and certificate is None,
+        confirmation_required=(
+            evaluation is not None
+            and evaluation.state == RegulatoryCompletionState.STUDENT_CONFIRMATION_PENDING
+        )
+        if profile
+        else (passed_attempt is not None and evidence is None and certificate is None),
         completion_confirmed=evidence is not None,
         certificate_id=certificate.id if certificate else None,
         certificate_validation_code=certificate.validation_code if certificate else None,
+        regulatory_state=evaluation.state if evaluation else None,
     )
 
 
-@router.post(
-    "/courses/{course_id}/demo-enroll",
-    response_model=DemoEnrollmentResponse,
-)
+@router.post("/courses/{course_id}/demo-enroll", response_model=DemoEnrollmentResponse)
 async def demo_enroll(
     course_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Create a no-charge enrollment only in the explicitly enabled demo environment."""
     if not settings.DEMO_SEED_MODE or settings.ENVIRONMENT.lower() == "production":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo enrollment is disabled in this environment",
-        )
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Demo enrollment is disabled in this environment")
     tenant_id = get_current_tenant_id()
     course = await _load_course(db, course_id, tenant_id)
     if not course_requires_assessment(course.code):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Demo assessment journey is not configured for this course",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo assessment journey is not configured for this course")
     student = await _load_student(db, tenant_id, current_user)
-
     existing = (
         await db.execute(
             select(Enrollment)
@@ -326,9 +314,7 @@ async def demo_enroll(
                 Enrollment.tenant_id == tenant_id,
                 Class.course_id == course.id,
                 Class.tenant_id == tenant_id,
-                Enrollment.status.in_(
-                    [EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA]
-                ),
+                Enrollment.status.in_([EnrollmentStatus.CONFIRMADA, EnrollmentStatus.CONCLUIDA]),
             )
             .order_by(Enrollment.enrollment_date.desc())
             .limit(1)
@@ -341,7 +327,6 @@ async def demo_enroll(
             status=existing.status.value,
             created=False,
         )
-
     admin = (
         await db.execute(
             select(User)
@@ -355,11 +340,7 @@ async def demo_enroll(
         )
     ).scalar_one_or_none()
     if not admin:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Demo enrollment requires an active tenant administrator",
-        )
-
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Demo enrollment requires an active tenant administrator")
     demo_class = (
         await db.execute(
             select(Class).where(
@@ -384,7 +365,6 @@ async def demo_enroll(
         )
         db.add(demo_class)
         await db.flush()
-
     enrollment = Enrollment(
         tenant_id=tenant_id,
         student_id=student.id,
@@ -403,56 +383,33 @@ async def demo_enroll(
     )
 
 
-@router.post(
-    "/lessons/{lesson_id}/progress",
-    response_model=LessonProgressResponse,
-)
+@router.post("/lessons/{lesson_id}/progress", response_model=LessonProgressResponse)
 async def assessment_lesson_progress(
     lesson_id: UUID,
     progress_data: LessonProgressCreate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Persist progress without auto-issuing a certificate at 100% lessons."""
     tenant_id = get_current_tenant_id()
     lesson = (
-        await db.execute(
-            select(Lesson).where(
-                Lesson.id == lesson_id,
-                Lesson.tenant_id == tenant_id,
-            )
-        )
+        await db.execute(select(Lesson).where(Lesson.id == lesson_id, Lesson.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if not lesson:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
-
     course = await _load_course(db, lesson.course_id, tenant_id)
     if not course_requires_assessment(course.code):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment progress route is not configured for this course",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment progress route is not configured for this course")
     student = await _load_student(db, tenant_id, current_user)
-    await _load_enrollment(
+    enrollment = await _load_enrollment(
         db,
         student_id=student.id,
         course_id=course.id,
         tenant_id=tenant_id,
     )
-
     if progress_data.watched_seconds < 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="watched_seconds must be non-negative",
-        )
-    if (
-        lesson.duration_seconds is not None
-        and progress_data.watched_seconds > lesson.duration_seconds
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="watched_seconds cannot exceed lesson duration",
-        )
+        raise HTTPException(status_code=422, detail="watched_seconds must be non-negative")
+    if lesson.duration_seconds is not None and progress_data.watched_seconds > lesson.duration_seconds:
+        raise HTTPException(status_code=422, detail="watched_seconds cannot exceed lesson duration")
 
     progress = (
         await db.execute(
@@ -463,6 +420,8 @@ async def assessment_lesson_progress(
             )
         )
     ).scalar_one_or_none()
+    old_watched = progress.watched_seconds if progress else 0
+    was_completed = bool(progress and progress.completed)
     if not progress:
         progress = LessonProgress(
             tenant_id=tenant_id,
@@ -473,22 +432,43 @@ async def assessment_lesson_progress(
         )
         db.add(progress)
     else:
-        progress.watched_seconds = max(
-            progress.watched_seconds,
-            progress_data.watched_seconds,
-        )
-
+        progress.watched_seconds = max(progress.watched_seconds, progress_data.watched_seconds)
     should_complete = progress_data.completed
-    if (
-        not should_complete
-        and lesson.content_type == LessonContentType.UPLOAD
-        and lesson.duration_seconds
-    ):
+    if not should_complete and lesson.content_type == LessonContentType.UPLOAD and lesson.duration_seconds:
         should_complete = progress.watched_seconds >= int(lesson.duration_seconds * 0.9)
     if should_complete and not progress.completed:
         progress.completed = True
         progress.completed_at = utc_now()
+    await db.flush()
 
+    evaluation = await evaluate_regulatory_state(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+    )
+    if evaluation.regulatory and progress.watched_seconds > old_watched:
+        await record_training_event(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            student_id=student.id,
+            course_id=course.id,
+            lesson_id=lesson.id,
+            actor_user_id=student.user_id,
+            event_type=TrainingEventType.PROGRESS_UPDATED,
+            details={"watched_seconds": progress.watched_seconds},
+        )
+    if evaluation.regulatory and progress.completed and not was_completed:
+        await record_training_event(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            student_id=student.id,
+            course_id=course.id,
+            lesson_id=lesson.id,
+            actor_user_id=student.user_id,
+            event_type=TrainingEventType.LESSON_COMPLETED,
+        )
     await db.commit()
     await db.refresh(progress)
     return progress
@@ -512,11 +492,7 @@ async def start_assessment(
         current_user=current_user,
     )
     if not course_requires_assessment(course.code):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment is not configured for this course",
-        )
-
+        raise HTTPException(status_code=404, detail="Assessment is not configured for this course")
     required_total, completed_required = await _required_progress(
         db,
         student_id=student.id,
@@ -524,11 +500,7 @@ async def start_assessment(
         tenant_id=tenant_id,
     )
     if required_total == 0 or completed_required < required_total:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Complete all required lessons before starting the assessment",
-        )
-
+        raise HTTPException(status_code=409, detail="Complete all required lessons before starting the assessment")
     passed = (
         await db.execute(
             select(AssessmentAttempt)
@@ -543,11 +515,7 @@ async def start_assessment(
         )
     ).scalar_one_or_none()
     if passed:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Assessment already passed; confirm course completion",
-        )
-
+        raise HTTPException(status_code=409, detail="Assessment already passed; confirm course completion")
     unfinished = (
         await db.execute(
             select(AssessmentAttempt)
@@ -572,8 +540,7 @@ async def start_assessment(
             questions=public_questions(course.code),
             started_at=unfinished.started_at,
         )
-
-    last_number = (
+    last_number = int(
         await db.scalar(
             select(func.coalesce(func.max(AssessmentAttempt.attempt_number), 0)).where(
                 AssessmentAttempt.tenant_id == tenant_id,
@@ -582,18 +549,41 @@ async def start_assessment(
         )
         or 0
     )
+    profile = await _compliance_profile(db, tenant_id=tenant_id, course_id=course.id)
+    minimum_score = (
+        profile.minimum_score
+        if profile and profile.requires_final_assessment and profile.minimum_score is not None
+        else MINIMUM_SCORE
+    )
     questions = public_questions(course.code)
     attempt = AssessmentAttempt(
         tenant_id=tenant_id,
         enrollment_id=enrollment.id,
         student_id=student.id,
         course_id=course.id,
-        attempt_number=int(last_number) + 1,
+        attempt_number=last_number + 1,
         question_version=QUESTION_VERSION,
         total_questions=len(questions),
-        minimum_score=MINIMUM_SCORE,
+        minimum_score=minimum_score,
     )
     db.add(attempt)
+    await db.flush()
+    evaluation = await evaluate_regulatory_state(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=enrollment.id,
+    )
+    if evaluation.regulatory:
+        await record_training_event(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            student_id=student.id,
+            course_id=course.id,
+            actor_user_id=student.user_id,
+            event_type=TrainingEventType.ASSESSMENT_STARTED,
+            details={"attempt_id": str(attempt.id), "attempt_number": attempt.attempt_number},
+        )
     await db.commit()
     await db.refresh(attempt)
     return AssessmentStartResponse(
@@ -607,10 +597,7 @@ async def start_assessment(
     )
 
 
-@router.post(
-    "/attempts/{attempt_id}/submit",
-    response_model=AssessmentResultResponse,
-)
+@router.post("/attempts/{attempt_id}/submit", response_model=AssessmentResultResponse)
 async def submit_assessment(
     attempt_id: UUID,
     payload: dict,
@@ -624,48 +611,59 @@ async def submit_assessment(
         attempt_id=attempt_id,
         tenant_id=tenant_id,
         student_id=student.id,
+        for_update=True,
     )
     if attempt.completed_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Assessment attempt was already submitted",
-        )
-
+        raise HTTPException(status_code=409, detail="Assessment attempt was already submitted")
     course = await _load_course(db, attempt.course_id, tenant_id)
     bank = QUESTION_BANKS.get(course.code)
     if not bank:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment is not configured for this course",
-        )
-
+        raise HTTPException(status_code=404, detail="Assessment is not configured for this course")
     answers = payload.get("answers") if isinstance(payload, dict) else None
     if not isinstance(answers, dict):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="answers must be an object",
-        )
+        raise HTTPException(status_code=422, detail="answers must be an object")
     expected_ids = {item["id"] for item in bank}
     if set(answers) != expected_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Answer every assessment question exactly once",
-        )
+        raise HTTPException(status_code=422, detail="Answer every assessment question exactly once")
     for item in bank:
         value = answers.get(item["id"])
         if not isinstance(value, int) or value < 0 or value >= len(item["options"]):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid option for question {item['id']}",
-            )
+            raise HTTPException(status_code=422, detail=f"Invalid option for question {item['id']}")
 
-    correct, total, score_value, passed = grade_answers(course.code, answers)
+    correct, total, score_value, passed = grade_answers(
+        course.code,
+        answers,
+        minimum_score=attempt.minimum_score,
+    )
     attempt.answers = answers
     attempt.correct_answers = correct
     attempt.total_questions = total
     attempt.score = score_value
     attempt.passed = passed
     attempt.completed_at = utc_now()
+    await db.flush()
+    evaluation = await evaluate_regulatory_state(
+        db,
+        tenant_id=tenant_id,
+        enrollment_id=attempt.enrollment_id,
+    )
+    if evaluation.regulatory:
+        await record_training_event(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=attempt.enrollment_id,
+            student_id=student.id,
+            course_id=course.id,
+            actor_user_id=student.user_id,
+            event_type=TrainingEventType.ASSESSMENT_SUBMITTED,
+            details={
+                "attempt_id": str(attempt.id),
+                "attempt_number": attempt.attempt_number,
+                "score": score_value,
+                "minimum_score": attempt.minimum_score,
+                "passed": passed,
+            },
+        )
     await db.commit()
     await db.refresh(attempt)
     return AssessmentResultResponse(
@@ -680,10 +678,7 @@ async def submit_assessment(
     )
 
 
-@router.post(
-    "/attempts/{attempt_id}/confirm",
-    response_model=CompletionConfirmationResponse,
-)
+@router.post("/attempts/{attempt_id}/confirm", response_model=CompletionConfirmationResponse)
 async def confirm_completion(
     attempt_id: UUID,
     payload: CompletionConfirmationRequest,
@@ -691,11 +686,7 @@ async def confirm_completion(
     current_user: dict = Depends(get_current_user),
 ):
     if not payload.declaration_accepted:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Completion declaration must be accepted",
-        )
-
+        raise HTTPException(status_code=422, detail="Completion declaration must be accepted")
     tenant_id = get_current_tenant_id()
     student = await _load_student(db, tenant_id, current_user)
     attempt = await _load_attempt_for_student(
@@ -703,13 +694,10 @@ async def confirm_completion(
         attempt_id=attempt_id,
         tenant_id=tenant_id,
         student_id=student.id,
+        for_update=True,
     )
     if attempt.completed_at is None or not attempt.passed:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A passing assessment attempt is required",
-        )
-
+        raise HTTPException(status_code=409, detail="A passing assessment attempt is required")
     course = await _load_course(db, attempt.course_id, tenant_id)
     enrollment = await _load_enrollment(
         db,
@@ -718,11 +706,7 @@ async def confirm_completion(
         tenant_id=tenant_id,
     )
     if enrollment.id != attempt.enrollment_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Assessment attempt does not match the active enrollment",
-        )
-
+        raise HTTPException(status_code=409, detail="Assessment attempt does not match the active enrollment")
     required_total, completed_required = await _required_progress(
         db,
         student_id=student.id,
@@ -730,10 +714,26 @@ async def confirm_completion(
         tenant_id=tenant_id,
     )
     if required_total == 0 or completed_required < required_total:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Required lessons are no longer complete",
+        raise HTTPException(status_code=409, detail="Required lessons are no longer complete")
+
+    profile = await _compliance_profile(db, tenant_id=tenant_id, course_id=course.id)
+    evaluation = None
+    if profile:
+        evaluation = await evaluate_regulatory_state(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
         )
+        if evaluation.state != RegulatoryCompletionState.STUDENT_CONFIRMATION_PENDING:
+            await db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Regulatory completion requirements are not satisfied",
+                    "state": evaluation.state,
+                    "blockers": evaluation.blockers,
+                },
+            )
 
     user = (
         await db.execute(
@@ -744,15 +744,8 @@ async def confirm_completion(
             )
         )
     ).scalar_one_or_none()
-    if (
-        not user
-        or not user.password_hash
-        or not verify_password(payload.password, user.password_hash)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid password confirmation",
-        )
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password confirmation")
 
     evidence = (
         await db.execute(
@@ -773,8 +766,38 @@ async def confirm_completion(
             auth_method="PASSWORD_REAUTH",
         )
         db.add(evidence)
-
     enrollment.status = EnrollmentStatus.CONCLUIDA
+    await db.flush()
+
+    if profile:
+        await record_training_event(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+            student_id=student.id,
+            course_id=course.id,
+            actor_user_id=user.id,
+            event_type=TrainingEventType.STUDENT_CONFIRMATION,
+            details={
+                "assessment_attempt_id": str(attempt.id),
+                "declaration_version": evidence.declaration_version,
+                "auth_method": evidence.auth_method,
+            },
+        )
+        evaluation = await evaluate_regulatory_state(
+            db,
+            tenant_id=tenant_id,
+            enrollment_id=enrollment.id,
+        )
+        await db.commit()
+        return CompletionConfirmationResponse(
+            confirmed=True,
+            certificate_id=None,
+            certificate_number=None,
+            validation_code=None,
+            is_demo=False,
+            regulatory_state=evaluation.state,
+        )
 
     certificate = (
         await db.execute(
@@ -797,7 +820,6 @@ async def confirm_completion(
             reason="student assessment completion confirmation",
             demo=True,
         )
-
     await db.commit()
     await db.refresh(certificate)
     return CompletionConfirmationResponse(
@@ -806,4 +828,5 @@ async def confirm_completion(
         certificate_number=certificate.certificate_number,
         validation_code=certificate.validation_code,
         is_demo=is_demo_certificate(certificate),
+        regulatory_state=None,
     )

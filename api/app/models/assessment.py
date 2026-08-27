@@ -41,7 +41,14 @@ class StudentSignatureEvidence(Base):
     enrollment_id = Column(UUID(as_uuid=True), ForeignKey("enrollments.id"), nullable=False, unique=True, index=True)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False, index=True)
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False, index=True)
-    assessment_attempt_id = Column(UUID(as_uuid=True), ForeignKey("assessment_attempts.id"), nullable=False)
+    # Some regulated courses may not require a final assessment. In those
+    # cases the authenticated completion declaration remains valid evidence
+    # without fabricating an assessment attempt.
+    assessment_attempt_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("assessment_attempts.id"),
+        nullable=True,
+    )
     declaration_version = Column(String, nullable=False, default="nr1-demo-v1")
     auth_method = Column(String, nullable=False, default="PASSWORD_REAUTH")
     accepted_at = Column(DateTime, default=utc_now, nullable=False)

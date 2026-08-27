@@ -47,6 +47,7 @@ class AssessmentStatusResponse(BaseModel):
     completion_confirmed: bool = False
     certificate_id: UUID | None = None
     certificate_validation_code: str | None = None
+    regulatory_state: str | None = None
 
 
 class CompletionConfirmationRequest(BaseModel):
@@ -56,10 +57,11 @@ class CompletionConfirmationRequest(BaseModel):
 
 class CompletionConfirmationResponse(BaseModel):
     confirmed: bool
-    certificate_id: UUID
-    certificate_number: str
-    validation_code: str
-    is_demo: bool
+    certificate_id: UUID | None = None
+    certificate_number: str | None = None
+    validation_code: str | None = None
+    is_demo: bool = False
+    regulatory_state: str | None = None
 
 
 class DemoEnrollmentResponse(BaseModel):

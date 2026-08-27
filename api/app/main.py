@@ -31,6 +31,8 @@ from app.api.routes import (
     plans,
     privacy,
     reconciliation,
+    regulatory_assessment_guards,
+    regulatory_legacy_guards,
     reports,
     storage,
     students,
@@ -38,6 +40,7 @@ from app.api.routes import (
     tenant_secrets,
     tenant_subscriptions,
     tenants,
+    training_evidence,
 )
 from app.core.audit import AdminAuditMiddleware
 from app.core.config import settings
@@ -113,13 +116,6 @@ async def _get_tenant_subscription_status(tenant_id) -> str | None:
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(_request: Request, exc: IntegrityError):
-    """Expose known business conflicts without leaking database internals.
-
-    The company table already enforces ``(tenant_id, cnpj)`` uniqueness at the
-    database layer. This handler makes the constraint race-safe for both create
-    and update paths: even when two concurrent requests bypass a pre-check, the
-    API returns a deterministic conflict instead of an internal-server error.
-    """
     if "uq_company_tenant_cnpj" in str(exc.orig):
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -205,6 +201,12 @@ app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliati
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-compliance"])
+app.include_router(training_evidence.router, prefix="/api/v1/training-evidence", tags=["training-evidence"])
+# Compatibility guards are registered before the legacy routers so existing
+# clients keep their URLs while regulated enrollments cannot bypass the new
+# completion state machine. They are hidden from OpenAPI by their own routers.
+app.include_router(regulatory_assessment_guards.router, prefix="/api/v1")
+app.include_router(regulatory_legacy_guards.router, prefix="/api/v1")
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])

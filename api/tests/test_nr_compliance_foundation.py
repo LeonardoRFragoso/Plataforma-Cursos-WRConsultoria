@@ -174,10 +174,7 @@ async def test_compliance_ready_pins_approved_project_and_new_version_requires_r
         headers=admin_headers,
     )
     assert class_response.status_code == 201, class_response.text
-    assert (
-        class_response.json()["pedagogical_project_version_id"]
-        == project_v1["id"]
-    )
+    assert class_response.json()["pedagogical_project_version_id"] == project_v1["id"]
 
     immutable = await client.patch(
         f"/api/v1/compliance/courses/{course['id']}/projects/{project_v1['id']}",
@@ -220,7 +217,7 @@ async def test_compliance_ready_pins_approved_project_and_new_version_requires_r
 
 
 @pytest.mark.asyncio
-async def test_readiness_blocks_missing_assessment_bank_and_practical_component(
+async def test_readiness_blocks_missing_assessment_bank_but_supports_practical_runtime(
     client,
     admin_headers,
 ):
@@ -251,7 +248,7 @@ async def test_readiness_blocks_missing_assessment_bank_and_practical_component(
     assert ready.status_code == 409, ready.text
     blockers = ready.json()["detail"]["blockers"]
     assert any("assessment bank" in item for item in blockers)
-    assert any("Practical component tracking" in item for item in blockers)
+    assert not any("Practical component tracking" in item for item in blockers)
 
 
 @pytest.mark.asyncio
