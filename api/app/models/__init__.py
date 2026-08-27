@@ -35,6 +35,14 @@ from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
 from app.models.tenant_secret import TenantSecret
 from app.models.tenant_subscription import SubscriptionStatus, TenantSubscription
+from app.models.training_evidence import (
+    EnrollmentComplianceProgress,
+    PracticalResult,
+    PracticalTrainingRecord,
+    RegulatoryCompletionState,
+    TrainingAccessEvent,
+    TrainingEventType,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -59,6 +67,7 @@ __all__ = [
     "CourseModality",
     "CourseTrainingProfessional",
     "Enrollment",
+    "EnrollmentComplianceProgress",
     "EnrollmentSource",
     "EnrollmentStatus",
     "FinancialReview",
@@ -80,8 +89,11 @@ __all__ = [
     "PedagogicalProjectStatus",
     "PedagogicalProjectVersion",
     "Plan",
+    "PracticalResult",
+    "PracticalTrainingRecord",
     "PrivacyRequest",
     "ProfessionalAssignmentRole",
+    "RegulatoryCompletionState",
     "ReviewStatus",
     "Student",
     "StudentSignatureEvidence",
@@ -90,6 +102,8 @@ __all__ = [
     "TenantSecret",
     "TenantStatus",
     "TenantSubscription",
+    "TrainingAccessEvent",
+    "TrainingEventType",
     "TrainingProfessional",
     "User",
     "UserRole",
