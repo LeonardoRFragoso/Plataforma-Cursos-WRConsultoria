@@ -48,7 +48,15 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 export async function navigationGuard(to) {
   const authStore = useAuthStore()
-  if (authStore.token && !authStore.initialized) await authStore.initializeUser()
+  // Only block on session restoration when the target route actually needs
+  // an authenticated/authorized user. Public routes (/, /login, /cursos,
+  // /validar-certificado, …) must render immediately — a slow or down API
+  // must never produce a white screen on a public page. Session restoration
+  // for public routes still happens in the background via App.vue onMounted.
+  const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin || to.meta.requiresSuperAdmin
+  if (needsAuth && authStore.token && !authStore.initialized) {
+    await authStore.initializeUser()
+  }
   const userRole = authStore.userRole?.toLowerCase()
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     const redirect = isSafeInternalRedirect(to.fullPath) ? to.fullPath : null

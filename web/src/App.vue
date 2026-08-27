@@ -49,13 +49,16 @@ const layoutComponent = computed(() => {
   return PublicLayout
 })
 
-onMounted(async () => {
-  if (authStore.token) {
-    try {
-      await authStore.initializeUser()
-    } catch (error) {
-      // Silent — the API interceptor handles logout/redirect
-    }
+onMounted(() => {
+  // Background session restoration for public routes. The router guard
+  // already awaits initializeUser() for protected routes, so this call only
+  // matters when a user with a stored token lands on a public page. It is
+  // intentionally fire-and-forget — the public page renders immediately and
+  // the session is restored (or silently cleared) in the background.
+  if (authStore.token && !authStore.initialized) {
+    authStore.initializeUser().catch(() => {
+      // Silent — the API interceptor handles logout/redirect on 401
+    })
   }
 })
 </script>
