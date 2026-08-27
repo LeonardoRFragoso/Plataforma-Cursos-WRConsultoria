@@ -438,6 +438,7 @@ async def update_retention_policy_version(
 )
 async def approve_retention_policy_version(
     version_id: UUID,
+    payload: RetentionPolicyUpdate | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_admin),
 ):
@@ -456,6 +457,16 @@ async def approve_retention_policy_version(
         raise HTTPException(status_code=404, detail="Retention policy version not found")
     if item.status == RetentionPolicyStatus.APPROVED:
         return item
+
+    # Allow a single atomic approve-with-final-inputs call: if a body is
+    # supplied, apply the final legal inputs to the DRAFT before validating
+    # them. This mirrors the frontend's save-then-approve flow but makes
+    # approval atomic and avoids a race where a draft is approved before its
+    # final inputs are persisted.
+    if payload is not None:
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, key, value)
+        item.updated_at = utc_now()
 
     required_periods = {
         "certificate_retention_days": item.certificate_retention_days,

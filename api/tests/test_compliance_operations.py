@@ -51,7 +51,7 @@ async def _create_regulatory_fixture(
     *,
     code,
     review_at,
-    requires_assessment=True,
+    requires_assessment=False,
     requires_practical=False,
     enroll_student=True,
 ):
@@ -331,12 +331,29 @@ async def test_summary_with_regulatory_profile_and_near_review(client, admin_hea
 
 @pytest.mark.asyncio
 async def test_summary_expired_review(client, admin_headers):
-    await _create_regulatory_fixture(
+    fixture = await _create_regulatory_fixture(
         client,
         admin_headers,
         code="NR-OPS-EXP",
-        review_at=utc_now() - timedelta(days=5),
+        review_at=utc_now() + timedelta(days=200),
     )
+    # The schema rejects past review dates on creation, so simulate an
+    # expired review by backdating the profile row directly.
+    async with AsyncSessionLocal() as db:
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        from app.models.compliance import CourseComplianceProfile
+
+        profile = (
+            await db.execute(
+                select(CourseComplianceProfile).where(
+                    CourseComplianceProfile.tenant_id == WR_TENANT_ID,
+                    CourseComplianceProfile.course_id == uuid.UUID(fixture["course"]["id"]),
+                )
+            )
+        ).scalar_one()
+        profile.next_compliance_review_at = utc_now() - timedelta(days=5)
+        await db.commit()
     body = (await client.get(f"{BASE}/summary", headers=admin_headers)).json()
     assert body["reviews_expired"] >= 1
 
@@ -359,9 +376,24 @@ async def test_summary_enrollments_without_ledger(client, admin_headers):
 
 @pytest.mark.asyncio
 async def test_summary_signer_profile_expired(client, admin_headers):
-    await _upsert_signing_profile(
-        client, admin_headers, not_after=utc_now() - timedelta(days=1)
-    )
+    # The signing profile API rejects already-expired certificates, so seed
+    # an expired profile directly to exercise the summary's expired detection.
+    async with AsyncSessionLocal() as db:
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+        await db.execute(text("SET LOCAL app.bypass_rls = '1'"))
+        from app.models.certificate_signing import CertificateSigningProfile
+
+        db.add(
+            CertificateSigningProfile(
+                tenant_id=WR_TENANT_ID,
+                provider="MOCK",
+                enabled=True,
+                signer_display_name="Expired Signer",
+                certificate_not_after=utc_now() - timedelta(days=1),
+                provider_metadata={},
+            )
+        )
+        await db.commit()
     body = (await client.get(f"{BASE}/summary", headers=admin_headers)).json()
     assert body["signer_profile_enabled"] is True
     assert body["signer_certificate_expired"] is True
@@ -560,7 +592,10 @@ async def test_retention_create_v1_and_v2(client, admin_headers):
 async def test_retention_independent_tenants(client, admin_headers):
     alfa_id = await _seed_alfa_tenant()
     alfa_admin_id = await _create_admin_in_tenant("alfa-retention@alfa.test", alfa_id)
-    alfa_headers = {"Authorization": f"Bearer {_token(alfa_admin_id, 'admin', alfa_id)}"}
+    alfa_headers = {
+        "Authorization": f"Bearer {_token(alfa_admin_id, 'admin', alfa_id)}",
+        "X-Tenant-Id": str(alfa_id),
+    }
 
     wr_v1 = (
         await client.post(f"{BASE}/retention-policy/versions", json={}, headers=admin_headers)
@@ -786,7 +821,10 @@ async def test_retention_concurrent_first_version_no_500(client, admin_headers):
 async def test_retention_update_not_found_cross_tenant(client, admin_headers):
     alfa_id = await _seed_alfa_tenant()
     alfa_admin_id = await _create_admin_in_tenant("alfa-x@alfa.test", alfa_id)
-    alfa_headers = {"Authorization": f"Bearer {_token(alfa_admin_id, 'admin', alfa_id)}"}
+    alfa_headers = {
+        "Authorization": f"Bearer {_token(alfa_admin_id, 'admin', alfa_id)}",
+        "X-Tenant-Id": str(alfa_id),
+    }
     alfa_created = (
         await client.post(f"{BASE}/retention-policy/versions", json={}, headers=alfa_headers)
     ).json()
