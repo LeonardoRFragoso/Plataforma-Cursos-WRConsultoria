@@ -203,7 +203,7 @@
               </p>
             </div>
             <span class="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-              Nota mínima demo: {{ assessment.minimum_score || 70 }}%
+              Nota mínima demo: {{ assessment.minimum_score || 60 }}%
             </span>
           </div>
         </div>
@@ -375,7 +375,7 @@ const courseId = route.params.id
 const course = ref({})
 const lessons = ref([])
 const progress = ref({ percentage: 0, completed_required: 0, required_lessons: 0 })
-const assessment = ref({ required: false, lessons_complete: false, minimum_score: 70, passed: false })
+const assessment = ref({ required: false, lessons_complete: false, minimum_score: 60, passed: false })
 const selectedLesson = ref(null)
 const watchUrl = ref(null)
 const notEnrolled = ref(false)
