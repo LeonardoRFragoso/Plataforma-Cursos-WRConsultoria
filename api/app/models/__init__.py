@@ -2,6 +2,12 @@ from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
 from app.models.attendance import Attendance
 from app.models.certificate import Certificate, CertificateEvent
 from app.models.certificate_document import CertificateDocument, CertificateDocumentStatus
+from app.models.certificate_signing import (
+    CertificateSigningEvent,
+    CertificateSigningJob,
+    CertificateSigningProfile,
+    SigningJobStatus,
+)
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
 from app.models.compliance import (
@@ -55,6 +61,9 @@ __all__ = [
     "CertificateDocument",
     "CertificateDocumentStatus",
     "CertificateEvent",
+    "CertificateSigningEvent",
+    "CertificateSigningJob",
+    "CertificateSigningProfile",
     "Class",
     "ClassStatus",
     "Company",
@@ -98,6 +107,7 @@ __all__ = [
     "ProfessionalAssignmentRole",
     "RegulatoryCompletionState",
     "ReviewStatus",
+    "SigningJobStatus",
     "Student",
     "StudentSignatureEvidence",
     "SubscriptionStatus",
