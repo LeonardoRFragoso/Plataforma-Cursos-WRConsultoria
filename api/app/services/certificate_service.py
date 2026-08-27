@@ -129,6 +129,55 @@ class IssuanceInputs:
     course_validity_days: int | None
 
 
+@dataclass
+class CertificatePDFContext:
+    """All data needed to render a certificate PDF.
+
+    This is the single entry point for PDF rendering. Today it carries the
+    demo/technical certificate fields. Future NR-01 regulatory fields
+    (training_location, training_started_at, training_completed_at,
+    training_type, program_content, instructors, instructor_qualifications,
+    technical_responsible, signatures, content_reuse/convalidation, …)
+    will be added here as optional attributes, keeping the rendering
+    function signature stable and allowing a future multi-page layout
+    (page 1 = certificate, page 2 = program content / instructors) without
+    breaking callers.
+
+    No field here should ever hold a fabricated/fake value — every optional
+    field is ``None`` by default and only populated when real data exists.
+    """
+
+    # --- required (current demo template) ---
+    student_name: str
+    course_name: str
+    course_code: str
+    carga_horaria: int
+    certificate_number: str
+    validation_code: str
+    responsible_admin_name: str
+    brand_name: str
+    validation_url: str
+
+    # --- optional (current demo template) ---
+    issued_date: datetime | None = None
+    brand_primary_color: str | None = None
+    brand_logo_url: str | None = None
+    is_demo: bool = False
+
+    # --- future NR-01 regulatory fields (all optional, none populated yet) ---
+    # Populated only after the NR-01 item 1.7 audit confirms requirements.
+    training_location: str | None = None
+    training_started_at: datetime | None = None
+    training_completed_at: datetime | None = None
+    training_type: str | None = None  # EAD / presencial / semipresencial
+    program_content: list[str] | None = None
+    instructors: list[dict] | None = None  # [{name, qualification}]
+    technical_responsible: dict | None = None  # {name, qualification, council}
+    student_signature_url: str | None = None
+    technical_responsible_signature_url: str | None = None
+    content_reuse: str | None = None  # convalidation / aproveitamento
+
+
 class CertificateService:
     # --- Issuance (shared by route + demo script) -----------------------
 
@@ -403,6 +452,19 @@ class CertificateService:
     # --- PDF generation (branded, with QR) -------------------------------
 
     @staticmethod
+    def build_pdf(context: CertificatePDFContext) -> bytes:
+        """Render a certificate PDF from a :class:`CertificatePDFContext`.
+
+        This is the preferred entry point for new callers. The legacy
+        ``generate_certificate_pdf`` keyword-based signature is kept as a
+        thin wrapper for backwards compatibility. Future NR-01 regulatory
+        rendering (multi-page, program content, instructors, signatures)
+        will be handled here based on the optional context fields — without
+        changing this method's signature.
+        """
+        return CertificateService._render_demo_template(context)
+
+    @staticmethod
     def generate_certificate_pdf(
         *,
         student_name: str,
@@ -420,9 +482,41 @@ class CertificateService:
         is_demo: bool = False,
     ) -> bytes:
         """Generate a professional A4 landscape certificate PDF with a QR
-        code that points to the public validation page."""
-        if issued_date is None:
-            issued_date = utc_now()
+        code that points to the public validation page.
+
+        .. deprecated::
+            Prefer :meth:`build_pdf` with a :class:`CertificatePDFContext`.
+            This keyword-based wrapper is kept for backwards compatibility
+            with existing callers (routes, demo script, tests).
+        """
+        ctx = CertificatePDFContext(
+            student_name=student_name,
+            course_name=course_name,
+            course_code=course_code,
+            carga_horaria=carga_horaria,
+            certificate_number=certificate_number,
+            validation_code=validation_code,
+            responsible_admin_name=responsible_admin_name,
+            brand_name=brand_name,
+            validation_url=validation_url,
+            issued_date=issued_date,
+            brand_primary_color=brand_primary_color,
+            brand_logo_url=brand_logo_url,
+            is_demo=is_demo,
+        )
+        return CertificateService._render_demo_template(ctx)
+
+    @staticmethod
+    def _render_demo_template(ctx: CertificatePDFContext) -> bytes:
+        """Current DEMO certificate template renderer.
+
+        This is intentionally a single-page landscape layout. When the
+        NR-01 audit concludes, a new renderer (or a page-2 extension) can
+        be added without touching ``build_pdf`` callers.
+        """
+        issued_date = ctx.issued_date or utc_now()
+        brand_primary_color = ctx.brand_primary_color
+        is_demo = ctx.is_demo
 
         try:
             primary = colors.HexColor(brand_primary_color or WR_PRIMARY_COLOR)
@@ -531,7 +625,7 @@ class CertificateService:
         elements: list = []
 
         # Brand header
-        elements.append(Paragraph(brand_name.upper(), subtitle_style))
+        elements.append(Paragraph(ctx.brand_name.upper(), subtitle_style))
         elements.append(Spacer(1, 4 * mm))
 
         # Title
@@ -544,14 +638,14 @@ class CertificateService:
         # Body
         elements.append(Paragraph("Certificamos que", body_style))
         elements.append(Spacer(1, 2 * mm))
-        elements.append(Paragraph(student_name, student_style))
+        elements.append(Paragraph(ctx.student_name, student_style))
         elements.append(Spacer(1, 4 * mm))
         elements.append(Paragraph("concluiu o treinamento", body_style))
         elements.append(Spacer(1, 2 * mm))
-        elements.append(Paragraph(course_name, course_style))
+        elements.append(Paragraph(ctx.course_name, course_style))
         elements.append(Spacer(1, 3 * mm))
 
-        meta_line = f"Código: <b>{course_code}</b>&nbsp;&nbsp;&nbsp;Carga horária: <b>{carga_horaria}h</b>"
+        meta_line = f"Código: <b>{ctx.course_code}</b>&nbsp;&nbsp;&nbsp;Carga horária: <b>{ctx.carga_horaria}h</b>"
         elements.append(Paragraph(meta_line, meta_style))
         elements.append(Spacer(1, 2 * mm))
 
@@ -560,7 +654,7 @@ class CertificateService:
         elements.append(Spacer(1, 8 * mm))
 
         # QR code
-        qr_widget = QrCodeWidget(validation_url, barLevel="M")
+        qr_widget = QrCodeWidget(ctx.validation_url, barLevel="M")
         bounds = qr_widget.getBounds()
         qr_w = bounds[2] - bounds[0]
         qr_h = bounds[3] - bounds[1]
@@ -588,14 +682,14 @@ class CertificateService:
         )
 
         info_cell = [
-            [Paragraph(f"<b>Número do certificado:</b> {certificate_number}", footer_style)],
-            [Paragraph(f"<b>Código de validação:</b> {validation_code}", footer_style)],
+            [Paragraph(f"<b>Número do certificado:</b> {ctx.certificate_number}", footer_style)],
+            [Paragraph(f"<b>Código de validação:</b> {ctx.validation_code}", footer_style)],
             [Spacer(1, 3 * mm)],
-            [Paragraph(f"Responsável: {responsible_admin_name}", footer_style)],
+            [Paragraph(f"Responsável: {ctx.responsible_admin_name}", footer_style)],
             [Spacer(1, 2 * mm)],
-            [Paragraph(f"Emitido por <b>{brand_name}</b>", footer_style)],
+            [Paragraph(f"Emitido por <b>{ctx.brand_name}</b>", footer_style)],
             [Spacer(1, 2 * mm)],
-            [Paragraph(f"Valide em: {validation_url}", footer_style)],
+            [Paragraph(f"Valide em: {ctx.validation_url}", footer_style)],
         ]
         info_table = Table(info_cell, colWidths=[120 * mm])
         info_table.setStyle(
@@ -648,7 +742,6 @@ class CertificateService:
         )
         buffer.seek(0)
         return buffer.getvalue()
-
 
 def _format_pt_br(dt: datetime) -> str:
     months = [

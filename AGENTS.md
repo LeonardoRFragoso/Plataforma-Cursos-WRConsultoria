@@ -1,5 +1,22 @@
 # AGENTS.md — Certificate QR Validation & Demo Mode
 
+## STATUS
+
+**TECHNICAL CERTIFICATE FOUNDATION — DEMO ONLY**
+
+This is the technical foundation for verifiable certificates (QR codes,
+public validation, academic journey, content hash, demo mode). The PDF
+template is a **DEMO template** and carries the "SEM VALIDADE OFICIAL"
+watermark. No official/regulatory certificate is issued by this code.
+
+**REGULATORY TEMPLATE PENDING NR-01 AUDIT.**
+
+The certificate layout and fields are NOT regulatorily complete. A separate
+audit against NR-01 item 1.7 (especially 1.7.1.1 and Anexo II for EAD/
+semipresencial) is in progress. Regulatory fields will be added to
+`CertificatePDFContext` only after the audit confirms requirements — no
+fake or speculative values are present.
+
 ## Feature Summary
 
 Verifiable certificates with QR codes, enriched public validation, demo mode,
@@ -74,3 +91,17 @@ returns the existing demo certificate instead of creating a duplicate.
   SUPERSEDED, NOT_FOUND — each with distinct UI treatment
 - **Tenant isolation**: public validation by code is global (privacy-safe);
   admin certificate access is tenant-scoped (404 for cross-tenant)
+- **CertificatePDFContext**: PDF rendering accepts a single dataclass
+  (`CertificatePDFContext`) via `CertificateService.build_pdf(ctx)`. The
+  legacy `generate_certificate_pdf(**kwargs)` signature is kept as a
+  backwards-compatible wrapper. Future NR-01 regulatory fields
+  (training_location, training_started_at, training_completed_at,
+  training_type, program_content, instructors, instructor_qualifications,
+  technical_responsible, signatures, content_reuse) are declared as
+  optional fields on the context — all default to `None`, none are
+  populated yet. This allows a future multi-page layout (page 1 =
+  certificate, page 2 = program content/instructors) without breaking
+  callers.
+- **QR independence**: `build_validation_url()` is the single source of the
+  QR payload, decoupled from the PDF layout. Redesigning the certificate
+  does not affect validation.

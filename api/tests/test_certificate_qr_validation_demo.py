@@ -216,6 +216,64 @@ def test_pdf_is_valid_pdf_bytes():
     assert pdf[:4] == b"%PDF"
 
 
+def test_build_pdf_via_context_produces_valid_pdf_with_qr():
+    """The new CertificatePDFContext entry point produces the same valid PDF
+    with a decodable QR code as the legacy keyword-based signature."""
+    pytest.importorskip("fitz")
+    pytest.importorskip("cv2")
+
+    from app.services.certificate_service import CertificatePDFContext
+
+    code = "CTXQR1234567890AB"
+    url = build_validation_url("https://app.example.com", code)
+    ctx = CertificatePDFContext(
+        student_name="Aluno Context",
+        course_name="Curso Context",
+        course_code="CTX-1",
+        carga_horaria=6,
+        certificate_number="CERT-CTX-1",
+        validation_code=code,
+        responsible_admin_name="Admin Context",
+        brand_name="WR",
+        validation_url=url,
+        issued_date=utc_now(),
+        brand_primary_color="#047F37",
+        is_demo=False,
+    )
+    pdf = CertificateService.build_pdf(ctx)
+    assert pdf[:4] == b"%PDF"
+    assert _decode_qr_from_pdf(pdf) == url
+
+
+def test_certificate_pdf_context_accepts_future_nr_fields_as_none():
+    """The context dataclass must accept all future NR-01 regulatory fields
+    without breaking — they default to None and are not rendered yet."""
+    from app.services.certificate_service import CertificatePDFContext
+
+    ctx = CertificatePDFContext(
+        student_name="A",
+        course_name="C",
+        course_code="X",
+        carga_horaria=1,
+        certificate_number="CERT-1",
+        validation_code="V1",
+        responsible_admin_name="R",
+        brand_name="WR",
+        validation_url="https://app.example.com/validar-certificado?codigo=V1",
+    )
+    # Future NR fields are all None by default
+    assert ctx.training_location is None
+    assert ctx.training_started_at is None
+    assert ctx.training_completed_at is None
+    assert ctx.training_type is None
+    assert ctx.program_content is None
+    assert ctx.instructors is None
+    assert ctx.technical_responsible is None
+    assert ctx.student_signature_url is None
+    assert ctx.technical_responsible_signature_url is None
+    assert ctx.content_reuse is None
+
+
 # -- Phase 4 & 5: demo mode + watermark -----------------------------------
 
 
