@@ -120,6 +120,7 @@ class TestCourseMaterial:
     async def test_create_and_list(self, client, admin_headers, student_user):
         """Admin can create materials; enrolled students can list."""
         from datetime import timedelta
+
         from app.core.utils import utc_now
 
         course_id = await _create_course(client, admin_headers)
@@ -223,6 +224,7 @@ class TestCourseMaterial:
     async def test_deactivate(self, client, admin_headers, student_user):
         """Deleting a material deactivates it (soft delete)."""
         from datetime import timedelta
+
         from app.core.utils import utc_now
 
         course_id = await _create_course(client, admin_headers)

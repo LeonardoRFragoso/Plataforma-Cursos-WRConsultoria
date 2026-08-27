@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import timedelta
 
@@ -7,7 +8,13 @@ from sqlalchemy import text
 
 from app.core.config import settings
 
-settings.DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test"
+# Allow isolating the test database via env var (e.g. when running tests in
+# parallel with another worktree). Defaults to the shared test DB so existing
+# behaviour is unchanged.
+settings.DATABASE_URL = os.environ.get(
+    "WR_TEST_DATABASE_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/wr_cursos_test",
+)
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal, Base, engine

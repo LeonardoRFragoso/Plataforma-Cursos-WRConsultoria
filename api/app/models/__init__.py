@@ -1,3 +1,4 @@
+from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
 from app.models.attendance import Attendance
 from app.models.certificate import Certificate, CertificateEvent
 from app.models.class_model import Class, ClassStatus
@@ -27,6 +28,7 @@ from app.models.tenant_subscription import SubscriptionStatus, TenantSubscriptio
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AssessmentAttempt",
     "Attendance",
     "BillingCycle",
     "Certificate",
@@ -64,6 +66,7 @@ __all__ = [
     "Plan",
     "ReviewStatus",
     "Student",
+    "StudentSignatureEvidence",
     "SubscriptionStatus",
     "Tenant",
     "TenantSecret",

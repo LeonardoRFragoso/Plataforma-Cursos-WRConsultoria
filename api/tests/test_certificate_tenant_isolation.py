@@ -935,7 +935,7 @@ async def test_wr_validation_url_uses_wr_origin(client):
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(resp.content))
         text = " ".join(page.extract_text() or "" for page in reader.pages)
-        assert "http://wr.test/certificates/validate" in text, \
+        assert "http://wr.test/validar-certificado" in text, \
             "Validation URL should use WR origin"
     finally:
         settings.TRUSTED_FRONTEND_ORIGINS = original_trusted
@@ -975,7 +975,7 @@ async def test_alfa_validation_url_uses_alfa_origin(client):
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(resp.content))
         text = " ".join(page.extract_text() or "" for page in reader.pages)
-        assert "http://alfa.test/certificates/validate" in text, \
+        assert "http://alfa.test/validar-certificado" in text, \
             "Validation URL should use Alfa origin"
         assert "http://wr.test" not in text, \
             "Alfa validation URL should NOT point to WR frontend"
@@ -1019,7 +1019,7 @@ async def test_untrusted_origin_not_reflected(client):
         reader = PdfReader(io.BytesIO(resp.content))
         text = " ".join(page.extract_text() or "" for page in reader.pages)
         # Must use fallback FRONTEND_URL, NOT the untrusted origin
-        assert "http://fallback.test/certificates/validate" in text, \
+        assert "http://fallback.test/validar-certificado" in text, \
             "Untrusted Origin must fall back to FRONTEND_URL"
         assert "http://evil.test" not in text, \
             "Untrusted Origin must NOT be reflected in validation URL (open redirect)"
