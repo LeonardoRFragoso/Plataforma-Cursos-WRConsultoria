@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.utils import utc_now
 from app.services.assessment_service import MINIMUM_SCORE
@@ -110,6 +110,14 @@ class ComplianceProfileUpsert(BaseModel):
     pedagogical_project_version_id: UUID | None = None
     next_compliance_review_at: datetime | None = None
 
+    @field_validator("next_compliance_review_at")
+    @classmethod
+    def normalize_review_datetime(cls, value: datetime | None):
+        """Store review timestamps as UTC-naive, matching the platform DB contract."""
+        if value is None or value.tzinfo is None:
+            return value
+        return value.astimezone(UTC).replace(tzinfo=None)
+
     @model_validator(mode="after")
     def validate_assessment_policy(self):
         """Keep compliance metadata aligned with the assessment engine in this slice."""
@@ -178,7 +186,7 @@ class ComplianceReadinessResponse(BaseModel):
         next_review = self.profile.next_compliance_review_at
         if next_review is not None:
             if next_review.tzinfo is not None:
-                next_review = next_review.replace(tzinfo=None)
+                next_review = next_review.astimezone(UTC).replace(tzinfo=None)
             if next_review <= utc_now():
                 self.ready = False
                 blocker = "Compliance review date has expired"
