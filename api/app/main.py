@@ -67,7 +67,14 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 
 _ENFORCEMENT_EXEMPT_EXACT = frozenset({
-    "/", "/health", "/health/live", "/health/ready", "/docs", "/redoc", "/openapi.json",
+    "/",
+    "/health",
+    "/health/live",
+    "/health/ready",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/api/v1/certificates/validate",
 })
 _ENFORCEMENT_EXEMPT_PREFIXES = (
     "/api/v1/super-admin",
