@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -32,7 +33,7 @@ class RegulatoryEvaluation:
     regulatory: bool
     state: str
     blockers: list[str]
-    last_evaluated_at: object
+    last_evaluated_at: datetime
 
 
 async def find_active_enrollment(
@@ -102,6 +103,13 @@ async def _persist_evaluation(
     state: str,
     blockers: list[str],
 ) -> EnrollmentComplianceProgress:
+    """Persist current state after the enrollment row has been locked.
+
+    ``evaluate_regulatory_state`` takes a row-level lock on the Enrollment
+    before entering this function. That single lock serializes concurrent
+    evaluations for the same enrollment and makes first-row creation safe
+    without an application-level mutex.
+    """
     now = utc_now()
     progress = (
         await db.execute(
@@ -140,11 +148,7 @@ async def _persist_evaluation(
             student_id=enrollment.student_id,
             course_id=course_id,
             event_type=TrainingEventType.STATE_TRANSITION,
-            details={
-                "from": previous_state,
-                "to": state,
-                "blockers": blockers,
-            },
+            details={"from": previous_state, "to": state, "blockers": blockers},
         )
     return progress
 
@@ -156,19 +160,22 @@ async def evaluate_regulatory_state(
     enrollment_id: UUID,
     persist: bool = True,
 ) -> RegulatoryEvaluation:
-    row = (
-        await db.execute(
-            select(Enrollment, Class, Course)
-            .join(Class, Enrollment.class_id == Class.id)
-            .join(Course, Class.course_id == Course.id)
-            .where(
-                Enrollment.id == enrollment_id,
-                Enrollment.tenant_id == tenant_id,
-                Class.tenant_id == tenant_id,
-                Course.tenant_id == tenant_id,
-            )
+    stmt = (
+        select(Enrollment, Class, Course)
+        .join(Class, Enrollment.class_id == Class.id)
+        .join(Course, Class.course_id == Course.id)
+        .where(
+            Enrollment.id == enrollment_id,
+            Enrollment.tenant_id == tenant_id,
+            Class.tenant_id == tenant_id,
+            Course.tenant_id == tenant_id,
         )
-    ).first()
+    )
+    if persist:
+        # All state mutations for an enrollment serialize on this row. Using
+        # OF Enrollment avoids unnecessarily locking Course/Class rows.
+        stmt = stmt.with_for_update(of=Enrollment)
+    row = (await db.execute(stmt)).first()
     if not row:
         raise LookupError("Enrollment not found")
     enrollment, class_obj, course = row
@@ -256,9 +263,7 @@ async def evaluate_regulatory_state(
                 if progress_count > 0
                 else RegulatoryCompletionState.ENROLLED
             )
-            blockers.append(
-                f"Required lessons incomplete ({completed_required}/{required_total})"
-            )
+            blockers.append(f"Required lessons incomplete ({completed_required}/{required_total})")
         else:
             state = RegulatoryCompletionState.CONTENT_COMPLETED
 
@@ -291,6 +296,8 @@ async def evaluate_regulatory_state(
                 RegulatoryCompletionState.CONTENT_COMPLETED,
                 RegulatoryCompletionState.ASSESSMENT_SATISFACTORY,
             } and profile.requires_practical_component:
+                # Corrections are append-only and can reference an older
+                # performed_at. The latest *recorded* fact must therefore win.
                 latest_practical = (
                     await db.execute(
                         select(PracticalTrainingRecord)
@@ -299,17 +306,15 @@ async def evaluate_regulatory_state(
                             PracticalTrainingRecord.enrollment_id == enrollment.id,
                         )
                         .order_by(
-                            PracticalTrainingRecord.performed_at.desc(),
                             PracticalTrainingRecord.created_at.desc(),
+                            PracticalTrainingRecord.performed_at.desc(),
                         )
                         .limit(1)
                     )
                 ).scalar_one_or_none()
                 if not latest_practical or latest_practical.result != PracticalResult.SATISFACTORY:
                     state = RegulatoryCompletionState.PRACTICAL_COMPONENT_PENDING
-                    blockers.append(
-                        "Practical component has no current satisfactory record"
-                    )
+                    blockers.append("Practical component has no current satisfactory record")
 
             if state in {
                 RegulatoryCompletionState.CONTENT_COMPLETED,
@@ -333,6 +338,7 @@ async def evaluate_regulatory_state(
                                 Certificate.tenant_id == tenant_id,
                                 Certificate.enrollment_id == enrollment.id,
                                 Certificate.status == "ACTIVE",
+                                ~Certificate.certificate_number.like("DEMO-%"),
                             )
                         )
                     ).scalar_one_or_none()
