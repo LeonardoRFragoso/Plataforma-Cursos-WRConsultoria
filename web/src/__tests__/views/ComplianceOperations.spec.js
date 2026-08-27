@@ -147,7 +147,6 @@ describe('ComplianceOperations View', () => {
   })
 
   it('permite editar rascunho, preencher e aprovar', async () => {
-    const { updateRetentionPolicyVersion, approveRetentionPolicyVersion } = await import('../../api/complianceOperations')
     const router = setupRouter()
     await router.push('/operations/compliance')
     await router.isReady()

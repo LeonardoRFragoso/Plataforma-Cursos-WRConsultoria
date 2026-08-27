@@ -26,7 +26,6 @@ from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.core.security import create_access_token, hash_password
 from app.core.utils import utc_now
-from app.models.compliance_retention import ComplianceRetentionPolicyVersion
 from app.models.governance import AdminAuditLog
 from app.models.tenant import Tenant, TenantStatus
 from app.models.training_evidence import EnrollmentComplianceProgress
