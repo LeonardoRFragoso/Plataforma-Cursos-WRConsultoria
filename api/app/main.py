@@ -29,6 +29,7 @@ from app.api.routes import (
     payments,
     plans,
     privacy,
+    reconciliation,
     reports,
     storage,
     students,
@@ -199,6 +200,7 @@ app.include_router(students.router, prefix="/api/v1/students", tags=["students"]
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(financial_admin.router, prefix="/api/v1/financial", tags=["financial-admin"])
+app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliation", tags=["financial-reconciliation"])
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
