@@ -34,7 +34,8 @@ async def test_student_privacy_request_lifecycle_and_export(client, student_user
     exported = await client.get("/api/v1/privacy/me/export", headers=student_headers)
     assert exported.status_code == 200, exported.text
     body = exported.json()
-    assert body["account"]["id"] == student_user["user_id"]
+    assert body["account"]["email"] == student_user["email"]
+    assert body["student_profile"]["id"] == student_user["student_id"]
     assert "password_hash" not in body["account"]
     assert "access_token" not in str(body).lower()
     assert body["tenant_id"]
