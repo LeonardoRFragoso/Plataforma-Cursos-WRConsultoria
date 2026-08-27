@@ -42,6 +42,7 @@ from app.api.routes import (
     tenant_subscriptions,
     tenants,
     training_evidence,
+    trusted_certificate_guards,
 )
 from app.core.audit import AdminAuditMiddleware
 from app.core.config import settings
@@ -205,9 +206,10 @@ app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-com
 app.include_router(training_evidence.router, prefix="/api/v1/training-evidence", tags=["training-evidence"])
 # Compatibility guards are registered before the legacy routers so existing
 # clients keep their URLs while regulated enrollments cannot bypass the new
-# completion state machine. They are hidden from OpenAPI by their own routers.
+# completion/document state machines. They are hidden from OpenAPI.
 app.include_router(regulatory_assessment_guards.router, prefix="/api/v1")
 app.include_router(regulatory_legacy_guards.router, prefix="/api/v1")
+app.include_router(trusted_certificate_guards.router, prefix="/api/v1")
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
