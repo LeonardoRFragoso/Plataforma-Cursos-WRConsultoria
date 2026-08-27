@@ -18,6 +18,16 @@ class RegulatoryStateResponse(BaseModel):
     last_evaluated_at: datetime
 
 
+class RegulatoryCompletionConfirmRequest(BaseModel):
+    password: str = Field(min_length=1)
+    declaration_accepted: bool
+
+
+class RegulatoryCompletionConfirmResponse(BaseModel):
+    confirmed: bool
+    state: RegulatoryStateResponse
+
+
 class PracticalTrainingRecordCreate(BaseModel):
     instructor_id: UUID
     result: str
@@ -46,6 +56,14 @@ class PracticalTrainingRecordCreate(BaseModel):
         if normalized > utc_now():
             raise ValueError("performed_at cannot be in the future")
         return normalized
+
+    @field_validator("location")
+    @classmethod
+    def clean_location(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 2:
+            raise ValueError("location cannot be empty")
+        return cleaned
 
 
 class PracticalTrainingRecordResponse(BaseModel):
