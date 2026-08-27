@@ -41,6 +41,7 @@ class AssessmentStatusResponse(BaseModel):
     minimum_score: float = 70.0
     attempts: int = 0
     passed: bool = False
+    passed_attempt_id: UUID | None = None
     best_score: float | None = None
     confirmation_required: bool = False
     completion_confirmed: bool = False
