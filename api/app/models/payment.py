@@ -82,6 +82,9 @@ class Payment(Base):
     mercado_pago_id = Column(String, nullable=True, unique=True)
     installments = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)
+    # Provider polling metadata. It contains no credentials or response bodies.
+    last_reconciled_at = Column(DateTime, nullable=True, index=True)
+    last_provider_status = Column(String(64), nullable=True)
     # Financial events such as chargeback disputes, partial refunds or refunds
     # after course completion require human review instead of silently mutating
     # historical learning/certificate records.

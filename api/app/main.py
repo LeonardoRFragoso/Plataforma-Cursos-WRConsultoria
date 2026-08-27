@@ -23,10 +23,13 @@ from app.api.routes import (
     dashboard,
     enrollments,
     financial_admin,
+    governance,
     lessons,
     partner_leads,
     payments,
     plans,
+    privacy,
+    reconciliation,
     reports,
     storage,
     students,
@@ -35,6 +38,7 @@ from app.api.routes import (
     tenant_subscriptions,
     tenants,
 )
+from app.core.audit import AdminAuditMiddleware
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSession, AsyncSessionLocal, get_db
@@ -65,6 +69,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(AdminAuditMiddleware)
 
 _ENFORCEMENT_EXEMPT_EXACT = frozenset({
     "/", "/health", "/health/live", "/health/ready", "/docs", "/redoc", "/openapi.json",
@@ -195,6 +200,9 @@ app.include_router(students.router, prefix="/api/v1/students", tags=["students"]
 app.include_router(enrollments.router, prefix="/api/v1/enrollments", tags=["enrollments"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(financial_admin.router, prefix="/api/v1/financial", tags=["financial-admin"])
+app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliation", tags=["financial-reconciliation"])
+app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
+app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
