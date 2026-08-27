@@ -1,8 +1,30 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+_SENSITIVE_METADATA_TOKENS = (
+    "token",
+    "secret",
+    "password",
+    "private_key",
+    "privatekey",
+    "pfx",
+    "pkcs12",
+    "credential",
+    "api_key",
+    "apikey",
+)
+
+
+def _utc_naive(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 class CertificateSigningProfileUpsert(BaseModel):
@@ -36,6 +58,24 @@ class CertificateSigningProfileUpsert(BaseModel):
         if len(normalized) != 64 or any(ch not in "0123456789abcdef" for ch in normalized):
             raise ValueError("certificate_fingerprint_sha256 must be a SHA-256 hex digest")
         return normalized
+
+    @field_validator("certificate_not_before", "certificate_not_after")
+    @classmethod
+    def normalize_certificate_timestamp(cls, value: datetime | None) -> datetime | None:
+        return _utc_naive(value)
+
+    @field_validator("provider_metadata")
+    @classmethod
+    def reject_secrets_in_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(value) > 50:
+            raise ValueError("provider_metadata has too many entries")
+        for raw_key in value:
+            key = str(raw_key).strip().lower()
+            if any(token in key for token in _SENSITIVE_METADATA_TOKENS):
+                raise ValueError(
+                    "provider_metadata cannot contain credentials, tokens, PFX or private-key material; use TenantSecret"
+                )
+        return value
 
 
 class CertificateSigningProfileResponse(BaseModel):
