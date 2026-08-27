@@ -12,8 +12,8 @@
             <div class="min-w-0">
               <p class="truncate text-sm font-black">Tutor NR</p>
               <p class="flex items-center gap-1.5 text-[11px] text-slate-300">
-                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                Assistente virtual de estudo
+                <span class="h-2 w-2 rounded-full" :class="onlineMode ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+                {{ onlineMode ? 'Assistente com base de conhecimento' : 'Assistente virtual de estudo' }}
               </p>
             </div>
           </div>
@@ -31,7 +31,7 @@
           <div
             v-for="message in messages"
             :key="message.id"
-            :class="['flex', message.role === 'user' ? 'justify-end' : 'justify-start']"
+            :class="['flex flex-col', message.role === 'user' ? 'items-end' : 'items-start']"
           >
             <div
               :class="[
@@ -43,6 +43,23 @@
             >
               {{ message.text }}
             </div>
+            <!-- Sources -->
+            <div v-if="message.sources && message.sources.length" class="mt-1.5 flex flex-wrap gap-1 px-1">
+              <span
+                v-for="source in message.sources"
+                :key="source.label"
+                class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+                data-testid="tutor-source-chip"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                {{ source.label }}
+              </span>
+            </div>
+            <!-- Confidence indicator -->
+            <div v-if="message.confidence && message.role === 'assistant' && message.confidence !== 'HIGH'" class="mt-1 px-1 text-[10px] text-slate-400">
+              <span v-if="message.confidence === 'MEDIUM'">Confiança média</span>
+              <span v-else>Confiança baixa — reformule para melhor resultado</span>
+            </div>
           </div>
 
           <div v-if="typing" class="flex justify-start">
@@ -51,6 +68,21 @@
                 <span class="nr-tutor-dot">•</span><span class="nr-tutor-dot">•</span><span class="nr-tutor-dot">•</span>
               </span>
             </div>
+          </div>
+
+          <!-- Error state -->
+          <div v-if="error" class="flex flex-col items-start gap-2">
+            <div class="max-w-[88%] rounded-2xl rounded-bl-md border border-red-100 bg-red-50 px-3.5 py-3 text-[13px] text-red-700 shadow-sm">
+              {{ error }}
+            </div>
+            <button
+              type="button"
+              class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
+              data-testid="tutor-retry-btn"
+              @click="retryLastQuestion"
+            >
+              Tentar novamente
+            </button>
           </div>
         </div>
 
@@ -74,6 +106,8 @@
               maxlength="500"
               class="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400"
               placeholder="Pergunte sobre qualquer NR..."
+              :disabled="typing"
+              data-testid="tutor-input"
               @keydown.enter.exact.prevent="sendMessage"
             />
             <button
@@ -81,6 +115,7 @@
               :disabled="!draft.trim() || typing"
               class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Enviar pergunta"
+              data-testid="tutor-send-btn"
             >
               ↑
             </button>
@@ -110,18 +145,24 @@
 <script setup>
 import { nextTick, ref, watch } from 'vue'
 import { answerNrTutor } from '../utils/nrTutorEngine'
+import { askTutor } from '../api/tutor'
 
 const STORAGE_KEY = 'wr_nr_tutor_session_v1'
 const open = ref(false)
 const draft = ref('')
 const typing = ref(false)
+const error = ref('')
 const messagesEl = ref(null)
+const onlineMode = ref(true)
+const lastQuestion = ref('')
 const currentSuggestions = ref(['Quero estudar NR-6', 'Explique trabalho em altura', 'Quais NRs existem?'])
 
 const welcomeMessage = () => ({
   id: `welcome-${Date.now()}`,
   role: 'assistant',
   text: 'Sou o Tutor NR, assistente virtual de estudo. Posso explicar qualquer NR de 1 a 38, revisar assuntos, comparar normas e ajudar em dúvidas durante a aula — mesmo sobre cursos em que você não está matriculado.',
+  sources: [],
+  confidence: '',
 })
 
 const loadMessages = () => {
@@ -151,28 +192,62 @@ const scrollToBottom = async () => {
 
 watch(open, (value) => { if (value) scrollToBottom() })
 
-const append = (role, text) => {
-  messages.value.push({ id: `${role}-${Date.now()}-${Math.random()}`, role, text })
+const append = (role, text, extra = {}) => {
+  messages.value.push({ id: `${role}-${Date.now()}-${Math.random()}`, role, text, ...extra })
   messages.value = messages.value.slice(-30)
   persist()
+}
+
+const buildConversationContext = () => {
+  return messages.value
+    .slice(-8)
+    .filter((m) => m.text)
+    .map((m) => ({ role: m.role, text: m.text }))
 }
 
 const sendMessage = async () => {
   const question = draft.value.trim()
   if (!question || typing.value) return
   draft.value = ''
+  error.value = ''
+  lastQuestion.value = question
   append('user', question)
   currentSuggestions.value = []
   typing.value = true
   await scrollToBottom()
 
-  const result = answerNrTutor(question)
-  window.setTimeout(async () => {
-    append('assistant', result.text)
+  try {
+    const context = buildConversationContext()
+    const result = await askTutor(question, context)
+    onlineMode.value = true
+    append('assistant', result.answer, {
+      sources: result.sources || [],
+      confidence: result.confidence || '',
+      knowledgeLevel: result.knowledge_level || '',
+    })
     currentSuggestions.value = result.suggestions || []
+  } catch (err) {
+    // Fallback to deterministic engine if backend is unavailable
+    onlineMode.value = false
+    const fallback = answerNrTutor(question)
+    append('assistant', fallback.text, { sources: [], confidence: 'LOW' })
+    currentSuggestions.value = fallback.suggestions || []
+    // Show error only for non-auth issues
+    if (err?.response?.status !== 401 && err?.response?.status !== 403) {
+      error.value = 'Não foi possível consultar a base de conhecimento. Resposta do modo offline.'
+    }
+  } finally {
     typing.value = false
     await scrollToBottom()
-  }, 280)
+  }
+}
+
+const retryLastQuestion = () => {
+  error.value = ''
+  if (lastQuestion.value) {
+    draft.value = lastQuestion.value
+    sendMessage()
+  }
 }
 
 const sendSuggestion = (suggestion) => {
@@ -183,6 +258,7 @@ const sendSuggestion = (suggestion) => {
 const resetConversation = () => {
   messages.value = [welcomeMessage()]
   currentSuggestions.value = ['Quero estudar NR-6', 'Explique trabalho em altura', 'Quais NRs existem?']
+  error.value = ''
   persist()
   scrollToBottom()
 }

@@ -45,6 +45,7 @@ from app.api.routes import (
     tenants,
     training_evidence,
     trusted_certificate_guards,
+    tutor,
 )
 from app.core.audit import AdminAuditMiddleware
 from app.core.config import settings
@@ -245,6 +246,7 @@ app.include_router(
     prefix="/api/v1/integrations/certificate-signing",
     tags=["certificate-signing-webhook"],
 )
+app.include_router(tutor.router, prefix="/api/v1/tutor", tags=["tutor"])
 
 
 @app.get("/")
