@@ -13,6 +13,7 @@ from app.api.routes import (
     assessments,
     auth,
     certificate_documents,
+    certificate_signing,
     certificates,
     classes,
     companies,
@@ -86,6 +87,7 @@ _ENFORCEMENT_EXEMPT_PREFIXES = (
     "/api/v1/plans/public",
     "/api/v1/tenants/branding",
     "/api/v1/auth",
+    "/api/v1/integrations/certificate-signing/webhook",
     "/health",
 )
 
@@ -169,6 +171,7 @@ async def tenant_middleware(request: Request, call_next):
                 or request.url.path.startswith("/api/v1/partner-leads")
                 or request.url.path.startswith("/api/v1/super-admin")
                 or request.url.path.startswith("/api/v1/plans/public")
+                or request.url.path.startswith("/api/v1/integrations/certificate-signing/webhook")
             ):
                 current_tenant_id.reset(token)
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
@@ -216,6 +219,7 @@ app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", 
 app.include_router(super_admin.router, prefix="/api/v1/super-admin", tags=["super-admin"])
 app.include_router(tenant_secrets.router, prefix="/api/v1/secrets", tags=["secrets"])
 app.include_router(certificate_documents.router, prefix="/api/v1/certificate-documents", tags=["certificate-documents"])
+app.include_router(certificate_signing.router, prefix="/api/v1/certificate-signing", tags=["certificate-signing"])
 app.include_router(certificates.router, prefix="/api/v1/certificates", tags=["certificates"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
 app.include_router(corporate.router, prefix="/api/v1/corporate", tags=["corporate"])
@@ -229,6 +233,11 @@ app.include_router(
     asaas_integration.router,
     prefix="/api/v1/integrations/asaas",
     tags=["asaas-integration"],
+)
+app.include_router(
+    certificate_signing.webhook_router,
+    prefix="/api/v1/integrations/certificate-signing",
+    tags=["certificate-signing-webhook"],
 )
 
 

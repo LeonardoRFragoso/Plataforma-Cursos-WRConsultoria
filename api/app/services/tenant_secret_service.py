@@ -1,7 +1,7 @@
 """Serviço de acesso a secrets criptografados de tenant.
 
 Centraliza a leitura de secrets de tenant para consumidores backend
-(ex.: gateway de pagamento Mercado Pago). O valor descriptografado nunca
+(ex.: gateways de pagamento e assinatura). O valor descriptografado nunca
 é exposto em responses ou logs — apenas retornado ao código backend
 autorizado.
 """
@@ -18,6 +18,8 @@ from app.services.secret_crypto import decrypt
 # Chaves canônicas de secrets de tenant.
 MERCADO_PAGO_ACCESS_TOKEN_KEY = "mercado_pago_access_token"
 ASAAS_API_KEY_KEY = "asaas_api_key"
+CERTIFICATE_SIGNING_API_TOKEN_KEY = "certificate_signing_api_token"
+CERTIFICATE_SIGNING_WEBHOOK_SECRET_KEY = "certificate_signing_webhook_secret"
 
 
 async def get_tenant_secret(
