@@ -3,6 +3,15 @@ from app.models.attendance import Attendance
 from app.models.certificate import Certificate, CertificateEvent
 from app.models.class_model import Class, ClassStatus
 from app.models.company import Company
+from app.models.compliance import (
+    CourseComplianceProfile,
+    CourseTrainingProfessional,
+    PedagogicalProjectVersion,
+    PracticalTrainingRecord,
+    TrainingAccessEvent,
+    TrainingProfessional,
+    TrainingSession,
+)
 from app.models.corporate import CorporateInvite, CorporateSeatAllocation, CorporateTrainingRequest
 from app.models.corporate_enrollment_batch import CorporateEnrollmentBatch
 from app.models.course import Course, CourseModality
@@ -36,6 +45,8 @@ __all__ = [
     "Class",
     "ClassStatus",
     "Company",
+    "CourseComplianceProfile",
+    "CourseTrainingProfessional",
     "CorporateEnrollmentBatch",
     "CorporateInvite",
     "CorporateSeatAllocation",
@@ -63,7 +74,9 @@ __all__ = [
     "PaymentProvider",
     "PaymentStatus",
     "PaymentWebhookEvent",
+    "PedagogicalProjectVersion",
     "Plan",
+    "PracticalTrainingRecord",
     "ReviewStatus",
     "Student",
     "StudentSignatureEvidence",
@@ -72,6 +85,9 @@ __all__ = [
     "TenantSecret",
     "TenantStatus",
     "TenantSubscription",
+    "TrainingAccessEvent",
+    "TrainingProfessional",
+    "TrainingSession",
     "User",
     "UserRole",
 ]
