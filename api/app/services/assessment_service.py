@@ -248,11 +248,24 @@ def public_questions(course_code: str) -> list[dict]:
     ]
 
 
-def grade_answers(course_code: str, answers: dict[str, int]) -> tuple[int, int, float, bool]:
+def grade_answers(
+    course_code: str,
+    answers: dict[str, int],
+    *,
+    minimum_score: float = MINIMUM_SCORE,
+) -> tuple[int, int, float, bool]:
+    """Grade a deterministic bank using the threshold pinned to the attempt.
+
+    The default preserves the existing 60% demo policy. Regulatory attempts
+    can supply the configured compliance threshold, and historical attempts
+    remain auditable because their own ``minimum_score`` is used on submit.
+    """
+    if minimum_score < 0 or minimum_score > 100:
+        raise ValueError("minimum_score must be between 0 and 100")
     bank = QUESTION_BANKS.get(course_code)
     if not bank:
         raise ValueError("Assessment is not configured for this course")
     correct = sum(1 for item in bank if answers.get(item["id"]) == item["correct"])
     total = len(bank)
     score = round((correct / total) * 100, 2) if total else 0.0
-    return correct, total, score, score >= MINIMUM_SCORE
+    return correct, total, score, score >= minimum_score

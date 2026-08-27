@@ -14,6 +14,7 @@ class ClassStatus(str, PyEnum):
     CONCLUIDA = "CONCLUIDA"
     CANCELADA = "CANCELADA"
 
+
 class Class(Base):
     __tablename__ = "classes"
 
@@ -21,12 +22,20 @@ class Class(Base):
     tenant_id = Column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
-        
         nullable=False,
         index=True,
     )
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False)
     responsible_admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Regulatory classes pin the approved pedagogical project that was current
+    # when the class was opened. The reference is immutable through the public
+    # class update schema so later project revisions cannot rewrite history.
+    pedagogical_project_version_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("pedagogical_project_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     max_students = Column(Integer, nullable=False)
