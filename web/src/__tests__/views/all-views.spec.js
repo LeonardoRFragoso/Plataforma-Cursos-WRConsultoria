@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/auth'
 
 import Certificates from '../../views/Certificates.vue'
 import Classes from '../../views/Classes.vue'
+import ComplianceOperations from '../../views/ComplianceOperations.vue'
 import CourseDetail from '../../views/CourseDetail.vue'
 import CourseLearn from '../../views/CourseLearn.vue'
 import CourseLessons from '../../views/CourseLessons.vue'
@@ -39,6 +40,7 @@ vi.mock('../../api/client', () => ({
 const cases = [
   ['Certificates', Certificates, '/certificates'],
   ['Classes', Classes, '/classes'],
+  ['ComplianceOperations', ComplianceOperations, '/operations/compliance'],
   ['CourseDetail', CourseDetail, '/courses/123'],
   ['CourseLearn', CourseLearn, '/courses/123/learn'],
   ['CourseLessons', CourseLessons, '/courses/123/lessons'],
@@ -79,6 +81,7 @@ describe('Views render', () => {
         { path: '/certificates', component: { template: '<div>certificates</div>' } },
         { path: '/classes', component: { template: '<div>classes</div>' } },
         { path: '/enrollments', component: { template: '<div>enrollments</div>' } },
+        { path: '/operations/compliance', component: { template: '<div>compliance</div>' } },
         { path: '/payments', component: { template: '<div>payments</div>' } },
         { path: '/students', component: { template: '<div>students</div>' } },
         { path: '/settings/white-label', component: { template: '<div>wl</div>' } },
