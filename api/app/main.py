@@ -10,6 +10,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.api.routes import (
     asaas_integration,
+    assessments,
     auth,
     certificates,
     classes,
@@ -184,6 +185,7 @@ app.include_router(companies.router, prefix="/api/v1/companies", tags=["companie
 app.include_router(corporate.router, prefix="/api/v1/corporate", tags=["corporate"])
 app.include_router(corporate_invites.router, prefix="/api/v1/corporate", tags=["corporate-invites"])
 app.include_router(lessons.router, prefix="/api/v1/lessons", tags=["lessons"])
+app.include_router(assessments.router, prefix="/api/v1/assessments", tags=["assessments"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
 app.include_router(course_content.router, prefix="/api/v1", tags=["course-content"])
 app.include_router(course_materials.router, prefix="/api/v1", tags=["course-materials"])
