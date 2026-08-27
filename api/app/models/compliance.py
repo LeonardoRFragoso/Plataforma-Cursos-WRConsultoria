@@ -13,6 +13,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
@@ -160,3 +162,22 @@ class CourseTrainingProfessional(Base):
     )
     role = Column(String(32), nullable=False, index=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+@event.listens_for(TrainingProfessional, "after_update")
+def _require_revalidation_after_professional_change(_mapper, connection, target) -> None:
+    """Invalidate ready profiles when referenced professional facts change.
+
+    Regulatory approval must not silently remain valid after name,
+    qualification, registration or active-state changes. Existing classes keep
+    their historical project reference; only future readiness is reopened.
+    """
+    connection.execute(
+        update(CourseComplianceProfile)
+        .where(
+            CourseComplianceProfile.tenant_id == target.tenant_id,
+            CourseComplianceProfile.technical_responsible_id == target.id,
+            CourseComplianceProfile.status == ComplianceStatus.COMPLIANCE_READY,
+        )
+        .values(status=ComplianceStatus.REVIEW_REQUIRED, updated_at=utc_now())
+    )
