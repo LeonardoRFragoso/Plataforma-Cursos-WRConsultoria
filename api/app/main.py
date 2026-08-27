@@ -15,6 +15,7 @@ from app.api.routes import (
     certificates,
     classes,
     companies,
+    compliance,
     corporate,
     corporate_invites,
     course_content,
@@ -203,6 +204,7 @@ app.include_router(financial_admin.router, prefix="/api/v1/financial", tags=["fi
 app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliation", tags=["financial-reconciliation"])
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
+app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-compliance"])
 app.include_router(plans.router, prefix="/api/v1/plans", tags=["plans"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(tenant_subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
