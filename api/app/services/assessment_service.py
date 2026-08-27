@@ -6,7 +6,7 @@ for the courses that already have complete video content in private storage.
 Correct alternatives never leave the backend.
 """
 
-MINIMUM_SCORE = 70.0
+MINIMUM_SCORE = 60.0
 QUESTION_VERSION = "wr-nr-demo-v1"
 
 

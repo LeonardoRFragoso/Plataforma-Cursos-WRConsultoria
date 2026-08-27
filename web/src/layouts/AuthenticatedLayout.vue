@@ -15,17 +15,23 @@
         </div>
       </main>
     </div>
+
+    <NrTutorAssistant v-if="isStudent" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppTopbar from '../components/AppTopbar.vue'
+import NrTutorAssistant from '../components/NrTutorAssistant.vue'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const authStore = useAuthStore()
 const drawerOpen = ref(false)
+const isStudent = computed(() => String(authStore.userRole || '').toLowerCase() === 'student')
 const toggleDrawer = () => { drawerOpen.value = !drawerOpen.value }
 watch(() => route.path, () => { drawerOpen.value = false })
 const onKeydown = (e) => { if (e.key === 'Escape' && drawerOpen.value) drawerOpen.value = false }
