@@ -19,7 +19,9 @@ Regra: todo item deve estar `IMPLEMENTED` ou `EXTERNAL BLOCKER`.
 | 25 | Payments / SMTP | IMPLEMENTED | Provider Asaas com modo mock explícito, erros sanitizados, timeout; SMTP em thread, timeout e mock de testes. |
 | 26 | Backup / observability / docs | IMPLEMENTED | Documentos de deployment, release, backup/restore, políticas de ciclo financeiro e logging estruturado. |
 | 28 | Freeze e gap matrix | IMPLEMENTED | Este documento; alterações commitadas e working tree limpo no momento do freeze. |
-| 29 | Migration gate | IMPLEMENTED | `alembic heads` possui exatamente uma head; fresh DB `upgrade head` concluído em DB descartável. |
+| 29 | Migration gate | IMPLEMENTED | `alembic heads` possui exatamente uma head; fresh DB `upgrade head → downgrade base → upgrade head` concluído em DB descartável. |
+| 32 | Playwright `ui-mocked` | EXTERNAL BLOCKER | Chromium instalado; 57/86 passam. 29 cenários falham por fixtures/mocks desalinhados com o frontend atual e requerem reconciliação dedicada. |
+| 33 | Central WR → LMS real local smoke | EXTERNAL BLOCKER | Depende de serviços, DNS e credenciais reais não disponíveis no ambiente local. |
 | Produção | Credenciais, DNS, SMTP, Asaas, provedor PAdES e aprovação regulatória | EXTERNAL BLOCKER | Requer configuração/contrato/credenciais e decisão humana de produção; não é bloqueio de implementação local. |
 | Produção | Emissão com validade oficial | EXTERNAL BLOCKER | Depende de auditoria/aprovação regulatória e dados reais; o modo demo não é promovido automaticamente. |
 
