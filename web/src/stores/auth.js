@@ -38,6 +38,19 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  const ssoLogin = async (code, state) => {
+    const response = await api.post('/api/v1/sso/exchange', { code, state })
+    token.value = response.data.access_token
+    refreshToken.value = response.data.refresh_token
+    localStorage.setItem('access_token', token.value)
+    localStorage.setItem('refresh_token', refreshToken.value)
+
+    const meResponse = await api.get('/api/v1/auth/me')
+    user.value = meResponse.data
+    userRole.value = meResponse.data.role
+    localStorage.setItem('user_role', userRole.value)
+  }
+
   const logout = () => {
     token.value = null
     refreshToken.value = null
@@ -102,6 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     register,
+    ssoLogin,
     logout,
     refreshAccessToken,
     initializeUser,

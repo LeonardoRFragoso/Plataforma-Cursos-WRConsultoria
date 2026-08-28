@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # WR tenant (e.g. the Railway API hostname). Defaults to localhost.
     MASTER_HOST: str = "localhost"
 
+    # SSO — Central WR as Identity Provider
+    CENTRAL_WR_FRONTEND_URL: str = "http://localhost:5173"
+    CENTRAL_WR_BACKEND_URL: str = "http://localhost:8000"
+    CENTRAL_WR_SSO_CLIENT_ID: str = "lms-wr-cursos"
+    CENTRAL_WR_SSO_CLIENT_SECRET: str = "change-me-sso-secret"
+
     # Demo/staging seed gate. The demo seed script refuses to run unless
     # this is true AND ENVIRONMENT != production.
     DEMO_SEED_MODE: bool = False

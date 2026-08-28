@@ -37,6 +37,7 @@ from app.api.routes import (
     regulatory_assessment_guards,
     regulatory_legacy_guards,
     reports,
+    sso,
     storage,
     students,
     super_admin,
@@ -89,6 +90,7 @@ _ENFORCEMENT_EXEMPT_PREFIXES = (
     "/api/v1/plans/public",
     "/api/v1/tenants/branding",
     "/api/v1/auth",
+    "/api/v1/sso",
     "/api/v1/integrations/certificate-signing/webhook",
     "/health",
 )
@@ -198,6 +200,7 @@ app.include_router(tenants.router, prefix="/api/v1/tenants", tags=["tenants"])
 app.include_router(partner_leads.router, prefix="/api/v1/partner-leads", tags=["partner-leads"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(sso.router, prefix="/api/v1/sso", tags=["sso"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(classes.router, prefix="/api/v1/classes", tags=["classes"])
 app.include_router(students.router, prefix="/api/v1/students", tags=["students"])

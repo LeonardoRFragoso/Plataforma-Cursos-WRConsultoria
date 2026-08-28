@@ -13,6 +13,7 @@ export const routes = [
   { path: '/recuperar-senha', name: 'ForgotPassword', component: () => import('../views/ForgotPassword.vue'), meta: { layout: 'public' } },
   { path: '/redefinir-senha', name: 'ResetPassword', component: () => import('../views/ResetPassword.vue'), meta: { layout: 'public' } },
   { path: '/ativar-conta', name: 'ActivateAccount', component: () => import('../views/ActivateAccount.vue'), meta: { layout: 'public' } },
+  { path: '/sso/callback', name: 'SsoCallback', component: () => import('../views/SsoCallback.vue'), meta: { layout: 'public' } },
   { path: '/cursos/:id', name: 'CourseDetail', component: () => import('../views/CourseDetail.vue'), meta: { layout: 'public' } },
   { path: '/cursos', name: 'CourseCatalog', component: () => import('../views/CourseCatalog.vue'), meta: { layout: 'public' } },
   { path: '/403', name: 'Forbidden', component: () => import('../views/Forbidden.vue'), meta: { layout: 'public' } },

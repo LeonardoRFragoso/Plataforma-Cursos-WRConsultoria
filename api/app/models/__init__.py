@@ -35,6 +35,7 @@ from app.models.course import Course, CourseModality
 from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial, MaterialDocumentType
 from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
+from app.models.external_identity import ExternalIdentity
 from app.models.financial_review import FinancialReview, FinancialReviewEvent
 from app.models.governance import AdminAuditLog, PrivacyRequest
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
@@ -102,6 +103,7 @@ __all__ = [
     "EnrollmentComplianceProgress",
     "EnrollmentSource",
     "EnrollmentStatus",
+    "ExternalIdentity",
     "FinancialReview",
     "FinancialReviewEvent",
     "Lesson",

@@ -120,4 +120,21 @@ describe('Auth Store', () => {
 
     expect(authStore.initialized).toBe(true)
   })
+
+  it('ssoLogin stores tokens and loads user', async () => {
+    vi.spyOn(api, 'post')
+      .mockResolvedValueOnce({ data: { access_token: 'sso-token', refresh_token: 'sso-refresh' } })
+    vi.spyOn(api, 'get')
+      .mockResolvedValueOnce({ data: { role: 'admin', full_name: 'SSO Admin' } })
+
+    const authStore = useAuthStore()
+    await authStore.ssoLogin('code123', 'state123')
+
+    expect(api.post).toHaveBeenCalledWith('/api/v1/sso/exchange', { code: 'code123', state: 'state123' })
+    expect(authStore.token).toBe('sso-token')
+    expect(authStore.refreshToken).toBe('sso-refresh')
+    expect(localStorage.getItem('access_token')).toBe('sso-token')
+    expect(localStorage.getItem('refresh_token')).toBe('sso-refresh')
+    expect(authStore.userRole).toBe('admin')
+  })
 })

@@ -22,6 +22,7 @@ from app.models.class_model import Class  # noqa: F401
 from app.models.company import Company  # noqa: F401
 from app.models.course import Course  # noqa: F401
 from app.models.enrollment import Enrollment  # noqa: F401
+from app.models.external_identity import ExternalIdentity  # noqa: F401
 from app.models.lesson import Lesson, LessonMaterial, LessonProgress  # noqa: F401
 from app.models.payment import Payment  # noqa: F401
 from app.models.plan import Plan  # noqa: F401
