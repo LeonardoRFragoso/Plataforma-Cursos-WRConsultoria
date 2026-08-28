@@ -200,6 +200,38 @@ RLS: ENABLE + FORCE, policy tenant_isolation_external_identities
 
 ## Local Development
 
+### Integrated Ecosystem (Central WR + LMS)
+
+When running both systems locally, the port assignments are:
+
+| Service | Port |
+|---------|------|
+| Central WR frontend | 5173 |
+| Central WR backend | 8000 |
+| LMS frontend | 5174 |
+| LMS backend | 8001 |
+
+The LMS `.env` must set:
+```
+VITE_API_URL=http://localhost:8001
+CENTRAL_WR_BACKEND_URL=http://localhost:8000
+```
+
+**Important**: `VITE_API_URL` is the LMS backend (8001), NOT the Central
+WR backend (8000). The LMS frontend must never call the Central WR backend
+directly — the only Central WR contact is the server-to-server exchange
+done by the LMS backend.
+
+### Vite envDir
+
+The LMS `web/vite.config.js` sets `envDir: '..'` so that Vite loads
+`.env` from the project root (one level up from `web/`). Without this,
+VITE_* variables defined in the repo-level `.env` are not available to
+the frontend, causing it to fall back to the default port 8000 (Central
+WR backend) instead of using the LMS backend port.
+
+### SSO Flow
+
 1. Ensure both the Central WR and LMS backends are running.
 2. Set the SSO env vars in `.env` (see above).
 3. The Central WR frontend initiates the flow by calling
