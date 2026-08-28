@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from app.app.scripts.audit_repair_enrollment_course_links import _candidate_list, _normalize
+from app.scripts.audit_repair_enrollment_course_links import _candidate_list, _normalize
 from app.models.course import Course, CourseModality, CourseType
 
 
