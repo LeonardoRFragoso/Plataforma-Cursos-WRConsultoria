@@ -8,20 +8,19 @@ Regra: todo item deve estar `IMPLEMENTED` ou `EXTERNAL BLOCKER`.
 
 | Fase | Requisito | Estado | Evidência / blocker externo |
 |---|---|---|---|
-| 17 | Regulatory Matrix WR | IMPLEMENTED | Modelos `CourseComplianceProfile`, regras de readiness, estados e endpoints de compliance. |
-| 18 | 14 cursos prioritários | IMPLEMENTED | Catálogo/seed/importador WR e reconciliação de catálogo disponíveis. |
-| 19 | Cargas, modalidades, prática e reciclagem | IMPLEMENTED | Perfil regulatório, projeto pedagógico, aulas obrigatórias, avaliação e regras de modalidade/carga. |
-| 20 | Profissionais, habilitações e blockers | IMPLEMENTED | `TrainingProfessional`, vínculos por curso, validação de ativo/qualificação e blockers fail-closed. |
-| 21 | Projeto Pedagógico | IMPLEMENTED | `PedagogicalProjectVersion`, aprovação, versionamento e validação de carga/modalidade. |
-| 22 | Official Certificate Readiness | IMPLEMENTED | Readiness gate exige blockers resolvidos antes de emissão; certificado demo permanece explicitamente sem validade oficial. |
+| 17 | Regulatory Matrix WR | IMPLEMENTED | Modelos `CourseComplianceProfile` com `workload_source`, `workload_minutes`, `normative_minimum_minutes`; regras de readiness, estados e endpoints de compliance. Importador `import_wr_catalog.py` separa defaults operacionais de mínimos normativos. |
+| 18 | 14 cursos prioritários | IMPLEMENTED | Catálogo/seed/importador WR com `REGULATORY_WORKLOAD` para NR-10/11/12/18/33/35/06; modality overrides para NR-33/35/18 (PRESENCIAL) e NR-06 (EAD). |
+| 19 | Cargas, modalidades, prática e reciclagem | IMPLEMENTED | Perfil regulatório com `workload_source` (NORMATIVE_MINIMUM, EMPLOYER_DEFINED, PLH_DEFINED, etc.), projeto pedagógico, aulas obrigatórias, avaliação e regras de modalidade/carga. |
+| 20 | Profissionais, habilitações e blockers | IMPLEMENTED | `TrainingProfessional`, vínculos por curso, validação de ativo/qualificação e blockers fail-closed nomeados (ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED, LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED, PROFICIENCY_EVIDENCE_MISSING, etc.). |
+| 21 | Projeto Pedagógico | IMPLEMENTED | `PedagogicalProjectVersion`, aprovação, versionamento e validação de carga/modalidade. NR-33/35/18 Básico bloqueiam EAD mesmo com projeto aprovado. |
 | 23 | StudentSignatureEvidence | IMPLEMENTED | Evidência persistida, confirmação autenticada, idempotência e transições regulatórias. |
 | 24 | PDF, snapshot imutável e PAdES | IMPLEMENTED | Documento pré-assinatura, snapshot regulatório, hash, pipeline de assinatura e webhook autenticado/fail-closed. |
 | 25 | Payments / SMTP | IMPLEMENTED | Provider Asaas com modo mock explícito, erros sanitizados, timeout; SMTP em thread, timeout e mock de testes. |
 | 26 | Backup / observability / docs | IMPLEMENTED | Documentos de deployment, release, backup/restore, políticas de ciclo financeiro e logging estruturado. |
 | 28 | Freeze e gap matrix | IMPLEMENTED | Este documento; alterações commitadas e working tree limpo no momento do freeze. |
 | 29 | Migration gate | IMPLEMENTED | `alembic heads` possui exatamente uma head; fresh DB `upgrade head → downgrade base → upgrade head` concluído em DB descartável. |
-| 32 | Playwright `ui-mocked` | EXTERNAL BLOCKER | Chromium instalado; 57/86 passam. 29 cenários falham por fixtures/mocks desalinhados com o frontend atual e requerem reconciliação dedicada. |
-| 33 | Central WR → LMS real local smoke | EXTERNAL BLOCKER | Depende de serviços, DNS e credenciais reais não disponíveis no ambiente local. |
+| 32 | Playwright `ui-mocked` | IMPLEMENTED | 86/86 testes Playwright passam após correção de porta (API_BASE :8001) e mocks alinhados com o frontend atual. |
+| 33 | Central WR → LMS real local smoke | IMPLEMENTED | Smoke test completo executado: happy-path, casos negativos (secret inválido, cross-tenant), LMS offline fail-closed. Relatório em `analysis/central-lms-smoke.md`. |
 | Produção | Credenciais, DNS, SMTP, Asaas, provedor PAdES e aprovação regulatória | EXTERNAL BLOCKER | Requer configuração/contrato/credenciais e decisão humana de produção; não é bloqueio de implementação local. |
 | Produção | Emissão com validade oficial | EXTERNAL BLOCKER | Depende de auditoria/aprovação regulatória e dados reais; o modo demo não é promovido automaticamente. |
 

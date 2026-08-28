@@ -4,44 +4,37 @@ Unlike ``test_b2b_rls_isolation.py`` (which manually creates RLS
 policies), this test:
 
 1. Creates a THROWAWAY PostgreSQL database.
-2. Runs ``alembic upgrade head`` against it (real migrations).
-3. Does NOT create any policy manually.
-4. Queries ``pg_class`` / ``pg_policies`` to verify RLS is installed
+2. Runs ``alembic upgrade head`` against it (real migrations — ALL of them).
+3. Does NOT create any table or policy manually.
+4. Does NOT create b2b_clients manually — the head migration creates it.
+5. Queries ``pg_class`` / ``pg_policies`` to verify RLS is installed
    by the migrations on: courses, classes, users, students,
    enrollments, lessons, lesson_progress, certificates.
-5. Seeds Tenant A and Tenant B with academic data.
-6. Makes HTTP B2B requests and verifies strict cross-tenant isolation.
+6. Seeds Tenant A and Tenant B with academic data.
+7. Makes HTTP B2B requests and verifies strict cross-tenant isolation.
 
 This proves the RLS policies installed by the migration scripts (not
 hand-rolled test policies) correctly isolate B2B data access.
 
 Requires PostgreSQL with the ability to CREATE DATABASE.
-Skipped if the throwaway DB cannot be created.
+Skip is ONLY acceptable if the environment does not offer PostgreSQL/
+CREATE DATABASE. If PostgreSQL is available, this test MUST run and pass.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
 import uuid
-from datetime import date, datetime
 
 import httpx
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession as AS
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.security import hash_password
-from app.models.b2b_client import B2BClient
-from app.models.class_model import Class, ClassStatus
-from app.models.course import Course, CourseModality, CourseType
-from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
-from app.models.student import Student
-from app.models.tenant import Tenant, TenantStatus
-from app.models.user import User, UserRole
 from tests.conftest import make_valid_cpf
 
 # The base Postgres connection (to create/drop the throwaway DB).
@@ -76,15 +69,10 @@ def _sync_admin_dsn(async_dsn: str) -> str:
     return async_dsn.replace("postgresql+asyncpg://", "postgresql://")
 
 
-def _db_name(async_dsn: str) -> str:
-    return async_dsn.rsplit("/", 1)[-1]
-
-
 async def _create_throwaway_db(admin_dsn: str, db_name: str) -> str:
     """Create a throwaway database and return its async DSN."""
     import asyncpg
 
-    # asyncpg needs postgresql:// (not postgresql+asyncpg://)
     pg_dsn = admin_dsn.replace("postgresql+asyncpg://", "postgresql://")
     base = pg_dsn.rsplit("/", 1)[0]
     conn = await asyncpg.connect(f"{base}/postgres")
@@ -93,7 +81,6 @@ async def _create_throwaway_db(admin_dsn: str, db_name: str) -> str:
         await conn.execute(f'CREATE DATABASE "{db_name}"')
     finally:
         await conn.close()
-    # Return the async DSN (with +asyncpg) for SQLAlchemy
     async_base = admin_dsn.rsplit("/", 1)[0]
     return f"{async_base}/{db_name}"
 
@@ -105,9 +92,7 @@ async def _drop_throwaway_db(admin_dsn: str, db_name: str) -> None:
     base = pg_dsn.rsplit("/", 1)[0]
     conn = await asyncpg.connect(f"{base}/postgres")
     try:
-        await conn.execute(
-            f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'
-        )
+        await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
     finally:
         await conn.close()
 
@@ -124,69 +109,12 @@ def _run_alembic_upgrade(sync_dsn: str, target: str = "head") -> None:
         env=env,
         cwd=api_root,
         timeout=120,
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
             f"alembic upgrade {target} failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-
-
-async def _create_b2b_clients_table(async_dsn: str) -> None:
-    """Manually create the b2b_clients table (from head migration 9193813510de).
-
-    We upgrade only to ``d7e8f9a0b1c2`` (which installs all RLS policies)
-    to avoid data migrations that require a pre-seeded WR tenant. The
-    b2b_clients table has no RLS policies and is created here directly.
-    Also adds missing columns that later migrations would add, so the
-    ORM models can query without errors.
-    """
-    import asyncpg
-
-    pg_dsn = async_dsn.replace("postgresql+asyncpg://", "postgresql://")
-    conn = await asyncpg.connect(pg_dsn)
-    try:
-        # b2b_clients table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS b2b_clients (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL REFERENCES tenants(id),
-                client_id VARCHAR NOT NULL UNIQUE,
-                client_secret_hash VARCHAR NOT NULL,
-                name VARCHAR NOT NULL,
-                allowed_scopes TEXT NOT NULL DEFAULT 'academic:read',
-                is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-        """)
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_b2b_clients_tenant_id ON b2b_clients(tenant_id)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_b2b_clients_client_id ON b2b_clients(client_id)"
-        )
-
-        # Add missing columns that later migrations (c1d2e3f4a5b6 etc.)
-        # would add. These are nullable so existing rows are unaffected.
-        await conn.execute(
-            "ALTER TABLE classes ADD COLUMN IF NOT EXISTS pedagogical_project_version_id UUID"
-        )
-        # external_identities table (from 16ef7bd242f3)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS external_identities (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                provider VARCHAR NOT NULL,
-                external_subject VARCHAR NOT NULL,
-                user_id UUID NOT NULL REFERENCES users(id),
-                tenant_id UUID NOT NULL REFERENCES tenants(id),
-                last_login_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                UNIQUE(provider, external_subject)
-            )
-        """)
-    finally:
-        await conn.close()
 
 
 async def _verify_rls_installed(engine) -> dict[str, bool]:
@@ -203,7 +131,7 @@ async def _verify_rls_installed(engine) -> dict[str, bool]:
             )
             r = row.fetchone()
             if r:
-                result[table] = bool(r[0])  # relrowsecurity
+                result[table] = bool(r[0])
             else:
                 result[table] = False
     return result
@@ -231,9 +159,8 @@ async def _seed_tenant(
 ):
     """Seed a tenant with course/class/enrollment/b2b_client using raw SQL.
 
-    Uses raw SQL (not ORM) because the migration revision we upgrade to
-    (697853c1effe) may not have all columns that the ORM model defines.
-    RLS bypass is set via set_config for the seeding session.
+    Uses raw SQL with RLS bypass for seeding. The b2b_clients table
+    is created by the head migration — no manual table creation needed.
     """
     import asyncpg
 
@@ -241,7 +168,6 @@ async def _seed_tenant(
     conn = await asyncpg.connect(pg_dsn)
     try:
         now = "NOW()"
-        # Set RLS context for seeding
         await conn.execute(
             "SELECT set_config('app.current_tenant', $1, true)", str(tenant_id)
         )
@@ -296,7 +222,7 @@ async def _seed_tenant(
             class_id, str(tenant_id), course_id, admin_user_id,
         )
 
-        # Enrollment
+        # Enrollment — CONFIRMADA (in_progress, not PENDENTE)
         enrollment_id = str(uuid.uuid4())
         await conn.execute(
             f"INSERT INTO enrollments (id, tenant_id, student_id, class_id, status, source, "
@@ -305,7 +231,7 @@ async def _seed_tenant(
             enrollment_id, str(tenant_id), student_id, class_id,
         )
 
-        # B2B client
+        # B2B client — table created by head migration 9193813510de
         await conn.execute(
             f"INSERT INTO b2b_clients (id, tenant_id, client_id, client_secret_hash, name, "
             f"allowed_scopes, is_active, created_at, updated_at) "
@@ -319,26 +245,31 @@ async def _seed_tenant(
 
 @pytest.fixture
 async def migration_db():
-    """Create a throwaway DB, run alembic upgrade head, yield engine, cleanup."""
+    """Create a throwaway DB, run alembic upgrade HEAD, yield engine, cleanup.
+
+    Uses the REAL head migration — no shortcuts, no manual table creation.
+    Skip is ONLY acceptable if PostgreSQL/CREATE DATABASE is unavailable.
+    """
     db_name = f"wr_test_rls_mig_{uuid.uuid4().hex[:8]}"
     try:
         async_dsn = await _create_throwaway_db(_ADMIN_DSN, db_name)
-    except Exception as exc:
-        pytest.skip(f"Cannot create throwaway DB for migration RLS test: {exc}")
+    except OSError as exc:
+        pytest.skip(
+            f"PostgreSQL not available for migration RLS test: {exc}. "
+            "This gate did NOT run — PostgreSQL/CREATE DATABASE is required."
+        )
 
     sync_dsn = _sync_admin_dsn(async_dsn)
     try:
-        # Upgrade to d7e8f9a0b1c2 — this includes ALL RLS policies
-        # (17e4c0870485 enables RLS, 697853c1effe adds bypass clause)
-        # and all schema columns needed by the ORM models. We stop before
-        # data migrations (e8f9a0b1c2d3, a0b1c2d3e4f5) that require a
-        # pre-seeded WR tenant with courses/users.
-        _run_alembic_upgrade(sync_dsn, "d7e8f9a0b1c2")
-        # Manually create b2b_clients table (from head migration 9193813510de)
-        await _create_b2b_clients_table(async_dsn)
-    except Exception as exc:
+        # Upgrade to HEAD — this runs ALL migrations including b2b_clients,
+        # external_identities, compliance tables, and all RLS policies.
+        # No manual table or policy creation is performed.
+        _run_alembic_upgrade(sync_dsn, "head")
+    except RuntimeError as exc:
         await _drop_throwaway_db(_ADMIN_DSN, db_name)
-        pytest.skip(f"alembic upgrade failed: {exc}")
+        raise AssertionError(
+            f"alembic upgrade head failed — migration gate is broken: {exc}"
+        ) from exc
 
     engine = create_async_engine(async_dsn, echo=False)
     try:
@@ -381,7 +312,7 @@ async def test_migration_tenant_isolation_policies_exist(migration_db):
 @pytest.fixture
 async def seeded_migration_app(migration_db):
     """Seed two tenants, create an ASGI app bound to the migration DB."""
-    engine, async_dsn = migration_db
+    _engine, async_dsn = migration_db
 
     # Seed both tenants
     await _seed_tenant(
@@ -394,10 +325,8 @@ async def seeded_migration_app(migration_db):
     )
 
     # Create a fresh app instance bound to the migration DB.
-    # We override the database engine/session factory in ALL modules
-    # that hold a reference to AsyncSessionLocal.
-    from app.core import database as db_mod
     from app.core import b2b_security
+    from app.core import database as db_mod
     from app.core.config import settings
 
     original_url = settings.DATABASE_URL

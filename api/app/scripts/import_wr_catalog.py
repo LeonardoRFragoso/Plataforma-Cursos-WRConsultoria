@@ -205,10 +205,18 @@ def _get_category(nr_family: str) -> str:
 
 
 def _get_ch(entry: dict) -> int:
+    """Get course workload in hours from the manifest content.
+
+    Uses the explicit workload from the manifest if present. Otherwise
+    falls back to employer-defined defaults that are NOT normative minimums —
+    they are WR's operational configuration and must not be treated as
+    legal minimums. The regulatory compliance profile tracks the
+    authoritative workload_source and normative_minimum_minutes separately.
+    """
     ch = entry["content"].get("workload")
     if ch and isinstance(ch, (int, float)):
         return int(ch)
-    # Defaults
+    # Employer-defined operational defaults (NOT normative minimums)
     nr = entry["nr_family"]
     if nr == "NR-10": return 40
     if nr == "NR-11": return 16
@@ -220,7 +228,86 @@ def _get_ch(entry: dict) -> int:
     return 8
 
 
+# Regulatory workload metadata for the 14 priority courses.
+# Maps course code to (workload_source, normative_minimum_minutes, modality_override).
+# normative_minimum_minutes is None when no universal legal minimum exists.
+REGULATORY_WORKLOAD: dict[str, dict] = {
+    "NR-10-B": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "modality": "SEMIPRESENCIAL",
+    },
+    "NR-10-S": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "modality": "SEMIPRESENCIAL",
+        "prerequisite": "NR-10-B",
+    },
+    "NR-33-AUT": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 16 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 12,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+        "min_practical_percent": 50,
+    },
+    "NR-33-SUP": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 12,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+        "min_practical_percent": 50,
+    },
+    "NR-35-F": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 8 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 24,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+    },
+    "NR-18-F": {
+        # Treating as NR-18 Básico (4h inicial, 4h periódico, 24 meses, presencial)
+        # If this code does NOT represent the Básico training, workload_source
+        # must be changed to REVIEW_REQUIRED.
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 4 * 60,
+        "periodic_minutes": 4 * 60,
+        "validity_months": 24,
+        "modality": "PRESENCIAL",
+    },
+    "NR-06-F": {
+        # NR-06 has no universal 4h legal minimum. Workload is employer-defined.
+        "workload_source": "EMPLOYER_DEFINED",
+        "normative_minimum_minutes": None,
+        "modality": "EAD",
+    },
+    "NR-12-F": {
+        # NR-12 workload is defined by PLH (Profissional Legalmente Habilitado)
+        "workload_source": "PLH_DEFINED",
+        "normative_minimum_minutes": None,
+        "modality": "SEMIPRESENCIAL",
+        "requires_practical_component": True,
+    },
+    # NR-11 variants — employer/PLH-defined, not 16h legal minimum
+    "NR-11-EMP": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-GUI": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-MIN": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-PLA": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-PON": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-RET": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+}
+
+
 def _get_modality(entry: dict) -> str:
+    # Check regulatory override first (e.g. NR-33, NR-35, NR-18 require PRESENCIAL)
+    code = entry.get("code", "")
+    reg = REGULATORY_WORKLOAD.get(code, {})
+    if "modality" in reg:
+        return reg["modality"]
     mod = entry["content"].get("modality")
     if mod and isinstance(mod, str) and mod.upper() in ("PRESENCIAL", "EAD", "SEMIPRESENCIAL"):
         return mod.upper()
@@ -251,7 +338,27 @@ def _to_text(value) -> str | None:
 
 
 def _build_profile_data(content: dict, entry: dict) -> dict:
-    """Build CourseContentProfile fields from manifest content."""
+    """Build CourseContentProfile fields from manifest content.
+
+    Academic content (syllabus, key_topics, risks, prevention) extracted
+    from the source apostila is marked SOURCE_CONFIRMED when the manifest
+    provides structured data. Workload, modality, practice, recycling,
+    technical responsible, and professional qualification are NOT promoted
+    — they have their own regulatory compliance cycle.
+    """
+    has_academic_content = bool(
+        content.get("syllabus")
+        or content.get("key_topics")
+        or content.get("risks_covered")
+        or content.get("prevention_topics")
+    )
+    # If the manifest provides academic content, mark as SOURCE_CONFIRMED.
+    # Otherwise, use the manifest's explicit review_status or default to INFERRED.
+    if has_academic_content:
+        review_status = "SOURCE_CONFIRMED"
+    else:
+        review_status = entry.get("review_status", "INFERRED")
+
     return {
         "short_description": _to_text(content.get("short_description")),
         "full_description": _to_text(content.get("full_description")),
@@ -279,8 +386,9 @@ def _build_profile_data(content: dict, entry: dict) -> dict:
             "pages": entry["source_pdf"]["pages"],
             "source_pages": content.get("source_pages"),
         },
-        "review_status": entry.get("review_status", "INFERRED"),
+        "review_status": review_status,
         "review_required_fields": entry.get("review_required_fields", []),
+        "manifest_hash": entry["source_pdf"]["sha256"],
     }
 
 

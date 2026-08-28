@@ -7,7 +7,7 @@ Branch: `feat/central-b2b-readonly-api`
 
 Foram concluídas e validadas as fases técnicas 1–29, incluindo hardening B2B, isolamento multi-tenant, progresso acadêmico, SSO, compliance regulatório, evidências, certificados, pagamentos, documentação e gate de migrações. As alterações foram separadas em commits pequenos e auditáveis.
 
-As fases de regressão completa e smoke foram executadas conforme autorização após o freeze. O Playwright iniciou corretamente, mas permanece com 29 falhas de fixture/integração enquanto 57 cenários passam; esse bloqueio está explicitamente registrado abaixo.
+As fases de regressão completa e smoke foram executadas conforme autorização após o freeze. Todos os 86 testes Playwright passam após correção de porta (API_BASE :8001) e mocks alinhados com o frontend atual. O smoke test Central WR → LMS foi executado com sucesso (happy-path, casos negativos, LMS offline fail-closed).
 
 ## Entregas concluídas
 
@@ -52,9 +52,11 @@ As fases de regressão completa e smoke foram executadas conforme autorização 
 ### Fase 7 — Taxonomia de status
 
 - Removido `in_progress = total - completed`.
-- `in_progress` agora conta explicitamente apenas matrículas `PENDENTE` e `CONFIRMADA`.
+- `in_progress` agora conta explicitamente apenas matrículas `CONFIRMADA` (em andamento).
+- `PENDENTE` é pendente (sem acesso ao curso) e não é contado como ativo ou em andamento.
+- `active_students` e `active_enrollments` no B2B summary contam apenas `CONFIRMADA`.
 - Matrículas canceladas e estados terminais não são classificadas como em andamento.
-- Coberto pelo teste canônico de progresso.
+- Coberto pelo teste canônico de progresso e por `test_b2b_summarypendente_not_counted_as_active`.
 
 ### Fase 8 — Hardening do SSO
 

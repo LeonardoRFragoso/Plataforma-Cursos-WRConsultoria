@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_REDIS_URL: str = ""
     B2B_RATE_LIMIT_REQUESTS: int = 120
     B2B_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    # Pre-auth IP-based limit for B2B endpoints — prevents rotating fake
+    # client IDs to bypass per-client quota. Applied before authentication.
+    B2B_PREAUTH_RATE_LIMIT_REQUESTS: int = 200
+    B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
     
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""

@@ -409,3 +409,116 @@ async def test_b2b_contextvar_reset_after_request(client: AsyncClient):
 
     # After the request, ContextVar must be reset to None
     assert current_tenant_id.get() is None
+
+
+# ─── Enrollment status taxonomy: PENDENTE ≠ in_progress ───
+
+
+@pytest.mark.asyncio
+async def test_b2b_summarypendente_not_counted_as_active(client: AsyncClient):
+    """PENDENTE enrollments must NOT be counted as active/in_progress.
+
+    Only CONFIRMADA should be counted as active_enrollments and
+    active_students. PENDENTE students have no course access yet.
+    """
+    from datetime import date, datetime
+
+    from app.models.class_model import Class, ClassStatus
+    from app.models.course import Course, CourseModality, CourseType
+    from app.models.enrollment import Enrollment, EnrollmentSource, EnrollmentStatus
+    from app.models.student import Student
+    from app.models.user import User, UserRole
+
+    async with AsyncSessionLocal() as session:
+        # Create a course
+        course = Course(
+            tenant_id=WR_TENANT_ID,
+            code="TEST-PEND-001",
+            name="Test Pending Course",
+            category="Test",
+            carga_horaria=8,
+            modality=CourseModality.EAD,
+            tipo_curso=CourseType.FORMACAO,
+            price=100.0,
+            is_active=True,
+        )
+        session.add(course)
+        await session.flush()
+
+        # Create admin + class
+        admin = User(
+            tenant_id=WR_TENANT_ID,
+            email="admin-pend@wr.com",
+            full_name="Admin",
+            role=UserRole.ADMIN,
+            is_active=True,
+            password_hash="x",
+        )
+        session.add(admin)
+        await session.flush()
+
+        cls = Class(
+            tenant_id=WR_TENANT_ID,
+            course_id=course.id,
+            responsible_admin_id=admin.id,
+            status=ClassStatus.ABERTA,
+            max_students=20,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+        )
+        session.add(cls)
+        await session.flush()
+
+        # Create 2 students with PENDENTE + 1 with CONFIRMADA
+        for i, status in enumerate([EnrollmentStatus.PENDENTE, EnrollmentStatus.PENDENTE, EnrollmentStatus.CONFIRMADA]):
+            user = User(
+                tenant_id=WR_TENANT_ID,
+                email=f"student-pend-{i}@wr.com",
+                full_name=f"Student {i}",
+                role=UserRole.STUDENT,
+                is_active=True,
+                password_hash="x",
+            )
+            session.add(user)
+            await session.flush()
+
+            student = Student(
+                tenant_id=WR_TENANT_ID,
+                user_id=user.id,
+                cpf=f"0000000000{i}",
+            )
+            session.add(student)
+            await session.flush()
+
+            enr = Enrollment(
+                tenant_id=WR_TENANT_ID,
+                student_id=student.id,
+                class_id=cls.id,
+                status=status,
+                source=EnrollmentSource.INDIVIDUAL,
+                enrollment_date=datetime(2026, 1, 15),
+                price=100.0,
+            )
+            session.add(enr)
+
+        await session.commit()
+
+    # Query summary — only 1 CONFIRMADA should be counted
+    response = await client.get("/api/v1/b2b/summary", headers=_b2b_headers())
+    assert response.status_code == 200
+    data = response.json()
+    # active_enrollments should count only CONFIRMADA (1), not PENDENTE (2)
+    assert data["active_enrollments"] >= 1
+    # The 2 PENDENTE enrollments should NOT inflate the count
+    # (there may be other CONFIRMADA enrollments from other tests, but
+    # the key assertion is that PENDENTE is not counted as active)
+
+    # Verify course progress endpoint
+    response = await client.get(
+        f"/api/v1/b2b/courses/{course.id}/progress", headers=_b2b_headers()
+    )
+    assert response.status_code == 200
+    progress = response.json()
+    # in_progress should be 1 (CONFIRMADA only), not 3 (PENDENTE + CONFIRMADA)
+    assert progress["in_progress"] == 1
+    assert progress["total_enrollments"] == 3

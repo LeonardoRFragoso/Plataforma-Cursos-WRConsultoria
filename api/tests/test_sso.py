@@ -802,3 +802,137 @@ def test_config_trusted_tenant_empty_allowed_in_development(monkeypatch):
     monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", "")
     s = Settings()
     assert s.CENTRAL_WR_TRUSTED_TENANT_ID == ""
+
+
+# ─── SSO cross-tenant defense: ExternalIdentity and User tenant checks ───
+
+
+@pytest.mark.asyncio
+async def test_sso_external_identity_other_tenant_rejected_403(client, mock_exchange):
+    """ExternalIdentity from another tenant must not resolve via SSO.
+
+    Even if the Central WR claims pass the trusted tenant check, an
+    ExternalIdentity row belonging to a different LMS tenant must
+    fail closed (403). The tenant_id filter on the ExternalIdentity
+    lookup prevents cross-tenant SSO resolution.
+    """
+    from app.models.tenant import Tenant, TenantStatus
+
+    other_tenant_id = uuid.uuid4()
+    async with AsyncSessionLocal() as session:
+        # Create the other tenant using ORM (avoids NOT NULL violations)
+        other_tenant = Tenant(
+            id=other_tenant_id,
+            name="Other Tenant",
+            slug=f"other-tenant-{other_tenant_id.hex[:8]}",
+            status=TenantStatus.ACTIVE,
+            contact_name="Test",
+            contact_email="test@other.com",
+        )
+        session.add(other_tenant)
+        await session.flush()
+
+        # Create a user in the other tenant
+        other_user = User(
+            tenant_id=other_tenant_id,
+            email="admin@other.com",
+            full_name="Other Admin",
+            password_hash="hashed",
+            role=UserRole.ADMIN,
+            is_active=True,
+        )
+        session.add(other_user)
+        await session.flush()
+        # Create ExternalIdentity pointing to other-tenant user
+        session.add(
+            ExternalIdentity(
+                provider=SSO_PROVIDER,
+                external_subject="central-user-123",
+                user_id=other_user.id,
+                tenant_id=other_tenant_id,
+            )
+        )
+        await session.commit()
+
+    mock_exchange.return_value = _claims()
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    # Must be 403 — ExternalIdentity is not in the WR tenant.
+    # The SSO code filters by tenant_id == WR_TENANT_ID, so the
+    # other-tenant identity is not found. SSO then falls through to
+    # email matching (no match) and tries to auto-provision. The
+    # auto-provision fails because the unique constraint on
+    # (provider, external_subject) conflicts with the other-tenant
+    # identity. SSO catches the IntegrityError and returns 403.
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_sso_orphan_external_identity_impossible_with_cascade(client, mock_exchange):
+    """ExternalIdentity has ondelete=CASCADE on user_id FK.
+
+    This means orphan identities (identity exists but user doesn't)
+    are impossible with the current schema. When a user is deleted,
+    all their ExternalIdentity rows are also deleted.
+
+    This test documents that the orphan scenario is prevented at the
+    database level via CASCADE, not at the application level.
+    """
+    # Create user + identity
+    user = await _create_user("orphan-test@wr.com", external_subject="orphan-test-subj")
+    original_user_id = user.id
+
+    # Delete the user
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import delete, select
+
+        await session.execute(delete(User).where(User.id == original_user_id))
+        await session.commit()
+
+        # Verify the ExternalIdentity was also deleted (CASCADE)
+        stmt = select(ExternalIdentity).where(
+            ExternalIdentity.external_subject == "orphan-test-subj"
+        )
+        result = await session.execute(stmt)
+        orphan = result.scalar_one_or_none()
+        assert orphan is None, (
+            "ExternalIdentity should have been CASCADE-deleted with the user. "
+            "If this fails, the FK ondelete=CASCADE is broken."
+        )
+
+
+@pytest.mark.asyncio
+async def test_sso_existing_identity_wr_admin_ok(client, mock_exchange):
+    """Existing ExternalIdentity in WR tenant + admin role → OK (200)."""
+    user = await _create_user("admin@wr.com", role=UserRole.ADMIN, external_subject="central-user-123")
+    mock_exchange.return_value = _claims()
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+    payload = decode_token(response.json()["access_token"])
+    assert payload["sub"] == str(user.id)
+
+
+@pytest.mark.asyncio
+async def test_sso_existing_identity_wr_super_admin_ok(client, mock_exchange):
+    """Existing ExternalIdentity in WR tenant + super_admin role → OK (200)."""
+    user = await _create_user("super@wr.com", role=UserRole.SUPER_ADMIN, external_subject="central-super-123")
+    mock_exchange.return_value = _claims(sub="central-super-123", email="super@wr.com")
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+    payload = decode_token(response.json()["access_token"])
+    assert payload["sub"] == str(user.id)
+    assert payload["role"] == "super_admin"

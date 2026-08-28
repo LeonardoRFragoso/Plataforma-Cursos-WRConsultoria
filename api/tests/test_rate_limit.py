@@ -165,7 +165,7 @@ async def test_middleware_uses_factory_backend_not_global_limiter(client):
 
 @pytest.mark.asyncio
 async def test_middleware_keys_b2b_requests_by_client_id(client):
-    """B2B requests use a client-specific key instead of sharing IP quota."""
+    """B2B requests use two-layer rate limiting: pre-auth IP + post-auth client."""
     from app.core import rate_limit as rl_module
     from app.core.config import settings as app_settings
 
@@ -173,6 +173,8 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
     original_backend = rl_module._backend
     original_b2b_requests = app_settings.B2B_RATE_LIMIT_REQUESTS
     original_b2b_window = app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS
+    original_preauth_requests = app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS
+    original_preauth_window = app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS
     backend = MagicMock()
     backend.is_allowed.return_value = True
 
@@ -180,6 +182,8 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
         app_settings.RATE_LIMIT_ENABLED = True
         app_settings.B2B_RATE_LIMIT_REQUESTS = 7
         app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = 11
+        app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = 200
+        app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = 60
         rl_module._backend = backend
 
         await client.get(
@@ -187,11 +191,67 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
             headers={"X-B2B-Client-Id": "client-a"},
         )
 
-        backend.is_allowed.assert_called_once_with("b2b-client:client-a", 7, 11)
+        # Two calls: pre-auth IP + post-auth client
+        assert backend.is_allowed.call_count == 2
+        first_call = backend.is_allowed.call_args_list[0]
+        assert first_call.args[0].startswith("b2b-ip:")
+        assert first_call.args[1] == 200
+        assert first_call.args[2] == 60
+        second_call = backend.is_allowed.call_args_list[1]
+        assert second_call.args[0] == "b2b-client:client-a"
+        assert second_call.args[1] == 7
+        assert second_call.args[2] == 11
     finally:
         app_settings.RATE_LIMIT_ENABLED = original_enabled
         app_settings.B2B_RATE_LIMIT_REQUESTS = original_b2b_requests
         app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = original_b2b_window
+        app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = original_preauth_requests
+        app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = original_preauth_window
+        rl_module._backend = original_backend
+
+
+@pytest.mark.asyncio
+async def test_middleware_b2b_fake_client_ids_share_ip_quota(client):
+    """100 fake client_ids from the same IP share the pre-auth IP quota.
+
+    Rotating fake client IDs cannot bypass the pre-auth IP-based limit.
+    """
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_backend = rl_module._backend
+    backend = MagicMock()
+    # Pre-auth IP limit blocks after 1 request; post-auth always allows
+    call_count = [0]
+
+    def mock_is_allowed(key, max_req, window, now=None):
+        call_count[0] += 1
+        if key.startswith("b2b-ip:"):
+            return call_count[0] <= 1  # Only first IP request allowed
+        return True  # Post-auth always allows
+
+    backend.is_allowed.side_effect = mock_is_allowed
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        rl_module._backend = backend
+
+        # First request with fake client_id 1 — allowed (IP quota has 1 slot)
+        resp1 = await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "fake-client-001"},
+        )
+        # Second request with fake client_id 2 — blocked by pre-auth IP quota
+        resp2 = await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "fake-client-002"},
+        )
+
+        assert resp1.status_code != 429
+        assert resp2.status_code == 429
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
         rl_module._backend = original_backend
 
 

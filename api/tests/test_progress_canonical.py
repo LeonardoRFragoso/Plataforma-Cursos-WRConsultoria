@@ -10,7 +10,6 @@ from datetime import date, datetime
 
 import httpx
 import pytest
-from sqlalchemy import text
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
@@ -174,8 +173,8 @@ def _b2b_headers():
 @pytest.mark.asyncio
 async def test_canonical_progress_service(progress_seed):
     """Canonical progress service should report 66.7% (2/3 required), not 60% (3/5 all)."""
-    from app.services.progress_service import compute_course_progress
     from app.core.database import AsyncSessionLocal
+    from app.services.progress_service import compute_course_progress
 
     async with AsyncSessionLocal() as db:
         result = await compute_course_progress(

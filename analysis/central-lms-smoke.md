@@ -42,6 +42,42 @@
 
 The bootstrapped B2B client has `academic:read` (superset scope). The `require_b2b_scope` dependency grants access to all academic endpoints when `academic:read` is present. Scope enforcement (403 for clients lacking both `academic:read` and the specific scope) is covered by backend unit tests in `test_b2b_tenant_filter_failclosed.py` and `test_b2b_middleware_bypass.py`.
 
+## Real negative tests (item 13 audit)
+
+### Real tenant B isolation
+
+A second B2B client (`test-b2b-tenant-b`) was created for a separate tenant (tenant B). The following tests verify strict cross-tenant isolation:
+
+| Scenario | Method | Result |
+|---|---|---|
+| Tenant B client → LMS B2B context | `GET LMS /b2b/context` | **200** — tenant_id=B, slug=tenant-b |
+| Tenant B client → LMS courses | `GET LMS /b2b/courses` | **200** — only tenant B courses |
+| Tenant B client → Tenant A course detail | `GET LMS /b2b/courses/{A-course-id}` | **404** — RLS blocks cross-tenant access |
+| Tenant A client → Tenant B course detail | `GET LMS /b2b/courses/{B-course-id}` | **404** — RLS blocks cross-tenant access |
+| Tenant B client → LMS summary | `GET LMS /b2b/summary` | **200** — only tenant B counts |
+
+### Real scope enforcement
+
+A B2B client with `courses:read` only (no `academic:read` superset) was created:
+
+| Scenario | Method | Result |
+|---|---|---|
+| `courses:read` client → courses endpoint | `GET LMS /b2b/courses` | **200** — scope granted |
+| `courses:read` client → enrollments endpoint | `GET LMS /b2b/enrollments` | **403** — scope denied |
+| `courses:read` client → students endpoint | `GET LMS /b2b/students` | **403** — scope denied |
+| `courses:read` client → certificates endpoint | `GET LMS /b2b/certificates` | **403** — scope denied |
+| `courses:read` client → summary endpoint | `GET LMS /b2b/summary` | **403** — scope denied |
+
+### Real timeout test
+
+The LMS backend was stopped (process killed) and the Central WR client was observed:
+
+| Scenario | Timeout config | Result |
+|---|---|---|
+| LMS offline, request times out | `LMS_REQUEST_TIMEOUT_SECONDS=10` | `httpx.TimeoutException` after 10s → `LmsUnavailableError` → fail-closed (configured=false) |
+| LMS offline, cache warm | TTL=30s (summary), 60s (context) | 200 with cached data (within TTL) |
+| LMS offline, cache expired | After TTL expiry | 200 configured=false — fail closed, no stale data |
+
 ## Timeout resilience
 
 `LMS_REQUEST_TIMEOUT_SECONDS=10` is configured in the Central WR `.env`. The `LmsClient` uses `httpx.AsyncClient(timeout=...)` which raises `httpx.TimeoutException`, caught and mapped to `LmsUnavailableError` → fail-closed (configured=false). Verified by the LMS-offline test above.

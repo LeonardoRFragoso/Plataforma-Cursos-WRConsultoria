@@ -6,7 +6,7 @@
         ratio="16/9"
         fit="contain"
         loading="lazy"
-        wrapper-class="w-full shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm sm:w-36"
+        wrapper-class="w-28 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm sm:w-36"
         img-test-id="progress-card-cover-img"
         fb-test-id="progress-card-cover-fallback"
       />

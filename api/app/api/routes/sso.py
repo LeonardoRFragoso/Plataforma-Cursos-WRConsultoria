@@ -32,6 +32,7 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -332,10 +333,14 @@ async def sso_exchange(
 
     normalized_email = normalize_email(email)
 
-    # 1. Look up existing ExternalIdentity link.
+    # 1. Look up existing ExternalIdentity link — scoped to WR tenant only.
+    #    An ExternalIdentity from another tenant must never resolve to a
+    #    local user via SSO. This is defense-in-depth on top of the
+    #    Central WR tenant trust check in _validate_claims.
     stmt = select(ExternalIdentity).where(
         ExternalIdentity.provider == SSO_PROVIDER,
         ExternalIdentity.external_subject == str(external_subject),
+        ExternalIdentity.tenant_id == WR_TENANT_ID,
     )
     result = await db.execute(stmt)
     ext_identity = result.scalar_one_or_none()
@@ -346,10 +351,24 @@ async def sso_exchange(
     role_changed = False
 
     if ext_identity:
-        # Existing link — fetch the user.
+        # Existing link — fetch the user and verify tenant ownership.
         user_stmt = select(User).where(User.id == ext_identity.user_id)
         user_result = await db.execute(user_stmt)
         user = user_result.scalar_one_or_none()
+        if user and user.tenant_id != WR_TENANT_ID:
+            logger.warning(
+                "sso_login_cross_tenant_user",
+                extra={
+                    "event": "sso_login_failed",
+                    "reason": "cross_tenant_user",
+                    "user_id": str(user.id),
+                    "user_tenant_id": str(user.tenant_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuário não pertence ao tenant esperado",
+            )
         if user and not user.is_active:
             logger.warning(
                 "sso_login_inactive_user",
@@ -362,6 +381,21 @@ async def sso_exchange(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuário inativo",
+            )
+        if user is None:
+            # Orphan ExternalIdentity — identity points to a deleted user.
+            # Fail closed; do not auto-provision or issue JWT.
+            logger.warning(
+                "sso_login_orphan_identity",
+                extra={
+                    "event": "sso_login_failed",
+                    "reason": "orphan_identity",
+                    "external_subject": str(external_subject),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Identidade externa órfã — contate o administrador",
             )
     else:
         # 2. No external link — try to match by email within the WR tenant.
@@ -436,7 +470,26 @@ async def sso_exchange(
 
     ext_identity.last_login_at = utc_now()
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # The unique constraint on (provider, external_subject) may fail
+        # if the external_subject already exists in another tenant. This
+        # is a cross-tenant SSO conflict — fail closed with 403.
+        await db.rollback()
+        logger.warning(
+            "sso_login_identity_conflict",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "identity_conflict",
+                "external_subject": str(external_subject),
+                "detail": str(exc.orig),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conflito de identidade externa — contate o administrador",
+        ) from exc
     await db.refresh(user)
 
     # Issue LMS tokens.

@@ -13,7 +13,6 @@ must be completed to earn a certificate.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +37,7 @@ async def compute_course_progress(
     db: AsyncSession,
     tenant_id,
     course_id,
-    student_id: Optional[str] = None,
+    student_id: str | None = None,
 ) -> CourseProgress:
     """Compute canonical required-only progress for a student in a course.
 

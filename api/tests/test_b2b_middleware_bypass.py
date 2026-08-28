@@ -12,15 +12,14 @@ Verifies that /api/v1/b2b/* routes:
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import delete, text
+from sqlalchemy import delete
 
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.b2b_client import B2BClient
-from app.models.tenant import Tenant, TenantStatus
-from app.models.tenant_subscription import TenantSubscription
 from app.models.plan import Plan
+from app.models.tenant_subscription import TenantSubscription
 
 B2B_CLIENT_ID = "test-b2b-mw-bypass"
 B2B_CLIENT_SECRET = "test-b2b-mw-bypass-secret-32chars!!"

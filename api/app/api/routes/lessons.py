@@ -33,7 +33,6 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonContentType, LessonMaterial, LessonProgress
 from app.models.student import Student
 from app.models.user import User
-from app.services.progress_service import compute_course_progress
 from app.schemas.lesson import (
     CourseProgressDetailResponse,
     LessonCreate,
@@ -50,6 +49,7 @@ from app.schemas.lesson import (
     UploadPresignRequest,
     UploadPresignResponse,
 )
+from app.services.progress_service import compute_course_progress
 
 router = APIRouter()
 

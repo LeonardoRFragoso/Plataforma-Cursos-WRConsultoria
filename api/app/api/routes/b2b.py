@@ -108,14 +108,14 @@ async def academic_summary(
         .select_from(Enrollment)
         .where(
             Enrollment.tenant_id == tid,
-            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+            Enrollment.status == EnrollmentStatus.CONFIRMADA.value,
         )
     ) or 0)
 
     active_enrollments = int(await db.scalar(
         select(func.count()).select_from(Enrollment).where(
             Enrollment.tenant_id == tid,
-            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+            Enrollment.status == EnrollmentStatus.CONFIRMADA.value,
         )
     ) or 0)
 
@@ -164,19 +164,19 @@ async def _compute_enrollment_progress(
 async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
     """Compute average progress across all active enrollments.
 
-    For each enrollment (PENDENTE or CONFIRMADA), computes individual
-    progress = completed_lessons / total_lessons * 100, then averages.
-    Returns 0.0 if there are no active enrollments.
+    For each enrollment (CONFIRMADA only — PENDENTE has no course access yet),
+    computes individual progress = completed_lessons / total_lessons * 100,
+    then averages. Returns 0.0 if there are no active enrollments.
     Always returns a value in [0, 100].
     """
-    # Get all active enrollments with their student_id and course_id
+    # Get all in-progress enrollments (CONFIRMADA only) with their student_id and course_id
     rows = (await db.execute(
         select(Enrollment.student_id, Class.course_id)
         .join(Class, Class.id == Enrollment.class_id)
         .where(
             Enrollment.tenant_id == tid,
             Class.tenant_id == tid,
-            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+            Enrollment.status == EnrollmentStatus.CONFIRMADA.value,
         )
     )).all()
 
@@ -196,7 +196,7 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
         .where(
             Enrollment.tenant_id == tid,
             Class.tenant_id == tid,
-            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+            Enrollment.status == EnrollmentStatus.CONFIRMADA.value,
         )
         .subquery()
     )
@@ -794,14 +794,12 @@ async def course_progress(
             enrollment_scope.c.status == EnrollmentStatus.CONCLUIDA.value,
         )
     ) or 0)
-    # Explicit status taxonomy: cancelled/other terminal records are not
-    # considered in progress. Never derive this as total - completed.
+    # Explicit status taxonomy: PENDENTE is pending (no course access yet),
+    # CONFIRMADA is in_progress, CONCLUIDA is completed, CANCELADA is cancelled.
+    # Never derive this as total - completed.
     in_progress = int(await db.scalar(
         select(func.count()).select_from(enrollment_scope).where(
-            enrollment_scope.c.status.in_([
-                EnrollmentStatus.PENDENTE.value,
-                EnrollmentStatus.CONFIRMADA.value,
-            ])
+            enrollment_scope.c.status == EnrollmentStatus.CONFIRMADA.value,
         )
     ) or 0)
 

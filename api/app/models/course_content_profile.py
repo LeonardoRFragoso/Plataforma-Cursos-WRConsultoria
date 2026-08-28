@@ -82,6 +82,16 @@ class CourseContentProfile(Base):
     )
     review_required_fields = Column(JSONB, nullable=True, default=list)
 
+    # Content approval audit trail — tracks when academic content
+    # (syllabus, key_topics, risks, prevention) was confirmed against
+    # the source apostila by the owner. Does NOT approve workload,
+    # modality, practice, recycling, or technical responsible — those
+    # have their own regulatory compliance cycle.
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    manifest_version = Column(String(128), nullable=True)  # manifest file version identifier
+    manifest_hash = Column(String(64), nullable=True)  # SHA-256 of the source manifest file
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 

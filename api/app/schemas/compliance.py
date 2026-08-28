@@ -100,6 +100,9 @@ class ComplianceProfileUpsert(BaseModel):
     regulatory_standard: str = Field(min_length=1, max_length=64)
     regulatory_version: str = Field(min_length=1, max_length=128)
     delivery_mode: str
+    workload_source: str = Field(default="REVIEW_REQUIRED", max_length=64)
+    workload_minutes: int | None = Field(default=None, gt=0)
+    normative_minimum_minutes: int | None = Field(default=None, gt=0)
     requires_practical_component: bool = False
     requires_final_assessment: bool = True
     minimum_score: float | None = Field(default=None, ge=0, le=100)
@@ -145,6 +148,9 @@ class ComplianceProfileResponse(BaseModel):
     regulatory_standard: str
     regulatory_version: str
     delivery_mode: str
+    workload_source: str
+    workload_minutes: int | None
+    normative_minimum_minutes: int | None
     requires_practical_component: bool
     requires_final_assessment: bool
     minimum_score: float | None
