@@ -114,7 +114,7 @@ As fases de regressão completa e smoke foram executadas conforme autorização 
 - `docs/FREEZE_GAP_MATRIX.md` criado.
 - Fresh DB `upgrade head` concluído.
 - Ciclo descartável `upgrade head → downgrade base → upgrade head` concluído.
-- `alembic heads`: exatamente uma head, `9193813510de`.
+- `alembic heads`: exatamente uma head, `1ba7b99712b3`.
 
 ## Validação executada
 
@@ -144,17 +144,16 @@ Também foram validados separadamente:
 
 ### Regressões autorizadas após o freeze
 
-- Backend completo: **1011 testes passando**.
+- Backend completo: **1017 testes passando**.
 - Frontend unitário completo: **444 testes passando em 44 arquivos**.
 - Frontend lint + build: **passando**.
-- Playwright `ui-mocked`: **57 passando / 29 falhando**.
-- As 29 falhas são de fixtures/mocks E2E atuais (curso não encontrado, branding Alfa, autenticação e dados de thumbnails), não de instalação do browser.
-- Smoke Central WR→LMS real: **EXTERNAL BLOCKER**, depende de serviços/credenciais reais não presentes no ambiente local.
+- Playwright `ui-mocked`: **86/86 testes passando**.
+- Smoke Central WR→LMS real: **PASS** — happy-path, casos negativos, LMS offline fail-closed. Relatório em `analysis/central-lms-smoke.md`.
 
 ### Migrações
 
 ```text
-alembic heads -> 9193813510de (head)
+alembic heads -> 1ba7b99712b3 (head)
 fresh upgrade head -> passed
 fresh upgrade head -> downgrade base -> upgrade head -> passed
 ```
@@ -168,12 +167,10 @@ Existe exatamente uma head Alembic.
 
 ## Gaps e blockers externos
 
-- Playwright: 29 cenários ainda falham por fixtures/mocks desalinhados com o frontend atual; 57 passam. Requer uma rodada dedicada de reconciliação E2E.
-- Smoke Central WR→LMS real: `EXTERNAL BLOCKER` por depender de serviços, DNS e credenciais reais.
 - Emissão de certificado com validade oficial: `EXTERNAL BLOCKER` por depender de aprovação regulatória e dados/provedor reais.
 - Lint global: há violações preexistentes fora do escopo deste ciclo; o lint dos arquivos alterados e o build frontend passaram.
 - Nenhuma operação financeira, envio SMTP real, deploy ou alteração de produção foi executada.
 
 ## Estado final
 
-As implementações técnicas das fases 1–29 estão commitadas e os gates de backend/frontend foram executados após o freeze. O Playwright tem resultado parcial documentado, e os itens dependentes de infraestrutura/credenciais/aprovação humana permanecem como blockers externos. O relatório foi atualizado após as validações finais.
+As implementações técnicas das fases 1–29 estão commitadas e os gates de backend/frontend foram executados após o freeze. Todos os 86 testes Playwright passam. O smoke test Central WR→LMS foi executado com sucesso. Os itens dependentes de infraestrutura/credenciais/aprovação humana permanecem como blockers externos. O relatório foi atualizado após as validações finais.

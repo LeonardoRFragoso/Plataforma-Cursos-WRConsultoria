@@ -164,15 +164,17 @@ async def test_middleware_uses_factory_backend_not_global_limiter(client):
 
 
 @pytest.mark.asyncio
-async def test_middleware_keys_b2b_requests_by_client_id(client):
-    """B2B requests use two-layer rate limiting: pre-auth IP + post-auth client."""
+async def test_middleware_b2b_preauth_ip_limit(client):
+    """B2B middleware applies ONLY pre-auth IP-based rate limiting.
+
+    The post-auth per-client quota is enforced inside get_b2b_context()
+    using the AUTHENTICATED client.id, not the presented header.
+    """
     from app.core import rate_limit as rl_module
     from app.core.config import settings as app_settings
 
     original_enabled = app_settings.RATE_LIMIT_ENABLED
     original_backend = rl_module._backend
-    original_b2b_requests = app_settings.B2B_RATE_LIMIT_REQUESTS
-    original_b2b_window = app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS
     original_preauth_requests = app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS
     original_preauth_window = app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS
     backend = MagicMock()
@@ -180,8 +182,6 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
 
     try:
         app_settings.RATE_LIMIT_ENABLED = True
-        app_settings.B2B_RATE_LIMIT_REQUESTS = 7
-        app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = 11
         app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = 200
         app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = 60
         rl_module._backend = backend
@@ -191,20 +191,14 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
             headers={"X-B2B-Client-Id": "client-a"},
         )
 
-        # Two calls: pre-auth IP + post-auth client
-        assert backend.is_allowed.call_count == 2
-        first_call = backend.is_allowed.call_args_list[0]
-        assert first_call.args[0].startswith("b2b-ip:")
-        assert first_call.args[1] == 200
-        assert first_call.args[2] == 60
-        second_call = backend.is_allowed.call_args_list[1]
-        assert second_call.args[0] == "b2b-client:client-a"
-        assert second_call.args[1] == 7
-        assert second_call.args[2] == 11
+        # Middleware makes exactly ONE call: pre-auth IP
+        backend.is_allowed.assert_called_once()
+        call = backend.is_allowed.call_args
+        assert call.args[0].startswith("b2b-ip:")
+        assert call.args[1] == 200
+        assert call.args[2] == 60
     finally:
         app_settings.RATE_LIMIT_ENABLED = original_enabled
-        app_settings.B2B_RATE_LIMIT_REQUESTS = original_b2b_requests
-        app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = original_b2b_window
         app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = original_preauth_requests
         app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = original_preauth_window
         rl_module._backend = original_backend
@@ -212,9 +206,11 @@ async def test_middleware_keys_b2b_requests_by_client_id(client):
 
 @pytest.mark.asyncio
 async def test_middleware_b2b_fake_client_ids_share_ip_quota(client):
-    """100 fake client_ids from the same IP share the pre-auth IP quota.
+    """Rotating fake client IDs cannot bypass the pre-auth IP-based limit.
 
-    Rotating fake client IDs cannot bypass the pre-auth IP-based limit.
+    The middleware applies only the pre-auth IP quota. The post-auth
+    per-client quota is enforced inside get_b2b_context() after
+    authentication, using the authenticated client.id.
     """
     from app.core import rate_limit as rl_module
     from app.core.config import settings as app_settings
@@ -222,14 +218,14 @@ async def test_middleware_b2b_fake_client_ids_share_ip_quota(client):
     original_enabled = app_settings.RATE_LIMIT_ENABLED
     original_backend = rl_module._backend
     backend = MagicMock()
-    # Pre-auth IP limit blocks after 1 request; post-auth always allows
+    # Pre-auth IP limit blocks after 1 request
     call_count = [0]
 
     def mock_is_allowed(key, max_req, window, now=None):
         call_count[0] += 1
         if key.startswith("b2b-ip:"):
             return call_count[0] <= 1  # Only first IP request allowed
-        return True  # Post-auth always allows
+        return True
 
     backend.is_allowed.side_effect = mock_is_allowed
 

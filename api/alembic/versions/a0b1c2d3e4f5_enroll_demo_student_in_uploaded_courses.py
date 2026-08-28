@@ -24,6 +24,15 @@ JUSTIFICATION FOR MODIFICATION (branch feat/central-b2b-readonly-api):
   behavior when prerequisite data is missing.
 - Production existing databases are NOT re-executed; the revision is
   already recorded in `alembic_version`.
+
+EXCEPTION POLICY:
+- This is the ONLY historical migration modified on this branch.
+- No other historical migrations are modified.
+- The exception is acceptable ONLY because:
+  1. It is a data migration (homologation demo), not a schema migration.
+  2. Fresh DB must reach head without demo seed data.
+  3. Environments where it was already applied will not re-execute it.
+  4. No historical schema/DDL is altered by this change.
 """
 
 from collections.abc import Sequence

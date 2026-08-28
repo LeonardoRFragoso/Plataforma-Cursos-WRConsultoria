@@ -8,11 +8,11 @@ Regra: todo item deve estar `IMPLEMENTED` ou `EXTERNAL BLOCKER`.
 
 | Fase | Requisito | Estado | Evidência / blocker externo |
 |---|---|---|---|
-| 17 | Regulatory Matrix WR | IMPLEMENTED | Modelos `CourseComplianceProfile` com `workload_source`, `workload_minutes`, `normative_minimum_minutes`; regras de readiness, estados e endpoints de compliance. Importador `import_wr_catalog.py` separa defaults operacionais de mínimos normativos. |
-| 18 | 14 cursos prioritários | IMPLEMENTED | Catálogo/seed/importador WR com `REGULATORY_WORKLOAD` para NR-10/11/12/18/33/35/06; modality overrides para NR-33/35/18 (PRESENCIAL) e NR-06 (EAD). |
-| 19 | Cargas, modalidades, prática e reciclagem | IMPLEMENTED | Perfil regulatório com `workload_source` (NORMATIVE_MINIMUM, EMPLOYER_DEFINED, PLH_DEFINED, etc.), projeto pedagógico, aulas obrigatórias, avaliação e regras de modalidade/carga. |
-| 20 | Profissionais, habilitações e blockers | IMPLEMENTED | `TrainingProfessional`, vínculos por curso, validação de ativo/qualificação e blockers fail-closed nomeados (ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED, LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED, PROFICIENCY_EVIDENCE_MISSING, etc.). |
-| 21 | Projeto Pedagógico | IMPLEMENTED | `PedagogicalProjectVersion`, aprovação, versionamento e validação de carga/modalidade. NR-33/35/18 Básico bloqueiam EAD mesmo com projeto aprovado. |
+| 17 | Regulatory Matrix WR | IMPLEMENTED | `CourseComplianceProfile` com `workload_source`, `workload_minutes`, `normative_minimum_minutes`. Matriz persistida via `upsert_regulatory_compliance_profile` em `import_wr_catalog.py`. Teste de integração `test_regulatory_matrix_persistence.py` valida os 14 cursos no banco. |
+| 18 | 14 cursos prioritários | IMPLEMENTED | `REGULATORY_WORKLOAD` persistida para NR-10/11/12/18/33/35/06. NR-18-F = REVIEW_REQUIRED (não inferido como Básico). Modality overrides para NR-33/35 (PRESENCIAL) e NR-06 (EAD). |
+| 19 | Cargas, modalidades, prática e reciclagem | IMPLEMENTED | Perfil regulatório com `workload_source` (NORMATIVE_MINIMUM, EMPLOYER_DEFINED, PLH_DEFINED, REVIEW_REQUIRED), projeto pedagógico, aulas obrigatórias, avaliação e regras de modalidade/carga. |
+| 20 | Profissionais, habilitações e blockers | IMPLEMENTED | `TrainingProfessional`, vínculos por curso, validação de ativo/qualificação e blockers fail-closed nomeados (ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED, LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED, PROFICIENCY_EVIDENCE_MISSING, NR18_VARIANT_CONFIRMATION_REQUIRED). Willy Ramos NÃO é criado como TrainingProfessional (CPF fictício proibido); registrado apenas como intenção externa PENDING. |
+| 21 | Projeto Pedagógico | IMPLEMENTED | `PedagogicalProjectVersion`, aprovação, versionamento e validação de carga/modalidade. NR-33/35 bloqueiam EAD mesmo com projeto aprovado. NR-18-F requer confirmação humana de variante. |
 | 23 | StudentSignatureEvidence | IMPLEMENTED | Evidência persistida, confirmação autenticada, idempotência e transições regulatórias. |
 | 24 | PDF, snapshot imutável e PAdES | IMPLEMENTED | Documento pré-assinatura, snapshot regulatório, hash, pipeline de assinatura e webhook autenticado/fail-closed. |
 | 25 | Payments / SMTP | IMPLEMENTED | Provider Asaas com modo mock explícito, erros sanitizados, timeout; SMTP em thread, timeout e mock de testes. |

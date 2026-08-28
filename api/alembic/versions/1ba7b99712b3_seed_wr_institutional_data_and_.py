@@ -1,33 +1,46 @@
-"""seed_wr_institutional_data_and_instructor
+"""seed_wr_institutional_data
 
 Revision ID: 1ba7b99712b3
 Revises: e784adb04d36
 Create Date: 2026-08-28 17:58:36.817644
 
-Seeds WR institutional data (razão social, CNPJ, endereço) on the WR
-tenant and creates the informed instructor (Willy Ramos) as a
-TrainingProfessional with technical responsibility PENDING_VERIFICATION.
+Seeds WR institutional data (razão social, CNPJ, address) on the WR
+tenant's settings JSON block.
 
-IMPORTANT:
-- CEO is NOT a technical qualification. Willy Ramos is registered as
-  an informed instructor only. Technical responsibility for NR-10
-  (electrical) and NR-12 (PLH) remains PENDING_VERIFICATION.
-- No MTE/CREA/CFT/electrical formation/PLH/proficiency/ICP-Brasil
-  registrations are invented.
+IMPORTANT — what this migration does NOT do:
+- It does NOT create a TrainingProfessional for Willy Ramos.
+  Persisting personal data (CPF) for a real person using an invented
+  placeholder is prohibited. The instructor/CEO is recorded only as an
+  external intent in the settings block (name, declared qualification,
+  corporate role, verification status) until a real CPF/identity is
+  provided by the owner.
+- CEO is NOT a technical qualification. "Técnico em Segurança do
+  Trabalho" is a declared qualification, not a verified one.
+- professional_verification = PENDING means no official certificate
+  readiness can be granted based on this entry alone.
+
+Downgrade policy:
+- This migration only writes the `institutional` block into the
+  tenant's `settings` JSON and sets `legal_name`/`cnpj` if they were
+  NULL. It never overwrites preexisting real institutional data.
+- Downgrade removes ONLY the `institutional` block from `settings` and
+  restores `legal_name`/`cnpj` to NULL ONLY if they match the values
+  this migration set (i.e. were provably created by this migration).
+  Preexisting real data is never destroyed.
 """
 
 import json
 from collections.abc import Sequence
-from typing import Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "1ba7b99712b3"
-down_revision: Union[str, None] = "e784adb04d36"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "e784adb04d36"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 WR_TENANT_SLUG = "wr"
 
@@ -41,83 +54,92 @@ WR_INSTITUTIONAL = {
         "state": "RJ",
         "zip_code": "21910-174",
     },
+    # External intent only — NOT a TrainingProfessional record.
+    # No CPF/identity is persisted. Verification is PENDING until the
+    # owner provides real identification.
+    "informed_instructor": {
+        "name": "Willy Ramos",
+        "declared_qualification": "Técnico em Segurança do Trabalho",
+        "corporate_role": "CEO",
+        "professional_verification": "PENDING",
+        "note": (
+            "CEO is NOT a technical qualification. "
+            "No TrainingProfessional record is created until real "
+            "CPF/identity is provided. NR-10 electrical qualification "
+            "and NR-12 PLH remain PENDING_VERIFICATION."
+        ),
+    },
 }
 
-# Instructor — informed only, NOT a verified technical responsible.
-# Qualification: Técnico em Segurança do Trabalho (NOT electrical, NOT PLH).
-# Corporate role: CEO (NOT a technical qualification).
-INSTRUCTOR_CPF = "00000000000"  # Placeholder — must be replaced with real CPF
+_LEGAL_NAME = WR_INSTITUTIONAL["legal_name"]
+_CNPJ = WR_INSTITUTIONAL["cnpj"]
 
 
 def upgrade() -> None:
     bind = op.get_bind()
-
-    # Update WR tenant with institutional data.
     result = bind.execute(
-        sa.text("SELECT id, settings FROM tenants WHERE slug = :slug"),
+        sa.text("SELECT id, settings, legal_name, cnpj FROM tenants WHERE slug = :slug"),
         {"slug": WR_TENANT_SLUG},
     )
     row = result.fetchone()
-    if row:
-        tenant_id = row[0]
-        settings = row[1] if row[1] else {}
-        if isinstance(settings, str):
-            settings = json.loads(settings)
-        settings["institutional"] = WR_INSTITUTIONAL
-        bind.execute(
-            sa.text("UPDATE tenants SET legal_name = :legal_name, cnpj = :cnpj, settings = :settings WHERE id = :tid"),
-            {
-                "legal_name": WR_INSTITUTIONAL["legal_name"],
-                "cnpj": WR_INSTITUTIONAL["cnpj"],
-                "settings": json.dumps(settings),
-                "tid": str(tenant_id),
-            },
-        )
-
-        # Create instructor as TrainingProfessional if not exists.
-        # professional_registration is NULL — PENDING_VERIFICATION.
-        # No MTE/CREA/CFT/electrical/PLH registrations are invented.
-        existing = bind.execute(
-            sa.text("SELECT id FROM training_professionals WHERE tenant_id = :tid AND cpf = :cpf"),
-            {"tid": str(tenant_id), "cpf": INSTRUCTOR_CPF},
-        ).fetchone()
-        if not existing:
-            bind.execute(
-                sa.text(
-                    "INSERT INTO training_professionals (id, tenant_id, full_name, cpf, qualification, professional_registration, council, registration_state, is_active, created_at, updated_at) "
-                    "VALUES (gen_random_uuid(), :tid, :full_name, :cpf, :qualification, NULL, NULL, NULL, true, now(), now())"
-                ),
-                {
-                    "tid": str(tenant_id),
-                    "full_name": "Willy Ramos",
-                    "cpf": INSTRUCTOR_CPF,
-                    "qualification": "Técnico em Segurança do Trabalho",
-                },
-            )
+    if not row:
+        return
+    tenant_id, settings, existing_legal_name, existing_cnpj = row
+    if isinstance(settings, str):
+        settings = json.loads(settings) if settings else {}
+    if settings is None:
+        settings = {}
+    settings["institutional"] = WR_INSTITUTIONAL
+    # Only set legal_name/cnpj if they were NULL — never overwrite real data.
+    new_legal_name = existing_legal_name if existing_legal_name else _LEGAL_NAME
+    new_cnpj = existing_cnpj if existing_cnpj else _CNPJ
+    bind.execute(
+        sa.text(
+            "UPDATE tenants SET legal_name = :legal_name, cnpj = :cnpj, settings = :settings WHERE id = :tid"
+        ),
+        {
+            "legal_name": new_legal_name,
+            "cnpj": new_cnpj,
+            "settings": json.dumps(settings),
+            "tid": str(tenant_id),
+        },
+    )
 
 
 def downgrade() -> None:
+    """Remove ONLY data provably created by this migration.
+
+    Never destroy preexisting real institutional data. We only:
+    - Remove the `institutional` block from settings.
+    - Set legal_name/cnpj to NULL ONLY if they exactly match the values
+      this migration would have set (i.e. they were not preexisting).
+    """
     bind = op.get_bind()
     result = bind.execute(
-        sa.text("SELECT id FROM tenants WHERE slug = :slug"),
+        sa.text("SELECT id, settings, legal_name, cnpj FROM tenants WHERE slug = :slug"),
         {"slug": WR_TENANT_SLUG},
     )
     row = result.fetchone()
-    if row:
-        tenant_id = row[0]
-        bind.execute(
-            sa.text("DELETE FROM training_professionals WHERE tenant_id = :tid AND cpf = :cpf"),
-            {"tid": str(tenant_id), "cpf": INSTRUCTOR_CPF},
-        )
-        # Restore settings without institutional block
-        settings_row = bind.execute(
-            sa.text("SELECT settings FROM tenants WHERE id = :tid"),
-            {"tid": str(tenant_id)},
-        ).fetchone()
-        if settings_row and settings_row[0]:
-            settings = settings_row[0] if isinstance(settings_row[0], dict) else json.loads(settings_row[0])
-            settings.pop("institutional", None)
-            bind.execute(
-                sa.text("UPDATE tenants SET legal_name = NULL, cnpj = NULL, settings = :settings WHERE id = :tid"),
-                {"settings": json.dumps(settings), "tid": str(tenant_id)},
-            )
+    if not row:
+        return
+    tenant_id, settings, current_legal_name, current_cnpj = row
+    if isinstance(settings, str):
+        settings = json.loads(settings) if settings else {}
+    if settings is None:
+        settings = {}
+    settings.pop("institutional", None)
+    # Only null out legal_name/cnpj if they match what this migration set.
+    # If they differ, they were preexisting real data — preserve them.
+    restore_legal_name = None if current_legal_name == _LEGAL_NAME else current_legal_name
+    restore_cnpj = None if current_cnpj == _CNPJ else current_cnpj
+    bind.execute(
+        sa.text(
+            "UPDATE tenants SET legal_name = :legal_name, cnpj = :cnpj, settings = :settings WHERE id = :tid"
+        ),
+        {
+            "legal_name": restore_legal_name,
+            "cnpj": restore_cnpj,
+            "settings": json.dumps(settings),
+            "tid": str(tenant_id),
+        },
+    )

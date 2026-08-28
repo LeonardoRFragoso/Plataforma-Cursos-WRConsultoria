@@ -144,12 +144,13 @@ async def rate_limit_middleware(request: Request, call_next):
         return await call_next(request)
     backend = get_rate_limiter()
     is_b2b = request.url.path.startswith("/api/v1/b2b/")
-    client_id = request.headers.get("X-B2B-Client-Id", "").strip()
     if is_b2b:
-        # Two-layer B2B rate limiting:
-        # 1. Pre-auth: IP-based quota — prevents rotating fake client IDs
-        #    to obtain new quotas. All B2B requests from the same IP share
-        #    this limit regardless of which client_id is presented.
+        # Pre-auth IP-based quota — prevents rotating fake client IDs
+        # to obtain new quotas. All B2B requests from the same IP share
+        # this limit regardless of which client_id is presented.
+        # The post-auth per-client quota is enforced inside
+        # get_b2b_context() using the AUTHENTICATED client.id, not the
+        # presented X-B2B-Client-Id header.
         ip = get_client_ip(request)
         preauth_key = f"b2b-ip:{ip}"
         if not backend.is_allowed(
@@ -161,18 +162,6 @@ async def rate_limit_middleware(request: Request, call_next):
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={"detail": "Rate limit exceeded"},
             )
-        # 2. Post-auth: per-client quota — only applies if a client_id
-        #    is presented. A valid credential gets its own quota, but
-        #    arbitrary client_ids cannot bypass the pre-auth IP limit.
-        if client_id:
-            rate_key = f"b2b-client:{client_id[:128]}"
-            max_requests = settings.B2B_RATE_LIMIT_REQUESTS
-            window_seconds = settings.B2B_RATE_LIMIT_WINDOW_SECONDS
-            if not backend.is_allowed(rate_key, max_requests, window_seconds):
-                return JSONResponse(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    content={"detail": "Rate limit exceeded"},
-                )
         return await call_next(request)
     else:
         rate_key = f"ip:{get_client_ip(request)}"

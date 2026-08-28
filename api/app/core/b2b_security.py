@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.constants import WR_TENANT_ID
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSessionLocal
+from app.core.rate_limit import get_rate_limiter
 from app.core.security import verify_password
 from app.models.b2b_client import B2BClient
 from app.models.tenant_subscription import TenantSubscription
@@ -134,6 +135,25 @@ async def get_b2b_context(
 
         scopes = {s.strip() for s in client.allowed_scopes.split(",") if s.strip()}
         ctx = B2BContext(client=client, tenant_id=client.tenant_id, scopes=scopes)
+
+    # Post-auth per-client rate limit — uses the AUTHENTICATED client.id,
+    # not the presented X-B2B-Client-Id header. This prevents rotating
+    # fake client IDs to obtain new quotas. The pre-auth IP limit in the
+    # middleware still applies before this check.
+    from app.core.config import settings
+    if settings.RATE_LIMIT_ENABLED:
+        backend = get_rate_limiter()
+        client_key = f"b2b-auth-client:{ctx.client.client_id[:128]}"
+        if not backend.is_allowed(
+            client_key,
+            settings.B2B_RATE_LIMIT_REQUESTS,
+            settings.B2B_RATE_LIMIT_WINDOW_SECONDS,
+        ):
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded",
+            )
 
     # Enforce subscription AFTER authentication, using the authenticated
     # tenant_id — never the host-derived tenant.

@@ -20,7 +20,6 @@ from app.models.compliance import (
     ProfessionalAssignmentRole,
     ProfessionalBlocker,
     TrainingProfessional,
-    WorkloadSource,
 )
 from app.models.course import Course, CourseModality
 from app.schemas.compliance import (
@@ -548,6 +547,12 @@ async def _readiness_blockers(
             if nr_code.startswith("NR-12"):
                 blockers.append(ProfessionalBlocker.LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED)
 
+            # NR-18-F: variant not confirmed as "Treinamento Básico" by
+            # the owner/CEO. All regulatory rules remain REVIEW_REQUIRED
+            # until explicit human confirmation.
+            if nr_code == "NR-18-F":
+                blockers.append(ProfessionalBlocker.NR18_VARIANT_CONFIRMATION_REQUIRED)
+
             # General: technical responsible registration pending verification.
             if not professional.professional_registration:
                 blockers.append(ProfessionalBlocker.PROFESSIONAL_REGISTRATION_MISSING)
@@ -580,8 +585,7 @@ async def _readiness_blockers(
     # cannot be converted to EAD even with an approved pedagogical project.
     nr_code = course.code.upper()
     presential_only = (
-        nr_code.startswith("NR-33")
-        or nr_code.startswith("NR-35")
+        nr_code.startswith(("NR-33", "NR-35"))
         or nr_code == "NR-18-F"
     )
     if presential_only and course.modality.value == "EAD":

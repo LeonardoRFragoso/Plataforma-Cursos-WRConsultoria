@@ -46,37 +46,45 @@ The bootstrapped B2B client has `academic:read` (superset scope). The `require_b
 
 ### Real tenant B isolation
 
-A second B2B client (`test-b2b-tenant-b`) was created for a separate tenant (tenant B). The following tests verify strict cross-tenant isolation:
+Cross-tenant isolation is covered by automated tests in:
+- `api/tests/test_b2b_rls_migration_isolation.py` — uses real `alembic upgrade head`, seeds tenant A + B, verifies 404 for cross-tenant course access.
+- `api/tests/test_b2b_tenant_filter_failclosed.py` — deliberate inconsistent records with RLS disabled, verifies explicit tenant joins fail-closed.
+- `api/tests/test_b2b_api.py` — B2B API scope enforcement and tenant isolation.
 
-| Scenario | Method | Result |
+| Scenario | Test | Result |
 |---|---|---|
-| Tenant B client → LMS B2B context | `GET LMS /b2b/context` | **200** — tenant_id=B, slug=tenant-b |
-| Tenant B client → LMS courses | `GET LMS /b2b/courses` | **200** — only tenant B courses |
-| Tenant B client → Tenant A course detail | `GET LMS /b2b/courses/{A-course-id}` | **404** — RLS blocks cross-tenant access |
-| Tenant A client → Tenant B course detail | `GET LMS /b2b/courses/{B-course-id}` | **404** — RLS blocks cross-tenant access |
-| Tenant B client → LMS summary | `GET LMS /b2b/summary` | **200** — only tenant B counts |
+| Tenant A client → Tenant B course | `test_mig_tenant_a_cannot_access_tenant_b_course` | **404** |
+| Tenant B client → Tenant A course | `test_mig_tenant_b_cannot_access_tenant_a_course` | **404** |
+| Tenant A summary isolated | `test_mig_summary_tenant_a_isolated` | **200** — only A counts |
+| Tenant B summary isolated | `test_mig_summary_tenant_b_isolated` | **200** — only B counts |
+| Tenant A enrollments isolated | `test_mig_enrollments_isolated` | only A enrollments |
 
 ### Real scope enforcement
 
-A B2B client with `courses:read` only (no `academic:read` superset) was created:
+Scope enforcement is covered by automated tests in `api/tests/test_b2b_api.py`:
 
-| Scenario | Method | Result |
+| Scenario | Test | Result |
 |---|---|---|
-| `courses:read` client → courses endpoint | `GET LMS /b2b/courses` | **200** — scope granted |
-| `courses:read` client → enrollments endpoint | `GET LMS /b2b/enrollments` | **403** — scope denied |
-| `courses:read` client → students endpoint | `GET LMS /b2b/students` | **403** — scope denied |
-| `courses:read` client → certificates endpoint | `GET LMS /b2b/certificates` | **403** — scope denied |
-| `courses:read` client → summary endpoint | `GET LMS /b2b/summary` | **403** — scope denied |
+| `courses:read` client → courses | `test_b2b_courses_only_scope_can_access_courses` | **200** |
+| `courses:read` client → enrollments | `test_b2b_courses_only_scope_denied_enrollments` | **403** |
+| `courses:read` client → students | `test_b2b_courses_only_scope_denied_students` | **403** |
+| `courses:read` client → certificates | `test_b2b_courses_only_scope_denied_certificates` | **403** |
+| `courses:read` client → summary | `test_b2b_courses_only_scope_denied_summary` | **403** |
+| No-scope client → any endpoint | `test_b2b_no_scope_denied_all` | **403** |
 
-### Real timeout test
+### Real timeout test (reproducible)
 
-The LMS backend was stopped (process killed) and the Central WR client was observed:
+Timeout vs connection-refused is covered by `api/tests/test_b2b_timeout_failclosed.py`:
 
-| Scenario | Timeout config | Result |
+| Scenario | Test | Result |
 |---|---|---|
-| LMS offline, request times out | `LMS_REQUEST_TIMEOUT_SECONDS=10` | `httpx.TimeoutException` after 10s → `LmsUnavailableError` → fail-closed (configured=false) |
-| LMS offline, cache warm | TTL=30s (summary), 60s (context) | 200 with cached data (within TTL) |
-| LMS offline, cache expired | After TTL expiry | 200 configured=false — fail closed, no stale data |
+| Slow server (accepts, never responds) | `test_b2b_client_read_timeout_raises_timeout_exception` | `httpx.TimeoutException` after 2s |
+| Dead port (connection refused) | `test_b2b_client_connection_refused_raises_connect_error` | `httpx.ConnectError` |
+| Timeout → fail-closed | `test_b2b_fail_closed_on_timeout` | `LmsUnavailableError` → configured=false |
+| Connection refused → fail-closed | `test_b2b_fail_closed_on_connection_refused` | `LmsUnavailableError` → configured=false |
+
+Note: killing the LMS process normally produces connection-refused (not a read timeout).
+The reproducible timeout test uses a slow server that accepts connections but never responds.
 
 ## Timeout resilience
 
