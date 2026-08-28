@@ -152,27 +152,13 @@ async def academic_summary(
 async def _compute_enrollment_progress(
     db: AsyncSession, tid: UUID, student_id: UUID, course_id: UUID
 ) -> float:
-    """Compute progress percentage for a single enrollment.
+    """Compute progress percentage for a single enrollment (required-only).
 
-    Returns 0.0 if the course has no lessons. Result is always 0 <= p <= 100.
+    Uses the canonical required-only rule: completed_required / required_lessons.
+    Returns 0.0 if the course has no required lessons. Result is always 0 <= p <= 100.
     """
-    total = int(await db.scalar(
-        select(func.count()).select_from(Lesson).where(
-            Lesson.tenant_id == tid, Lesson.course_id == course_id
-        )
-    ) or 0)
-    if total == 0:
-        return 0.0
-    completed = int(await db.scalar(
-        select(func.count())
-        .select_from(LessonProgress)
-        .join(Lesson, Lesson.id == LessonProgress.lesson_id)
-        .where(
-            LessonProgress.tenant_id == tid, LessonProgress.student_id == student_id,
-            Lesson.course_id == course_id, LessonProgress.completed.is_(True)
-        )
-    ) or 0)
-    return round(min(completed / total * 100, 100.0), 1)
+    from app.services.progress_service import compute_progress_percentage
+    return await compute_progress_percentage(db, tid, course_id, student_id)
 
 
 async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
@@ -220,7 +206,7 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
             Lesson.course_id,
             func.count(Lesson.id).label("total_lessons"),
         )
-        .where(Lesson.tenant_id == tid)
+        .where(Lesson.tenant_id == tid, Lesson.is_required.is_(True))
         .group_by(Lesson.course_id)
         .subquery()
     )
@@ -232,7 +218,11 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
             func.count(LessonProgress.id).label("completed_lessons"),
         )
         .join(Lesson, Lesson.id == LessonProgress.lesson_id)
-        .where(LessonProgress.tenant_id == tid, LessonProgress.completed.is_(True))
+        .where(
+            LessonProgress.tenant_id == tid,
+            LessonProgress.completed.is_(True),
+            Lesson.is_required.is_(True),
+        )
         .group_by(LessonProgress.student_id, Lesson.course_id)
         .subquery()
     )
@@ -701,7 +691,8 @@ async def get_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment course not found")
     lessons_total = int(await db.scalar(
         select(func.count()).select_from(Lesson).where(
-            Lesson.tenant_id == tid, Lesson.course_id == course.id
+            Lesson.tenant_id == tid, Lesson.course_id == course.id,
+            Lesson.is_required.is_(True),
         )
     ) or 0) if course else 0
     lessons_completed = int(await db.scalar(
@@ -710,7 +701,8 @@ async def get_enrollment(
         .join(Lesson, Lesson.id == LessonProgress.lesson_id)
         .where(
             LessonProgress.tenant_id == tid, LessonProgress.student_id == student.id,
-            Lesson.course_id == course.id, LessonProgress.completed.is_(True)
+            Lesson.course_id == course.id, LessonProgress.completed.is_(True),
+            Lesson.is_required.is_(True),
         )
     ) or 0) if course and student else 0
     progress = round(min(lessons_completed / lessons_total * 100, 100.0), 1) if lessons_total > 0 else 0.0
@@ -825,7 +817,8 @@ async def course_progress(
         student_ids = [r.student_id for r in enr_rows]
         lessons_total = int(await db.scalar(
             select(func.count()).select_from(Lesson).where(
-                Lesson.tenant_id == tid, Lesson.course_id == course_id
+                Lesson.tenant_id == tid, Lesson.course_id == course_id,
+                Lesson.is_required.is_(True),
             )
         ) or 0)
         if lessons_total == 0:
@@ -839,6 +832,7 @@ async def course_progress(
                     LessonProgress.completed.is_(True),
                     LessonProgress.student_id.in_(student_ids),
                     Lesson.course_id == course_id,
+                    Lesson.is_required.is_(True),
                 )
                 .group_by(LessonProgress.student_id)
             )).all()
