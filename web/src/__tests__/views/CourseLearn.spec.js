@@ -37,6 +37,7 @@ function mockCourse(lessons = defaultLessons, required = 1) {
   api.get.mockImplementation((url) => {
     if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 0, completed_required: 0, required_lessons: required } })
     if (url.includes('/lessons/courses/')) return Promise.resolve({ data: lessons })
+    if (url.includes('/assessments/courses/')) return Promise.resolve({ data: { required: false, lessons_complete: false, minimum_score: 60, passed: false } })
     if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
     if (url.includes('/watch-url')) return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
     return Promise.resolve({ data: {} })
@@ -98,5 +99,32 @@ describe('CourseLearn View', () => {
     expect(rows[4].find('span').text()).toBe('5')
     expect(rows[0].find('span').text()).not.toBe('2')
     expect(rows[4].find('span').text()).not.toBe('6')
+  })
+
+  it('não mascara erro da API de aulas como curso vazio', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/lessons/courses/')) {
+        return Promise.reject({ response: { status: 500, data: { detail: 'Falha temporária no serviço de aulas' } } })
+      }
+      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 0, completed_required: 0, required_lessons: 4 } })
+      if (url.includes('/assessments/courses/')) return Promise.resolve({ data: { required: false, lessons_complete: false, minimum_score: 60, passed: false } })
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = await mountLearn()
+
+    expect(wrapper.find('[data-testid="lessons-load-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="lessons-load-error"]').text()).toContain('Falha temporária no serviço de aulas')
+    expect(wrapper.find('[data-testid="lessons-empty"]').exists()).toBe(false)
+  })
+
+  it('mostra estado vazio somente quando a API retorna lista vazia com sucesso', async () => {
+    mockCourse([], 0)
+    const wrapper = await mountLearn()
+
+    expect(wrapper.find('[data-testid="lessons-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="lessons-load-error"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Nenhuma aula foi cadastrada para este curso.')
   })
 })
