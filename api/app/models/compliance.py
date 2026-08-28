@@ -30,6 +30,26 @@ class ComplianceStatus:
     ARCHIVED = "ARCHIVED"
 
 
+class WorkloadSource:
+    """How the course workload was determined — regulatory audit trail."""
+    NORMATIVE_MINIMUM = "NORMATIVE_MINIMUM"
+    EMPLOYER_DEFINED = "EMPLOYER_DEFINED"
+    PLH_DEFINED = "PLH_DEFINED"
+    TECHNICAL_RESPONSIBLE_DEFINED = "TECHNICAL_RESPONSIBLE_DEFINED"
+    SOURCE_DOCUMENT = "SOURCE_DOCUMENT"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class ProfessionalBlocker:
+    """Named professional readiness blockers for official certificate issuance."""
+    PROFESSIONAL_REGISTRATION_MISSING = "PROFESSIONAL_REGISTRATION_MISSING"
+    PROFICIENCY_EVIDENCE_MISSING = "PROFICIENCY_EVIDENCE_MISSING"
+    ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED = "ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED"
+    LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED = "LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED"
+    TECHNICAL_RESPONSIBLE_PENDING_VERIFICATION = "TECHNICAL_RESPONSIBLE_PENDING_VERIFICATION"
+    NR18_VARIANT_CONFIRMATION_REQUIRED = "NR18_VARIANT_CONFIRMATION_REQUIRED"
+
+
 class PedagogicalProjectStatus:
     DRAFT = "DRAFT"
     IN_REVIEW = "IN_REVIEW"
@@ -113,6 +133,9 @@ class CourseComplianceProfile(Base):
     regulatory_standard = Column(String(64), nullable=False)
     regulatory_version = Column(String(128), nullable=False)
     delivery_mode = Column(String(32), nullable=False)
+    workload_source = Column(String(64), nullable=False, default=WorkloadSource.REVIEW_REQUIRED)
+    workload_minutes = Column(Integer, nullable=True)
+    normative_minimum_minutes = Column(Integer, nullable=True)
     requires_practical_component = Column(Boolean, nullable=False, default=False)
     requires_final_assessment = Column(Boolean, nullable=False, default=True)
     minimum_score = Column(Float, nullable=True)

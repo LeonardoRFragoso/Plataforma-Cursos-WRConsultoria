@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test'
 // B2C purchase journey UI tests.
 // Every API call is mocked: no real gateway credentials or money movement.
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 const STUDENT_ME = {
   id: 'user-purchase-1',

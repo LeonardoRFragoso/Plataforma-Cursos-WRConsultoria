@@ -24,6 +24,7 @@ The importer does NOT:
 """
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -33,12 +34,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
+from app.models.compliance import ComplianceStatus, CourseComplianceProfile, WorkloadSource
 from app.models.course import Course
-from app.models.course_content_profile import CourseContentProfile
+from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial
 from app.models.tenant import Tenant
 
 MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "wr_course_content_manifest.json"
+
+# Approval source recorded when the owner has externally confirmed the
+# academic content extracted from the apostilas. This does NOT approve
+# workload, modality, practice, recycling, or technical responsible.
+OWNER_EXTERNAL_CONFIRMATION = "OWNER_EXTERNAL_CONFIRMATION"
+
+
+def compute_manifest_hash(manifest_bytes: bytes) -> str:
+    """Deterministic SHA-256 of the manifest file bytes."""
+    return hashlib.sha256(manifest_bytes).hexdigest()
+
+
+def compute_manifest_version(manifest_path: Path) -> str:
+    """Version identifier for the manifest = filename + size + mtime."""
+    stat = manifest_path.stat()
+    return f"{manifest_path.name}:{stat.st_size}:{int(stat.st_mtime)}"
 
 
 async def get_wr_tenant_id(db: AsyncSession) -> UUID | None:
@@ -48,7 +66,7 @@ async def get_wr_tenant_id(db: AsyncSession) -> UUID | None:
     return tenant.id if tenant else None
 
 
-async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_run: bool = True) -> dict:
+async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_run: bool = True, manifest_hash: str = "", manifest_version: str = "") -> dict:
     """Import/update courses from the manifest."""
     report = {
         "CREATE_COURSE": [],
@@ -145,7 +163,7 @@ async def import_catalog(db: AsyncSession, tenant_id: UUID, manifest: dict, dry_
         if code in existing_courses or not dry_run:
             course = existing_courses.get(code)
             if course:
-                profile_data = _build_profile_data(content, entry)
+                profile_data = _build_profile_data(content, entry, manifest_hash, manifest_version)
                 existing_profile = (
                     await db.execute(
                         select(CourseContentProfile).where(
@@ -205,10 +223,18 @@ def _get_category(nr_family: str) -> str:
 
 
 def _get_ch(entry: dict) -> int:
+    """Get course workload in hours from the manifest content.
+
+    Uses the explicit workload from the manifest if present. Otherwise
+    falls back to employer-defined defaults that are NOT normative minimums —
+    they are WR's operational configuration and must not be treated as
+    legal minimums. The regulatory compliance profile tracks the
+    authoritative workload_source and normative_minimum_minutes separately.
+    """
     ch = entry["content"].get("workload")
     if ch and isinstance(ch, (int, float)):
         return int(ch)
-    # Defaults
+    # Employer-defined operational defaults (NOT normative minimums)
     nr = entry["nr_family"]
     if nr == "NR-10": return 40
     if nr == "NR-11": return 16
@@ -220,7 +246,88 @@ def _get_ch(entry: dict) -> int:
     return 8
 
 
+# Regulatory workload metadata for the 14 priority courses.
+# Maps course code to (workload_source, normative_minimum_minutes, modality_override).
+# normative_minimum_minutes is None when no universal legal minimum exists.
+REGULATORY_WORKLOAD: dict[str, dict] = {
+    "NR-10-B": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "modality": "SEMIPRESENCIAL",
+    },
+    "NR-10-S": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "modality": "SEMIPRESENCIAL",
+        "prerequisite": "NR-10-B",
+    },
+    "NR-33-AUT": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 16 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 12,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+        "min_practical_percent": 50,
+    },
+    "NR-33-SUP": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 40 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 12,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+        "min_practical_percent": 50,
+    },
+    "NR-35-F": {
+        "workload_source": "NORMATIVE_MINIMUM",
+        "normative_minimum_minutes": 8 * 60,
+        "periodic_minutes": 8 * 60,
+        "validity_months": 24,
+        "modality": "PRESENCIAL",
+        "requires_practical_component": True,
+    },
+    "NR-18-F": {
+        # NR-18-F variant is NOT confirmed as "Treinamento Básico" by the
+        # owner/CEO. Until explicit human confirmation, all regulatory
+        # rules remain REVIEW_REQUIRED. Do NOT infer 4h/24 months/Básico
+        # just because the code contains NR-18.
+        "workload_source": "REVIEW_REQUIRED",
+        "normative_minimum_minutes": None,
+        "modality": None,  # do not override — let manifest/default decide
+        "status": "REVIEW_REQUIRED",
+    },
+    "NR-06-F": {
+        # NR-06 has no universal 4h legal minimum. Workload is employer-defined.
+        "workload_source": "EMPLOYER_DEFINED",
+        "normative_minimum_minutes": None,
+        "modality": "EAD",
+    },
+    "NR-12-F": {
+        # NR-12 workload is defined by PLH (Profissional Legalmente Habilitado)
+        "workload_source": "PLH_DEFINED",
+        "normative_minimum_minutes": None,
+        "modality": "SEMIPRESENCIAL",
+        "requires_practical_component": True,
+    },
+    # NR-11 variants — employer/PLH-defined, not 16h legal minimum
+    "NR-11-EMP": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-GUI": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-MIN": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-PLA": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-PON": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+    "NR-11-RET": {"workload_source": "EMPLOYER_DEFINED", "normative_minimum_minutes": None, "modality": "SEMIPRESENCIAL", "requires_practical_component": True},
+}
+
+
 def _get_modality(entry: dict) -> str:
+    # Check regulatory override first (e.g. NR-33, NR-35 require PRESENCIAL).
+    # A None modality in REGULATORY_WORKLOAD means "do not override" (NR-18-F).
+    code = entry.get("code", "")
+    reg = REGULATORY_WORKLOAD.get(code, {})
+    reg_modality = reg.get("modality")
+    if reg_modality is not None:
+        return reg_modality
     mod = entry["content"].get("modality")
     if mod and isinstance(mod, str) and mod.upper() in ("PRESENCIAL", "EAD", "SEMIPRESENCIAL"):
         return mod.upper()
@@ -241,6 +348,154 @@ def _get_price(entry: dict) -> float:
     return 149.90
 
 
+# NR family → regulatory_standard mapping for compliance profiles.
+_NR_STANDARD = {
+    "NR-10": ("NR-10", "Segurança em Instalações e Serviços em Eletricidade"),
+    "NR-11": ("NR-11", "Transporte, Movimentação, Armazenagem e Manuseio de Materiais"),
+    "NR-12": ("NR-12", "Segurança no Trabalho em Máquinas e Equipamentos"),
+    "NR-18": ("NR-18", "Condições e Meio Ambiente de Trabalho na Indústria da Construção"),
+    "NR-33": ("NR-33", "Trabalho em Espaço Confinado"),
+    "NR-35": ("NR-35", "Trabalho em Altura"),
+    "NR-06": ("NR-06", "Equipamento de Proteção Individual"),
+}
+
+
+async def upsert_regulatory_compliance_profile(
+    db: AsyncSession,
+    tenant_id: UUID,
+    course: Course,
+    entry: dict,
+) -> CourseComplianceProfile | None:
+    """Idempotently upsert a CourseComplianceProfile from REGULATORY_WORKLOAD.
+
+    Only updates fields managed by the regulatory matrix. Does NOT
+    overwrite manually-approved fields (technical_responsible_id,
+    pedagogical_project_version_id, certificate_required_fields,
+    next_compliance_review_at, minimum_score).
+
+    Returns the profile, or None if the course code has no regulatory
+    matrix entry.
+    """
+    code = entry.get("code", "")
+    reg = REGULATORY_WORKLOAD.get(code)
+    if reg is None:
+        return None
+
+    nr_family = entry.get("nr_family", "")
+    standard, version = _NR_STANDARD.get(nr_family, (nr_family, "REVIEW_REQUIRED"))
+
+    # Compute workload_minutes from the course carga_horaria (hours → minutes)
+    workload_minutes = int(course.carga_horaria * 60) if course.carga_horaria else None
+
+    # For NORMATIVE_MINIMUM courses, workload_minutes must equal normative_minimum_minutes
+    normative_minimum_minutes = reg.get("normative_minimum_minutes")
+    if reg["workload_source"] == WorkloadSource.NORMATIVE_MINIMUM and normative_minimum_minutes:
+        workload_minutes = normative_minimum_minutes
+
+    # Determine delivery_mode — use regulatory override if set, else course modality
+    delivery_mode = reg.get("modality") or course.modality.value
+
+    # Determine status — REVIEW_REQUIRED for NR-18-F, else DRAFT
+    status = reg.get("status", ComplianceStatus.DRAFT)
+
+    # Prerequisites
+    prerequisites = reg.get("prerequisite")
+    prerequisite_text = f"Requer conclusão do curso {prerequisites}" if prerequisites else None
+
+    # Validity period
+    validity_months = reg.get("validity_months")
+
+    # Practical component
+    requires_practical = reg.get("requires_practical_component", False)
+
+    # Check if profile already exists
+    result = await db.execute(
+        select(CourseComplianceProfile).where(
+            CourseComplianceProfile.tenant_id == tenant_id,
+            CourseComplianceProfile.course_id == course.id,
+        )
+    )
+    profile = result.scalar_one_or_none()
+
+    if profile is None:
+        # Create new profile with regulatory matrix values
+        profile = CourseComplianceProfile(
+            tenant_id=tenant_id,
+            course_id=course.id,
+            regulatory_standard=standard,
+            regulatory_version=version,
+            delivery_mode=delivery_mode,
+            workload_source=reg["workload_source"],
+            workload_minutes=workload_minutes,
+            normative_minimum_minutes=normative_minimum_minutes,
+            requires_practical_component=requires_practical,
+            requires_final_assessment=True,
+            validity_period_months=validity_months,
+            prerequisites=prerequisite_text,
+            certificate_required_fields=[],
+            status=status,
+        )
+        db.add(profile)
+    else:
+        # Update ONLY the fields managed by the regulatory matrix.
+        # Never overwrite manually-configured fields.
+        profile.regulatory_standard = standard
+        profile.regulatory_version = version
+        profile.delivery_mode = delivery_mode
+        profile.workload_source = reg["workload_source"]
+        profile.workload_minutes = workload_minutes
+        profile.normative_minimum_minutes = normative_minimum_minutes
+        profile.requires_practical_component = requires_practical
+        if validity_months is not None:
+            profile.validity_period_months = validity_months
+        if prerequisite_text is not None:
+            profile.prerequisites = prerequisite_text
+        # Only set status to REVIEW_REQUIRED if it was DRAFT (don't downgrade
+        # a COMPLIANCE_READY profile — that requires manual review).
+        if status == ComplianceStatus.REVIEW_REQUIRED and profile.status == ComplianceStatus.DRAFT:
+            profile.status = status
+
+    return profile
+
+
+async def reconcile_regulatory_compliance(
+    db: AsyncSession,
+    tenant_id: UUID,
+    manifest: dict,
+    dry_run: bool = True,
+) -> dict:
+    """Reconcile all 14 priority courses with their regulatory profiles.
+
+    Calls upsert_regulatory_compliance_profile for each course that has
+    an entry in REGULATORY_WORKLOAD.
+    """
+    report = {"CREATED_PROFILE": [], "UPDATED_PROFILE": [], "SKIPPED": []}
+
+    # Load all existing courses for this tenant
+    result = await db.execute(select(Course).where(Course.tenant_id == tenant_id))
+    existing_courses = {c.code: c for c in result.scalars().all()}
+
+    for entry in manifest["courses"]:
+        code = entry["code"]
+        if code not in REGULATORY_WORKLOAD:
+            continue
+        course = existing_courses.get(code)
+        if not course:
+            report["SKIPPED"].append({"code": code, "reason": "course not found"})
+            continue
+
+        if not dry_run:
+            profile = await upsert_regulatory_compliance_profile(db, tenant_id, course, entry)
+            if profile:
+                report["CREATED_PROFILE"].append({"code": code})
+            else:
+                report["SKIPPED"].append({"code": code, "reason": "no regulatory entry"})
+        else:
+            report["CREATED_PROFILE"].append({"code": code, "dry_run": True})
+
+    return report
+
+
 def _to_text(value) -> str | None:
     """Convert a value to a string suitable for Text columns, or None."""
     if value is None or value == "REVIEW_REQUIRED":
@@ -250,8 +505,32 @@ def _to_text(value) -> str | None:
     return str(value)
 
 
-def _build_profile_data(content: dict, entry: dict) -> dict:
-    """Build CourseContentProfile fields from manifest content."""
+def _build_profile_data(content: dict, entry: dict, manifest_hash: str, manifest_version: str) -> dict:
+    """Build CourseContentProfile fields from manifest content.
+
+    Academic content (syllabus, key_topics, risks, prevention) extracted
+    from the source apostila is NOT auto-promoted to SOURCE_CONFIRMED.
+    SOURCE_CONFIRMED requires an explicit approval signal from the
+    manifest (``content_approval`` block) or an external confirmation
+    action. Without that signal, the profile stays INFERRED.
+
+    Workload, modality, practice, recycling, technical responsible, and
+    professional qualification are NOT promoted here — they have their
+    own regulatory compliance cycle.
+    """
+    # Default to INFERRED — never auto-confirm just because content exists.
+    review_status = ReviewStatus.INFERRED
+    approval_source = None
+    approved_at = None
+
+    # Explicit approval signal from the manifest. The owner may record
+    # that the academic content was externally confirmed.
+    approval = entry.get("content_approval") or {}
+    if approval.get("confirmed") is True:
+        review_status = ReviewStatus.SOURCE_CONFIRMED
+        approval_source = approval.get("source", OWNER_EXTERNAL_CONFIRMATION)
+        approved_at = approval.get("confirmed_at")
+
     return {
         "short_description": _to_text(content.get("short_description")),
         "full_description": _to_text(content.get("full_description")),
@@ -279,8 +558,14 @@ def _build_profile_data(content: dict, entry: dict) -> dict:
             "pages": entry["source_pdf"]["pages"],
             "source_pages": content.get("source_pages"),
         },
-        "review_status": entry.get("review_status", "INFERRED"),
+        "review_status": review_status,
         "review_required_fields": entry.get("review_required_fields", []),
+        "manifest_hash": manifest_hash,
+        "manifest_version": manifest_version,
+        "approval_source": approval_source,
+        "approved_at": approved_at,
+        # approved_by stays NULL — no in-database user represents the
+        # external owner confirmation. approval_source records the trail.
     }
 
 
@@ -385,8 +670,13 @@ async def main():
         print(f"ERROR: Manifest not found at {MANIFEST_PATH}")
         sys.exit(1)
 
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest_bytes = MANIFEST_PATH.read_bytes()
+    manifest_hash = compute_manifest_hash(manifest_bytes)
+    manifest_version = compute_manifest_version(MANIFEST_PATH)
+    manifest = json.loads(manifest_bytes)
     print(f"Loaded manifest: {len(manifest['courses'])} courses, {len(manifest.get('deactivate_codes', []))} to deactivate")
+    print(f"Manifest hash: {manifest_hash}")
+    print(f"Manifest version: {manifest_version}")
 
     async with AsyncSessionLocal() as db:
         tenant_id = await get_wr_tenant_id(db)
@@ -395,7 +685,14 @@ async def main():
             sys.exit(1)
         print(f"WR tenant ID: {tenant_id}")
 
-        report = await import_catalog(db, tenant_id, manifest, dry_run=dry_run)
+        report = await import_catalog(
+            db, tenant_id, manifest, dry_run=dry_run,
+            manifest_hash=manifest_hash, manifest_version=manifest_version,
+        )
+
+        # Reconcile regulatory compliance profiles for the 14 priority courses
+        reg_report = await reconcile_regulatory_compliance(db, tenant_id, manifest, dry_run=dry_run)
+        report.update(reg_report)
 
         if args.upload_materials:
             mat_report = await import_materials(db, tenant_id, manifest, dry_run=dry_run, upload=True)

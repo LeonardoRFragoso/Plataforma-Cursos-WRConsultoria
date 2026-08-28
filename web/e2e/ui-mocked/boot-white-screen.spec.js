@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test'
 // quickly even when the API is slow/unavailable, and that a stale token
 // on a public route does not produce a prolonged blank page.
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 test.beforeEach(async ({ page }) => {
   // Mock tenant branding so the layout doesn't depend on a live API

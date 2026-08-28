@@ -49,6 +49,7 @@ from app.schemas.lesson import (
     UploadPresignRequest,
     UploadPresignResponse,
 )
+from app.services.progress_service import compute_course_progress
 
 router = APIRouter()
 
@@ -664,50 +665,16 @@ async def get_course_progress(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this course")
 
     student_id = await _get_student_id(db, current_user.get("user_id"))
-    total_lessons = await db.scalar(
-        select(func.count(Lesson.id)).where(and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id))
-    ) or 0
-    required_lessons = await db.scalar(
-        select(func.count(Lesson.id)).where(
-            and_(Lesson.course_id == course_id, Lesson.tenant_id == tenant_id, Lesson.is_required == True)
-        )
-    ) or 0
-    optional_lessons = total_lessons - required_lessons
-
-    completed_required = await db.scalar(
-        select(func.count(LessonProgress.id)).join(Lesson).where(
-            and_(
-                LessonProgress.student_id == student_id,
-                LessonProgress.tenant_id == tenant_id,
-                Lesson.course_id == course_id,
-                LessonProgress.completed == True,
-                Lesson.is_required == True,
-            )
-        )
-    ) or 0
-    completed_optional = await db.scalar(
-        select(func.count(LessonProgress.id)).join(Lesson).where(
-            and_(
-                LessonProgress.student_id == student_id,
-                LessonProgress.tenant_id == tenant_id,
-                Lesson.course_id == course_id,
-                LessonProgress.completed == True,
-                Lesson.is_required == False,
-            )
-        )
-    ) or 0
-
-    percentage = round((completed_required / required_lessons) * 100, 2) if required_lessons > 0 else 0.0
-    certificate_eligible = required_lessons > 0 and completed_required >= required_lessons
+    progress = await compute_course_progress(db, tenant_id, course_id, student_id)
     return CourseProgressDetailResponse(
         course_id=course_id,
-        total_lessons=total_lessons,
-        required_lessons=required_lessons,
-        optional_lessons=optional_lessons,
-        completed_required=completed_required,
-        completed_optional=completed_optional,
-        percentage=percentage,
-        certificate_eligible=certificate_eligible,
+        total_lessons=progress.total_lessons,
+        required_lessons=progress.required_lessons,
+        optional_lessons=progress.optional_lessons,
+        completed_required=progress.completed_required,
+        completed_optional=progress.completed_optional,
+        percentage=progress.percentage,
+        certificate_eligible=progress.certificate_eligible,
     )
 
 

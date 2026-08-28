@@ -12,6 +12,7 @@ from app.api.routes import (
     asaas_integration,
     assessments,
     auth,
+    b2b,
     certificate_documents,
     certificate_signing,
     certificates,
@@ -142,16 +143,39 @@ async def rate_limit_middleware(request: Request, call_next):
     ):
         return await call_next(request)
     backend = get_rate_limiter()
-    if not backend.is_allowed(
-        get_client_ip(request),
-        settings.RATE_LIMIT_REQUESTS,
-        settings.RATE_LIMIT_WINDOW_SECONDS,
-    ):
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Rate limit exceeded"},
-        )
-    return await call_next(request)
+    is_b2b = request.url.path.startswith("/api/v1/b2b/")
+    if is_b2b:
+        # Pre-auth IP-based quota — prevents rotating fake client IDs
+        # to obtain new quotas. All B2B requests from the same IP share
+        # this limit regardless of which client_id is presented.
+        # The post-auth per-client quota is enforced inside
+        # get_b2b_context() using the AUTHENTICATED client.id, not the
+        # presented X-B2B-Client-Id header.
+        ip = get_client_ip(request)
+        preauth_key = f"b2b-ip:{ip}"
+        if not backend.is_allowed(
+            preauth_key,
+            settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS,
+            settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS,
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={"detail": "Rate limit exceeded"},
+            )
+        return await call_next(request)
+    else:
+        rate_key = f"ip:{get_client_ip(request)}"
+        max_requests = settings.RATE_LIMIT_REQUESTS
+        window_seconds = settings.RATE_LIMIT_WINDOW_SECONDS
+        if not backend.is_allowed(rate_key, max_requests, window_seconds):
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={"detail": "Rate limit exceeded"},
+            )
+        return await call_next(request)
+
+
+_B2B_PREFIX = "/api/v1/b2b"
 
 
 @app.middleware("http")
@@ -160,6 +184,27 @@ async def tenant_middleware(request: Request, call_next):
         "/health", "/health/live", "/health/ready", "/", "/docs", "/redoc", "/openapi.json",
     ):
         return await call_next(request)
+
+    # B2B routes bypass the common TenantResolver entirely. The B2B
+    # client's tenant_id (authenticated via X-B2B-Client-Id +
+    # X-B2B-Client-Secret) is the SOLE authority for tenant context.
+    # Host / X-Tenant-Slug / Origin must NOT influence the B2B tenant.
+    # Subscription enforcement is applied AFTER B2B authentication
+    # inside get_b2b_db (see app.core.b2b_security), using the
+    # authenticated tenant_id — never the host-derived one.
+    if request.url.path.startswith(_B2B_PREFIX):
+        # Set a neutral ContextVar; the B2B dependency will override it
+        # with the authenticated tenant_id. We do NOT resolve a tenant
+        # from the host here.
+        token = current_tenant_id.set(None)
+        request.state.tenant_id = None
+        request.scope["resolved_tenant_id"] = None
+        request.scope["b2b_route"] = True
+        try:
+            return await call_next(request)
+        finally:
+            current_tenant_id.reset(token)
+
     resolver = TenantResolver()
     token = current_tenant_id.set(None)
     async with AsyncSessionLocal() as db:
@@ -250,6 +295,7 @@ app.include_router(
     tags=["certificate-signing-webhook"],
 )
 app.include_router(tutor.router, prefix="/api/v1/tutor", tags=["tutor"])
+app.include_router(b2b.router, prefix="/api/v1/b2b", tags=["b2b"])
 
 
 @app.get("/")

@@ -164,6 +164,94 @@ async def test_middleware_uses_factory_backend_not_global_limiter(client):
 
 
 @pytest.mark.asyncio
+async def test_middleware_b2b_preauth_ip_limit(client):
+    """B2B middleware applies ONLY pre-auth IP-based rate limiting.
+
+    The post-auth per-client quota is enforced inside get_b2b_context()
+    using the AUTHENTICATED client.id, not the presented header.
+    """
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_backend = rl_module._backend
+    original_preauth_requests = app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS
+    original_preauth_window = app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS
+    backend = MagicMock()
+    backend.is_allowed.return_value = True
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = 200
+        app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = 60
+        rl_module._backend = backend
+
+        await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "client-a"},
+        )
+
+        # Middleware makes exactly ONE call: pre-auth IP
+        backend.is_allowed.assert_called_once()
+        call = backend.is_allowed.call_args
+        assert call.args[0].startswith("b2b-ip:")
+        assert call.args[1] == 200
+        assert call.args[2] == 60
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
+        app_settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS = original_preauth_requests
+        app_settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS = original_preauth_window
+        rl_module._backend = original_backend
+
+
+@pytest.mark.asyncio
+async def test_middleware_b2b_fake_client_ids_share_ip_quota(client):
+    """Rotating fake client IDs cannot bypass the pre-auth IP-based limit.
+
+    The middleware applies only the pre-auth IP quota. The post-auth
+    per-client quota is enforced inside get_b2b_context() after
+    authentication, using the authenticated client.id.
+    """
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_backend = rl_module._backend
+    backend = MagicMock()
+    # Pre-auth IP limit blocks after 1 request
+    call_count = [0]
+
+    def mock_is_allowed(key, max_req, window, now=None):
+        call_count[0] += 1
+        if key.startswith("b2b-ip:"):
+            return call_count[0] <= 1  # Only first IP request allowed
+        return True
+
+    backend.is_allowed.side_effect = mock_is_allowed
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        rl_module._backend = backend
+
+        # First request with fake client_id 1 — allowed (IP quota has 1 slot)
+        resp1 = await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "fake-client-001"},
+        )
+        # Second request with fake client_id 2 — blocked by pre-auth IP quota
+        resp2 = await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "fake-client-002"},
+        )
+
+        assert resp1.status_code != 429
+        assert resp2.status_code == 429
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
+        rl_module._backend = original_backend
+
+
+@pytest.mark.asyncio
 async def test_middleware_redis_backend_used_when_configured(client):
     """Com RATE_LIMIT_REDIS_URL definida, o middleware usa RedisBackend."""
     from app.core import rate_limit as rl_module

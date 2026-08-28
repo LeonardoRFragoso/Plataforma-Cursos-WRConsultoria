@@ -7,19 +7,46 @@ Create Date: 2026-08-27
 This is an idempotent homologation data migration. It only affects the
 existing WR demo account ``aluno2@wr.demo`` and the four NR courses whose
 private-storage videos and playback were validated before this migration.
+
+JUSTIFICATION FOR MODIFICATION (branch feat/central-b2b-readonly-api):
+- This migration was originally written to raise RuntimeError when the
+  WR tenant, demo user, demo student, admin, or demo courses were not
+  found. This blocked `alembic upgrade head` on clean/fresh databases
+  that do not contain homologation demo seed data.
+- The modification changes RuntimeError to a graceful `return` when
+  homologation data is absent. This allows fresh databases (test, CI,
+  new environments) to upgrade to head without requiring demo seed.
+- This migration was ALREADY APPLIED in existing environments (homologation,
+  production). The modification does NOT re-execute in those environments
+  because Alembic tracks the revision as applied.
+- The modification affects ONLY future executions on databases without
+  demo seed data. No schema (DDL) was changed — only the data migration
+  behavior when prerequisite data is missing.
+- Production existing databases are NOT re-executed; the revision is
+  already recorded in `alembic_version`.
+
+EXCEPTION POLICY:
+- This is the ONLY historical migration modified on this branch.
+- No other historical migrations are modified.
+- The exception is acceptable ONLY because:
+  1. It is a data migration (homologation demo), not a schema migration.
+  2. Fresh DB must reach head without demo seed data.
+  3. Environments where it was already applied will not re-execute it.
+  4. No historical schema/DDL is altered by this change.
 """
 
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta
-from typing import Sequence, Union
 from uuid import uuid4
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "a0b1c2d3e4f5"
-down_revision: Union[str, None] = "f9a0b1c2d3e4"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "f9a0b1c2d3e4"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 DEMO_EMAIL = "aluno2@wr.demo"
 COURSE_CODES = ("NR-06-F", "NR-12-F", "NR-33-AUT", "NR-35-F")
@@ -34,8 +61,10 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     tenant_id = _scalar(bind, "SELECT id FROM tenants WHERE slug = 'wr' LIMIT 1")
+    # Homologation data is optional. A clean production/test database must
+    # still be able to upgrade to head without requiring demo seed records.
     if tenant_id is None:
-        raise RuntimeError("WR tenant not found; cannot provision demo student journey")
+        return
 
     # RLS-aware migration context for tenant-scoped tables.
     bind.execute(
@@ -56,7 +85,7 @@ def upgrade() -> None:
         email=DEMO_EMAIL,
     )
     if user_id is None:
-        raise RuntimeError(f"Demo user {DEMO_EMAIL} not found")
+        return
 
     student_id = _scalar(
         bind,
@@ -65,7 +94,7 @@ def upgrade() -> None:
         user_id=user_id,
     )
     if student_id is None:
-        raise RuntimeError(f"Student profile for {DEMO_EMAIL} not found")
+        return
 
     admin_id = _scalar(
         bind,
@@ -81,7 +110,7 @@ def upgrade() -> None:
         tenant_id=tenant_id,
     )
     if admin_id is None:
-        raise RuntimeError("Active WR administrator not found")
+        return
 
     now = datetime.utcnow()
     start_date = date.today()
@@ -100,7 +129,8 @@ def upgrade() -> None:
             code=code,
         )
         if course_id is None:
-            raise RuntimeError(f"Required demo course {code} not found or inactive")
+            # The demo catalog is optional; do not block schema upgrades.
+            return
 
         existing_enrollment = _scalar(
             bind,

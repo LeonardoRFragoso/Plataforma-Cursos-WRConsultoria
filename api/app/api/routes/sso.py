@@ -12,7 +12,7 @@ Other roles are rejected with 403.
 
 Role reconciliation:
 - Central ADMIN + LMS admin → stays admin.
-- Central ADMIN + LMS student → promoted to admin (trusted IdP).
+- Central ADMIN + LMS student → rejected with 403; never promoted.
 - Central ADMIN + LMS super_admin → stays super_admin (never downgraded).
 - Central ADMIN + no LMS user → auto-provisioned as admin.
 - Central non-ADMIN → 403, no role change.
@@ -32,6 +32,7 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -241,11 +242,12 @@ def _reconcile_role(user: User, central_role: str) -> bool:
 
     Rules:
     - Central ADMIN + LMS admin → stays admin (no change).
-    - Central ADMIN + LMS student → promoted to admin.
+    - Central ADMIN + LMS student → rejected; never promoted.
     - Central ADMIN + LMS super_admin → stays super_admin (NEVER downgraded).
     - Central non-ADMIN → caller must have already rejected with 403.
 
     Returns True if the role was changed, False if it stayed the same.
+    Raises 403 for an existing local user without an administrative role.
     """
     normalized_central = (central_role or "").strip().upper()
     if normalized_central != "ADMIN":
@@ -257,8 +259,18 @@ def _reconcile_role(user: User, central_role: str) -> bool:
         return False
 
     if user.role != UserRole.ADMIN:
-        user.role = UserRole.ADMIN
-        return True
+        logger.warning(
+            "sso_existing_user_role_not_allowed",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "existing_user_not_admin",
+                "user_id": str(user.id),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário local não possui perfil administrativo",
+        )
 
     return False
 
@@ -283,8 +295,8 @@ async def sso_exchange(
        a. Look up ``ExternalIdentity`` by provider + external_subject.
        b. If not found, look up by email within the WR tenant and link.
        c. If still not found, auto-provision a new admin user.
-    5. Reconcile role: promote student → admin if Central is ADMIN.
-       Never downgrade super_admin.
+    5. Reconcile role: existing local students are rejected; existing
+       administrators retain their role. Never downgrade super_admin.
     6. Issue LMS JWT tokens (same shape as normal login).
     7. Update ``ExternalIdentity.last_login_at``.
     """
@@ -321,10 +333,14 @@ async def sso_exchange(
 
     normalized_email = normalize_email(email)
 
-    # 1. Look up existing ExternalIdentity link.
+    # 1. Look up existing ExternalIdentity link — scoped to WR tenant only.
+    #    An ExternalIdentity from another tenant must never resolve to a
+    #    local user via SSO. This is defense-in-depth on top of the
+    #    Central WR tenant trust check in _validate_claims.
     stmt = select(ExternalIdentity).where(
         ExternalIdentity.provider == SSO_PROVIDER,
         ExternalIdentity.external_subject == str(external_subject),
+        ExternalIdentity.tenant_id == WR_TENANT_ID,
     )
     result = await db.execute(stmt)
     ext_identity = result.scalar_one_or_none()
@@ -335,10 +351,24 @@ async def sso_exchange(
     role_changed = False
 
     if ext_identity:
-        # Existing link — fetch the user.
+        # Existing link — fetch the user and verify tenant ownership.
         user_stmt = select(User).where(User.id == ext_identity.user_id)
         user_result = await db.execute(user_stmt)
         user = user_result.scalar_one_or_none()
+        if user and user.tenant_id != WR_TENANT_ID:
+            logger.warning(
+                "sso_login_cross_tenant_user",
+                extra={
+                    "event": "sso_login_failed",
+                    "reason": "cross_tenant_user",
+                    "user_id": str(user.id),
+                    "user_tenant_id": str(user.tenant_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuário não pertence ao tenant esperado",
+            )
         if user and not user.is_active:
             logger.warning(
                 "sso_login_inactive_user",
@@ -351,6 +381,21 @@ async def sso_exchange(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuário inativo",
+            )
+        if user is None:
+            # Orphan ExternalIdentity — identity points to a deleted user.
+            # Fail closed; do not auto-provision or issue JWT.
+            logger.warning(
+                "sso_login_orphan_identity",
+                extra={
+                    "event": "sso_login_failed",
+                    "reason": "orphan_identity",
+                    "external_subject": str(external_subject),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Identidade externa órfã — contate o administrador",
             )
     else:
         # 2. No external link — try to match by email within the WR tenant.
@@ -425,7 +470,26 @@ async def sso_exchange(
 
     ext_identity.last_login_at = utc_now()
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # The unique constraint on (provider, external_subject) may fail
+        # if the external_subject already exists in another tenant. This
+        # is a cross-tenant SSO conflict — fail closed with 403.
+        await db.rollback()
+        logger.warning(
+            "sso_login_identity_conflict",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "identity_conflict",
+                "external_subject": str(external_subject),
+                "detail": str(exc.orig),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conflito de identidade externa — contate o administrador",
+        ) from exc
     await db.refresh(user)
 
     # Issue LMS tokens.

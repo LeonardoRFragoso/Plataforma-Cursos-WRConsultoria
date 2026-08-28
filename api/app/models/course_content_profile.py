@@ -77,10 +77,24 @@ class CourseContentProfile(Base):
     source_manifest = Column(JSONB, nullable=True)  # references to source PDFs, SHAs, pages
     review_status = Column(
         String,
-        default=ReviewStatus.SOURCE_CONFIRMED,
+        default=ReviewStatus.INFERRED,
         nullable=False,
     )
     review_required_fields = Column(JSONB, nullable=True, default=list)
+
+    # Content approval audit trail — tracks when academic content
+    # (syllabus, key_topics, risks, prevention) was confirmed against
+    # the source apostila by the owner. Does NOT approve workload,
+    # modality, practice, recycling, or technical responsible — those
+    # have their own regulatory compliance cycle.
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # approval_source records how the confirmation happened when no
+    # in-database user is available (e.g. OWNER_EXTERNAL_CONFIRMATION).
+    # approved_by remains NULL when approval_source is external.
+    approval_source = Column(String(128), nullable=True)
+    manifest_version = Column(String(128), nullable=True)  # manifest file version identifier
+    manifest_hash = Column(String(64), nullable=True)  # SHA-256 of the source manifest file
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

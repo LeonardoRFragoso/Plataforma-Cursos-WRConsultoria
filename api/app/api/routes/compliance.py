@@ -18,6 +18,7 @@ from app.models.compliance import (
     PedagogicalProjectStatus,
     PedagogicalProjectVersion,
     ProfessionalAssignmentRole,
+    ProfessionalBlocker,
     TrainingProfessional,
 )
 from app.models.course import Course, CourseModality
@@ -526,6 +527,36 @@ async def _readiness_blockers(
         ).scalar_one_or_none()
         if not professional or not professional.is_active:
             blockers.append("Technical responsible is missing or inactive")
+        else:
+            # Named professional blockers for specific NR families.
+            # These ensure official certificate readiness remains FALSE
+            # until the required professional qualification is verified.
+            nr_code = course.code.upper()
+
+            # NR-10: requires legally qualified electrical professional.
+            # A Técnico em Segurança do Trabalho is NOT automatically
+            # a legally qualified electrical professional.
+            if nr_code.startswith("NR-10"):
+                if not professional.professional_registration:
+                    blockers.append(ProfessionalBlocker.ELECTRICAL_LEGAL_QUALIFICATION_REQUIRED)
+                else:
+                    blockers.append(ProfessionalBlocker.PROFICIENCY_EVIDENCE_MISSING)
+
+            # NR-12: requires PLH (Profissional Legalmente Habilitado).
+            # A Técnico em Segurança do Trabalho is NOT a PLH for NR-12.
+            if nr_code.startswith("NR-12"):
+                blockers.append(ProfessionalBlocker.LEGAL_QUALIFIED_PROFESSIONAL_REQUIRED)
+
+            # NR-18-F: variant not confirmed as "Treinamento Básico" by
+            # the owner/CEO. All regulatory rules remain REVIEW_REQUIRED
+            # until explicit human confirmation.
+            if nr_code == "NR-18-F":
+                blockers.append(ProfessionalBlocker.NR18_VARIANT_CONFIRMATION_REQUIRED)
+
+            # General: technical responsible registration pending verification.
+            if not professional.professional_registration:
+                blockers.append(ProfessionalBlocker.PROFESSIONAL_REGISTRATION_MISSING)
+                blockers.append(ProfessionalBlocker.TECHNICAL_RESPONSIBLE_PENDING_VERIFICATION)
 
     if profile.requires_practical_component:
         practical_professional = (
@@ -549,6 +580,16 @@ async def _readiness_blockers(
         ).scalar_one_or_none()
         if not practical_professional:
             blockers.append("Practical component requires an active assigned training professional")
+
+    # NR-33, NR-35, and NR-18 Básico require PRESENCIAL delivery — they
+    # cannot be converted to EAD even with an approved pedagogical project.
+    nr_code = course.code.upper()
+    presential_only = (
+        nr_code.startswith(("NR-33", "NR-35"))
+        or nr_code == "NR-18-F"
+    )
+    if presential_only and course.modality.value == "EAD":
+        blockers.append("This NR requires PRESENCIAL delivery — EAD is not permitted")
 
     if profile.pedagogical_project_version_id is None:
         blockers.append("Approved pedagogical project version has not been selected")

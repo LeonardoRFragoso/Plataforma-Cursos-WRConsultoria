@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test'
  * 5. Shows tenant name in footer (no WR hardcoded leakage)
  */
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 const WR_BRANDING = {
   name: 'WR Consultoria e Soluções',
