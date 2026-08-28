@@ -78,6 +78,19 @@ def mock_exchange():
         yield mocked
 
 
+@pytest.fixture(autouse=True)
+def _align_trusted_tenant(monkeypatch):
+    """Align CENTRAL_WR_TRUSTED_TENANT_ID with test claims.
+
+    The test claims use WR_TENANT_ID as the Central WR tenant_id. In a
+    real deployment these are different UUIDs (Central WR tenant != LMS
+    WR_TENANT_ID), but for testing we align them so SSO succeeds.
+    Tests that specifically test cross-tenant rejection override this
+    via their own monkeypatch.setattr.
+    """
+    monkeypatch.setattr(settings, "CENTRAL_WR_TRUSTED_TENANT_ID", str(WR_TENANT_ID))
+
+
 @pytest.fixture
 def mock_exchange_error():
     """Patch the Central WR exchange call to raise a CentralWrExchangeError."""
