@@ -12,6 +12,7 @@ from app.api.routes import (
     asaas_integration,
     assessments,
     auth,
+    b2b,
     certificate_documents,
     certificate_signing,
     certificates,
@@ -250,6 +251,7 @@ app.include_router(
     tags=["certificate-signing-webhook"],
 )
 app.include_router(tutor.router, prefix="/api/v1/tutor", tags=["tutor"])
+app.include_router(b2b.router, prefix="/api/v1/b2b", tags=["b2b"])
 
 
 @app.get("/")
