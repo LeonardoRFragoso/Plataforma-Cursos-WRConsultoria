@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test'
  * Uses mocked API (no backend required) — runs under the ui-mocked project.
  */
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 // --- Helpers ---
 

@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test'
 // B2C entry journey and multi-tenant identity E2E tests.
 // All API calls are mocked — no real backend or Asaas credentials needed.
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 const COURSE = {
   id: 'course-b2c-1',

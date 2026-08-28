@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { test, expect } from '@playwright/test'
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 const mockAnswer = {
   answer: 'O EPI deve ser adequado ao risco e fornecido pelo empregador.',

@@ -2,9 +2,9 @@
 import { test, expect } from '@playwright/test'
 
 // Mock das respostas da API para tornar os testes e2e independentes do backend.
-// Todos os testes interceptam as chamadas para http://localhost:8000 (API_URL default).
+// Todos os testes interceptam as chamadas para o backend local configurado no Vite.
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 
 test.beforeEach(async ({ page }) => {
   // Mock tenant branding

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test'
 // Covers Phase 33: /validar-certificado?codigo=... auto-load, result, demo
 // banner, course, student, timeline.
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
 const VALIDATION_CODE = 'DEMOABC1234567890'
 
 const DEMO_VALIDATION_RESPONSE = {
