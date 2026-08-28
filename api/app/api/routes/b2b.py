@@ -71,6 +71,7 @@ async def b2b_context(
         tenant_slug=tenant.slug if tenant else None,
         client_id=ctx.client.client_id,
         scopes=sorted(ctx.scopes),
+        api_version="1",
     )
 
 
@@ -188,6 +189,7 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
         .join(Class, Class.id == Enrollment.class_id)
         .where(
             Enrollment.tenant_id == tid,
+            Class.tenant_id == tid,
             Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
         )
     )).all()
@@ -207,6 +209,7 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
         .join(Class, Class.id == Enrollment.class_id)
         .where(
             Enrollment.tenant_id == tid,
+            Class.tenant_id == tid,
             Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
         )
         .subquery()
@@ -300,7 +303,11 @@ async def list_courses(
             select(Class.course_id, func.count(func.distinct(Enrollment.student_id)).label("cnt"))
             .select_from(Enrollment)
             .join(Class, Class.id == Enrollment.class_id)
-            .where(Class.tenant_id == tid, Class.course_id.in_(course_ids))
+            .where(
+                Class.tenant_id == tid,
+                Enrollment.tenant_id == tid,
+                Class.course_id.in_(course_ids),
+            )
             .group_by(Class.course_id)
         )
         for row in (await db.execute(students_subq)).all():
@@ -336,7 +343,11 @@ async def get_course(
         select(func.count())
         .select_from(Enrollment)
         .join(Class, Class.id == Enrollment.class_id)
-        .where(Class.tenant_id == tid, Class.course_id == c.id)
+        .where(
+            Class.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Class.course_id == c.id,
+        )
     ) or 0)
     return B2BCourseDetail(
         id=c.id, code=c.code, name=c.name, category=c.category,
@@ -360,7 +371,9 @@ async def list_classes(
     db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
     tid = ctx.tenant_id
-    q = select(Class, Course).join(Course, Course.id == Class.course_id).where(Class.tenant_id == tid)
+    q = select(Class, Course).join(Course, Course.id == Class.course_id).where(
+        Class.tenant_id == tid, Course.tenant_id == tid
+    )
     if status_filter:
         q = q.where(Class.status == status_filter.upper())
     if course_id:
@@ -386,7 +399,12 @@ async def list_classes(
             select(Enrollment.class_id, Student.company)
             .select_from(Enrollment)
             .join(Student, Student.id == Enrollment.student_id)
-            .where(Enrollment.tenant_id == tid, Enrollment.class_id.in_(class_ids), Student.company.isnot(None))
+            .where(
+                Enrollment.tenant_id == tid,
+                Student.tenant_id == tid,
+                Enrollment.class_id.in_(class_ids),
+                Student.company.isnot(None),
+            )
             .distinct(Enrollment.class_id)
         )
         for row in (await db.execute(company_subq)).all():
@@ -417,7 +435,7 @@ async def get_class(
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
-    course = await db.scalar(select(Course).where(Course.id == row.course_id))
+    course = await db.scalar(select(Course).where(Course.tenant_id == tid, Course.id == row.course_id))
     enrollments_count = int(await db.scalar(
         select(func.count()).select_from(Enrollment).where(
             Enrollment.tenant_id == tid, Enrollment.class_id == row.id
@@ -434,7 +452,12 @@ async def get_class(
         select(Student.company)
         .select_from(Enrollment)
         .join(Student, Student.id == Enrollment.student_id)
-        .where(Enrollment.tenant_id == tid, Enrollment.class_id == row.id, Student.company.isnot(None))
+        .where(
+            Enrollment.tenant_id == tid,
+            Student.tenant_id == tid,
+            Enrollment.class_id == row.id,
+            Student.company.isnot(None),
+        )
         .limit(1)
     )
     if company_row:
@@ -460,7 +483,9 @@ async def list_students(
     db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
     tid = ctx.tenant_id
-    q = select(Student, User).join(User, User.id == Student.user_id).where(Student.tenant_id == tid)
+    q = select(Student, User).join(User, User.id == Student.user_id).where(
+        Student.tenant_id == tid, User.tenant_id == tid
+    )
     if search:
         q = q.where(User.full_name.ilike(f"%{search}%"))
     if company:
@@ -503,7 +528,7 @@ async def get_student(
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
-    user = await db.scalar(select(User).where(User.id == row.user_id))
+    user = await db.scalar(select(User).where(User.tenant_id == tid, User.id == row.user_id))
     enrollments_count = int(await db.scalar(
         select(func.count()).select_from(Enrollment).where(
             Enrollment.tenant_id == tid, Enrollment.student_id == row.id
@@ -519,7 +544,12 @@ async def get_student(
         select(func.count())
         .select_from(Certificate)
         .join(Enrollment, Enrollment.id == Certificate.enrollment_id)
-        .where(Certificate.tenant_id == tid, Enrollment.student_id == row.id, Certificate.status == "ACTIVE")
+        .where(
+            Certificate.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Enrollment.student_id == row.id,
+            Certificate.status == "ACTIVE",
+        )
     ) or 0)
     return B2BStudentDetail(
         id=row.id, full_name=user.full_name if user else "",
@@ -549,7 +579,13 @@ async def list_enrollments(
         .join(User, User.id == Student.user_id)
         .join(Class, Class.id == Enrollment.class_id)
         .join(Course, Course.id == Class.course_id)
-        .where(Enrollment.tenant_id == tid)
+        .where(
+            Enrollment.tenant_id == tid,
+            Student.tenant_id == tid,
+            User.tenant_id == tid,
+            Class.tenant_id == tid,
+            Course.tenant_id == tid,
+        )
     )
     if status_filter:
         q = q.where(Enrollment.status == status_filter.upper())
@@ -654,10 +690,15 @@ async def get_enrollment(
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found")
-    student = await db.scalar(select(Student).where(Student.id == row.student_id))
-    user = await db.scalar(select(User).where(User.id == student.user_id)) if student else None
-    cls = await db.scalar(select(Class).where(Class.id == row.class_id))
-    course = await db.scalar(select(Course).where(Course.id == cls.course_id)) if cls else None
+    student = await db.scalar(select(Student).where(Student.tenant_id == tid, Student.id == row.student_id))
+    user = await db.scalar(select(User).where(User.tenant_id == tid, User.id == student.user_id)) if student else None
+    cls = await db.scalar(select(Class).where(Class.tenant_id == tid, Class.id == row.class_id))
+    # If the class is not in this tenant (cross-tenant FK), fail closed.
+    if cls is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment class not found")
+    course = await db.scalar(select(Course).where(Course.tenant_id == tid, Course.id == cls.course_id))
+    if course is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment course not found")
     lessons_total = int(await db.scalar(
         select(func.count()).select_from(Lesson).where(
             Lesson.tenant_id == tid, Lesson.course_id == course.id
@@ -703,7 +744,14 @@ async def list_certificates(
         .join(User, User.id == Student.user_id)
         .join(Class, Class.id == Enrollment.class_id)
         .join(Course, Course.id == Class.course_id)
-        .where(Certificate.tenant_id == tid)
+        .where(
+            Certificate.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Student.tenant_id == tid,
+            User.tenant_id == tid,
+            Class.tenant_id == tid,
+            Course.tenant_id == tid,
+        )
     )
     if status_filter:
         q = q.where(Certificate.status == status_filter.upper())
@@ -739,15 +787,21 @@ async def course_progress(
         select(func.count())
         .select_from(Enrollment)
         .join(Class, Class.id == Enrollment.class_id)
-        .where(Class.tenant_id == tid, Class.course_id == course_id)
+        .where(
+            Class.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Class.course_id == course_id,
+        )
     ) or 0)
     completed = int(await db.scalar(
         select(func.count())
         .select_from(Enrollment)
         .join(Class, Class.id == Enrollment.class_id)
         .where(
-            Class.tenant_id == tid, Class.course_id == course_id,
-            Enrollment.status == EnrollmentStatus.CONCLUIDA.value
+            Class.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Class.course_id == course_id,
+            Enrollment.status == EnrollmentStatus.CONCLUIDA.value,
         )
     ) or 0)
     in_progress = total_enrollments - completed
@@ -757,7 +811,11 @@ async def course_progress(
     enr_rows = (await db.execute(
         select(Enrollment.student_id)
         .join(Class, Class.id == Enrollment.class_id)
-        .where(Class.tenant_id == tid, Class.course_id == course_id)
+        .where(
+            Class.tenant_id == tid,
+            Enrollment.tenant_id == tid,
+            Class.course_id == course_id,
+        )
     )).all()
 
     if not enr_rows:

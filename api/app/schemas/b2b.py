@@ -26,11 +26,15 @@ class B2BContextResponse(BaseModel):
 
     Returned by ``GET /api/v1/b2b/context`` so Central WR can verify
     that the LMS tenant binding matches the credential's actual tenant.
+
+    ``api_version`` is an additive field (always "1") that allows
+    Central WR to validate major version compatibility.
     """
     tenant_id: UUID
     tenant_slug: str | None
     client_id: str
     scopes: list[str]
+    api_version: str = "1"
 
 
 class B2BPageResponse(BaseModel):
