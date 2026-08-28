@@ -7,12 +7,16 @@ database session used by B2B routes has the correct RLS tenant
 context.
 
 Key design decisions:
-- ``b2b_clients`` table lookup uses a PRIVILEGED session (bypass RLS)
-  because the tenant is not known until the client is authenticated.
-  See ``docs/CENTRAL_WR_B2B_API.md`` for the rationale.
+- ``b2b_clients`` table lookup does NOT use ``bypass_rls``. The table
+  has no RLS policies (it is a global lookup table), so a plain
+  session with ``app.current_tenant`` set to the WR tenant is
+  sufficient. No privileged escalation is needed.
 - After authentication, a NEW session is created with
   ``set_config('app.current_tenant', :tid, true)`` using a
-  parameterized query (no string interpolation).
+  parameterized query (no string interpolation). This session has
+  ``app.bypass_rls`` explicitly set to ``'0'`` (defense in depth).
+- Subscription enforcement is applied AFTER B2B authentication,
+  using the authenticated ``tenant_id`` — never the host-derived one.
 - Missing headers return 401 (not 422) to avoid leaking whether
   the client_id exists.
 - The error message is identical for all auth failures.
@@ -32,11 +36,17 @@ from app.core.context import current_tenant_id
 from app.core.database import AsyncSessionLocal
 from app.core.security import verify_password
 from app.models.b2b_client import B2BClient
+from app.models.tenant_subscription import TenantSubscription
 
 _AUTH_ERROR = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="Invalid B2B client credentials",
     headers={"WWW-Authenticate": "B2B"},
+)
+
+_SUBSCRIPTION_BLOCKED = HTTPException(
+    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    detail="LMS tenant temporarily unavailable for B2B access.",
 )
 
 
@@ -53,14 +63,40 @@ class B2BContext:
     scopes: set[str]
 
 
+async def _check_subscription(tenant_id: UUID) -> None:
+    """Enforce subscription status AFTER B2B authentication.
+
+    Uses the authenticated ``tenant_id`` (from the B2B client record),
+    never the host-derived tenant. A SUSPENDED or CANCELLED tenant
+    blocks B2B access with 503.
+    """
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = tenant_id
+        await db.execute(
+            text("SELECT set_config('app.current_tenant', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
+        result = await db.execute(
+            select(TenantSubscription)
+            .where(TenantSubscription.tenant_id == tenant_id)
+            .order_by(TenantSubscription.updated_at.desc())
+            .limit(1)
+        )
+        sub = result.scalar_one_or_none()
+        if sub and sub.status in ("SUSPENDED", "CANCELLED"):
+            raise _SUBSCRIPTION_BLOCKED
+
+
 async def get_b2b_context(
     x_b2b_client_id: str | None = Header(None, alias="X-B2B-Client-Id"),
     x_b2b_client_secret: str | None = Header(None, alias="X-B2B-Client-Secret"),
 ) -> B2BContext:
     """Authenticate B2B client and return context with tenant_id + scopes.
 
-    Uses a privileged session (bypass RLS) to look up the client record,
-    because the tenant is unknown until authentication succeeds.
+    The ``b2b_clients`` table has no RLS policies (it is a global
+    lookup table), so no ``bypass_rls`` privilege is needed. We set
+    ``app.current_tenant`` to the WR tenant for the lookup session
+    (harmless — the table is not RLS-filtered).
 
     Raises 401 for:
     - Missing client_id header
@@ -75,17 +111,15 @@ async def get_b2b_context(
     if not x_b2b_client_id or not x_b2b_client_secret:
         raise _AUTH_ERROR
 
-    # Privileged session — bypass RLS for client lookup.
-    # The b2b_clients table is NOT RLS-protected because we need to
-    # look up the client by client_id before knowing the tenant.
-    # See docs/CENTRAL_WR_B2B_API.md § "b2b_clients RLS exemption".
+    # Lookup session — b2b_clients has no RLS, so no bypass_rls needed.
+    # We set current_tenant to WR_TENANT_ID for consistency but it has
+    # no effect on the b2b_clients table (no policies exist on it).
     async with AsyncSessionLocal() as session:
         session.info["tenant_id"] = WR_TENANT_ID
         await session.execute(
             text("SELECT set_config('app.current_tenant', :tid, true)"),
             {"tid": str(WR_TENANT_ID)},
         )
-        await session.execute(text("SET LOCAL app.bypass_rls = '1'"))
 
         client = await session.scalar(
             select(B2BClient).where(
@@ -99,7 +133,12 @@ async def get_b2b_context(
             raise _AUTH_ERROR
 
         scopes = {s.strip() for s in client.allowed_scopes.split(",") if s.strip()}
-        return B2BContext(client=client, tenant_id=client.tenant_id, scopes=scopes)
+        ctx = B2BContext(client=client, tenant_id=client.tenant_id, scopes=scopes)
+
+    # Enforce subscription AFTER authentication, using the authenticated
+    # tenant_id — never the host-derived tenant.
+    await _check_subscription(ctx.tenant_id)
+    return ctx
 
 
 async def get_b2b_db(ctx: B2BContext = Depends(get_b2b_context)) -> AsyncSession:
@@ -107,6 +146,7 @@ async def get_b2b_db(ctx: B2BContext = Depends(get_b2b_context)) -> AsyncSession
 
     This is the ONLY db dependency B2B routes should use. It guarantees:
     - ``app.current_tenant`` is set to the client's tenant_id
+    - ``app.bypass_rls`` is explicitly set to ``'0'`` (defense in depth)
     - RLS policies filter all queries to that tenant
     - The ContextVar is kept consistent and **restored** after the
       request (via ``ContextVar.reset(token)``) to prevent leakage
@@ -121,6 +161,8 @@ async def get_b2b_db(ctx: B2BContext = Depends(get_b2b_context)) -> AsyncSession
                 text("SELECT set_config('app.current_tenant', :tid, true)"),
                 {"tid": str(ctx.tenant_id)},
             )
+            # Explicitly ensure bypass_rls is OFF — defense in depth.
+            await session.execute(text("SET LOCAL app.bypass_rls = '0'"))
             yield session
     finally:
         current_tenant_id.reset(token)

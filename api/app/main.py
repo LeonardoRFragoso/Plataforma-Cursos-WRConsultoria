@@ -155,12 +155,36 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+_B2B_PREFIX = "/api/v1/b2b"
+
+
 @app.middleware("http")
 async def tenant_middleware(request: Request, call_next):
     if request.url.path in (
         "/health", "/health/live", "/health/ready", "/", "/docs", "/redoc", "/openapi.json",
     ):
         return await call_next(request)
+
+    # B2B routes bypass the common TenantResolver entirely. The B2B
+    # client's tenant_id (authenticated via X-B2B-Client-Id +
+    # X-B2B-Client-Secret) is the SOLE authority for tenant context.
+    # Host / X-Tenant-Slug / Origin must NOT influence the B2B tenant.
+    # Subscription enforcement is applied AFTER B2B authentication
+    # inside get_b2b_db (see app.core.b2b_security), using the
+    # authenticated tenant_id — never the host-derived one.
+    if request.url.path.startswith(_B2B_PREFIX):
+        # Set a neutral ContextVar; the B2B dependency will override it
+        # with the authenticated tenant_id. We do NOT resolve a tenant
+        # from the host here.
+        token = current_tenant_id.set(None)
+        request.state.tenant_id = None
+        request.scope["resolved_tenant_id"] = None
+        request.scope["b2b_route"] = True
+        try:
+            return await call_next(request)
+        finally:
+            current_tenant_id.reset(token)
+
     resolver = TenantResolver()
     token = current_tenant_id.set(None)
     async with AsyncSessionLocal() as db:
