@@ -21,6 +21,18 @@ class B2BPageMeta(BaseModel):
     total: int
 
 
+class B2BContextResponse(BaseModel):
+    """Authenticated B2B client context (no secret).
+
+    Returned by ``GET /api/v1/b2b/context`` so Central WR can verify
+    that the LMS tenant binding matches the credential's actual tenant.
+    """
+    tenant_id: UUID
+    tenant_slug: str | None
+    client_id: str
+    scopes: list[str]
+
+
 class B2BPageResponse(BaseModel):
     """Generic paginated response for B2B list endpoints."""
     meta: B2BPageMeta

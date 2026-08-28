@@ -1,11 +1,18 @@
 """B2B read-only academic API for Central WR integration.
 
 All endpoints require B2B client credentials (X-B2B-Client-Id +
-X-B2B-Client-Secret) and the ``academic:read`` scope. Data is
-tenant-scoped to the B2B client's registered tenant.
+X-B2B-Client-Secret) and appropriate scopes. Data is tenant-scoped
+to the B2B client's registered tenant via RLS.
 
-These endpoints are aggregated and read-only — Central WR never
-writes academic data through this API.
+Key design:
+- ``get_b2b_db`` provides a session with ``app.current_tenant`` set
+  to the client's tenant_id (parameterized, no string interpolation).
+- ``academic:read`` is a superset scope granting access to all
+  academic endpoints. Specific scopes (``courses:read``, etc.) grant
+  access only to their respective endpoints.
+- All responses are LGPD-safe: no CPF, password_hash, tokens, or
+  client_secret_hash are ever returned.
+- N+1 queries in list endpoints are eliminated via subquery aggregation.
 """
 
 from __future__ import annotations
@@ -13,23 +20,24 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import Numeric, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.b2b_security import B2BClient, require_b2b_scope
-from app.core.database import get_db
+from app.core.b2b_security import B2BContext, get_b2b_db, require_b2b_scope
 from app.models.certificate import Certificate
 from app.models.class_model import Class, ClassStatus
 from app.models.course import Course
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.lesson import Lesson, LessonProgress
 from app.models.student import Student
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.b2b import (
     B2BAcademicSummary,
     B2BCertificate,
     B2BClass,
     B2BClassDetail,
+    B2BContextResponse,
     B2BCourse,
     B2BCourseDetail,
     B2BCourseProgress,
@@ -44,19 +52,37 @@ from app.schemas.b2b import (
 router = APIRouter()
 
 
-def _b2b_tenant(client: B2BClient) -> UUID:
-    return client.tenant_id
+# ---- Context (for binding verification) ----
+
+@router.get("/context", response_model=B2BContextResponse)
+async def b2b_context(
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read")),
+    db: AsyncSession = Depends(get_b2b_db),
+) -> B2BContextResponse:
+    """Return the authenticated B2B client's context (no secret).
+
+    Used by Central WR to verify that the LMS tenant binding matches
+    the credential's actual tenant. This prevents a misconfigured
+    binding from serving data from the wrong LMS tenant.
+    """
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == ctx.tenant_id))
+    return B2BContextResponse(
+        tenant_id=ctx.tenant_id,
+        tenant_slug=tenant.slug if tenant else None,
+        client_id=ctx.client.client_id,
+        scopes=sorted(ctx.scopes),
+    )
 
 
 # ---- Summary ----
 
 @router.get("/summary", response_model=B2BAcademicSummary)
 async def academic_summary(
-    client: B2BClient = Depends(require_b2b_scope("academic:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BAcademicSummary:
     """Aggregated academic KPIs for the Central WR dashboard."""
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
 
     active_courses = int(await db.scalar(
         select(func.count()).select_from(Course).where(
@@ -104,16 +130,11 @@ async def academic_summary(
         )
     ) or 0)
 
-    # Average progress across all active enrollments
-    total_lessons = int(await db.scalar(
-        select(func.count()).select_from(Lesson).where(Lesson.tenant_id == tid)
-    ) or 0)
-    completed_lessons = int(await db.scalar(
-        select(func.count()).select_from(LessonProgress).where(
-            LessonProgress.tenant_id == tid, LessonProgress.completed.is_(True)
-        )
-    ) or 0)
-    avg_progress = round((completed_lessons / total_lessons * 100), 1) if total_lessons > 0 else 0.0
+    # Average progress: mean of per-enrollment progress percentages.
+    # For each active enrollment, progress = completed_lessons / total_lessons * 100.
+    # We compute this in a single query using subqueries, then average.
+    # This guarantees 0 <= avg_progress <= 100.
+    avg_progress = await _compute_avg_progress(db, tid)
 
     return B2BAcademicSummary(
         active_courses=active_courses,
@@ -127,6 +148,121 @@ async def academic_summary(
     )
 
 
+async def _compute_enrollment_progress(
+    db: AsyncSession, tid: UUID, student_id: UUID, course_id: UUID
+) -> float:
+    """Compute progress percentage for a single enrollment.
+
+    Returns 0.0 if the course has no lessons. Result is always 0 <= p <= 100.
+    """
+    total = int(await db.scalar(
+        select(func.count()).select_from(Lesson).where(
+            Lesson.tenant_id == tid, Lesson.course_id == course_id
+        )
+    ) or 0)
+    if total == 0:
+        return 0.0
+    completed = int(await db.scalar(
+        select(func.count())
+        .select_from(LessonProgress)
+        .join(Lesson, Lesson.id == LessonProgress.lesson_id)
+        .where(
+            LessonProgress.tenant_id == tid, LessonProgress.student_id == student_id,
+            Lesson.course_id == course_id, LessonProgress.completed.is_(True)
+        )
+    ) or 0)
+    return round(min(completed / total * 100, 100.0), 1)
+
+
+async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
+    """Compute average progress across all active enrollments.
+
+    For each enrollment (PENDENTE or CONFIRMADA), computes individual
+    progress = completed_lessons / total_lessons * 100, then averages.
+    Returns 0.0 if there are no active enrollments.
+    Always returns a value in [0, 100].
+    """
+    # Get all active enrollments with their student_id and course_id
+    rows = (await db.execute(
+        select(Enrollment.student_id, Class.course_id)
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(
+            Enrollment.tenant_id == tid,
+            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+        )
+    )).all()
+
+    if not rows:
+        return 0.0
+
+    # Compute per-enrollment progress using a single aggregated query
+    # to avoid N+1. We join enrollments → classes → courses → lessons
+    # and lessons → lesson_progress, then compute progress per enrollment.
+    progress_subq = (
+        select(
+            Enrollment.id.label("enrollment_id"),
+            Enrollment.student_id,
+            Class.course_id,
+        )
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(
+            Enrollment.tenant_id == tid,
+            Enrollment.status.in_([EnrollmentStatus.PENDENTE.value, EnrollmentStatus.CONFIRMADA.value]),
+        )
+        .subquery()
+    )
+
+    lessons_total_subq = (
+        select(
+            Lesson.course_id,
+            func.count(Lesson.id).label("total_lessons"),
+        )
+        .where(Lesson.tenant_id == tid)
+        .group_by(Lesson.course_id)
+        .subquery()
+    )
+
+    lessons_completed_subq = (
+        select(
+            LessonProgress.student_id,
+            Lesson.course_id,
+            func.count(LessonProgress.id).label("completed_lessons"),
+        )
+        .join(Lesson, Lesson.id == LessonProgress.lesson_id)
+        .where(LessonProgress.tenant_id == tid, LessonProgress.completed.is_(True))
+        .group_by(LessonProgress.student_id, Lesson.course_id)
+        .subquery()
+    )
+
+    # Per-enrollment progress = COALESCE(completed, 0) / total * 100
+    per_enrollment = (
+        select(
+            progress_subq.c.enrollment_id,
+            func.round(
+                (func.coalesce(lessons_completed_subq.c.completed_lessons, 0)
+                * 100.0
+                / func.nullif(lessons_total_subq.c.total_lessons, 0)).cast(Numeric),
+                1,
+            ).label("progress"),
+        )
+        .select_from(progress_subq)
+        .outerjoin(lessons_total_subq, lessons_total_subq.c.course_id == progress_subq.c.course_id)
+        .outerjoin(
+            lessons_completed_subq,
+            (lessons_completed_subq.c.student_id == progress_subq.c.student_id)
+            & (lessons_completed_subq.c.course_id == progress_subq.c.course_id),
+        )
+    ).subquery()
+
+    # Average of per-enrollment progress, treating NULL (no lessons) as 0
+    avg = await db.scalar(
+        select(func.avg(func.coalesce(per_enrollment.c.progress, 0.0)))
+    )
+    if avg is None:
+        return 0.0
+    return round(min(float(avg), 100.0), 1)
+
+
 # ---- Courses ----
 
 @router.get("/courses", response_model=B2BPageResponse)
@@ -135,10 +271,10 @@ async def list_courses(
     limit: int = Query(50, ge=1, le=200),
     search: str | None = Query(None),
     is_active: bool | None = Query(None),
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "courses:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "courses:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     q = select(Course).where(Course.tenant_id == tid)
     if search:
         q = q.where(Course.name.ilike(f"%{search}%"))
@@ -147,24 +283,36 @@ async def list_courses(
     total = int(await db.scalar(select(func.count()).select_from(q.subquery())) or 0)
     rows = (await db.execute(q.order_by(Course.created_at.desc()).offset(skip).limit(limit))).scalars().all()
 
-    data = []
-    for c in rows:
-        classes_count = int(await db.scalar(
-            select(func.count()).select_from(Class).where(
-                Class.tenant_id == tid, Class.course_id == c.id
-            )
-        ) or 0)
-        students_count = int(await db.scalar(
-            select(func.count(func.distinct(Enrollment.student_id)))
+    # N+1 elimination: batch counts for all courses in a single query
+    course_ids = [c.id for c in rows]
+    classes_counts = {}
+    students_counts = {}
+    if course_ids:
+        classes_subq = (
+            select(Class.course_id, func.count(Class.id).label("cnt"))
+            .where(Class.tenant_id == tid, Class.course_id.in_(course_ids))
+            .group_by(Class.course_id)
+        )
+        for row in (await db.execute(classes_subq)).all():
+            classes_counts[row.course_id] = int(row.cnt)
+
+        students_subq = (
+            select(Class.course_id, func.count(func.distinct(Enrollment.student_id)).label("cnt"))
             .select_from(Enrollment)
             .join(Class, Class.id == Enrollment.class_id)
-            .where(Class.tenant_id == tid, Class.course_id == c.id)
-        ) or 0)
+            .where(Class.tenant_id == tid, Class.course_id.in_(course_ids))
+            .group_by(Class.course_id)
+        )
+        for row in (await db.execute(students_subq)).all():
+            students_counts[row.course_id] = int(row.cnt)
+
+    data = []
+    for c in rows:
         data.append(B2BCourse(
             id=c.id, code=c.code, name=c.name, category=c.category,
             carga_horaria=c.carga_horaria, modality=c.modality.value,
-            is_active=c.is_active, classes_count=classes_count,
-            students_count=students_count, created_at=c.created_at,
+            is_active=c.is_active, classes_count=classes_counts.get(c.id, 0),
+            students_count=students_counts.get(c.id, 0), created_at=c.created_at,
         ))
     return B2BPageResponse(meta=B2BPageMeta(skip=skip, limit=limit, total=total), data=data)
 
@@ -172,10 +320,10 @@ async def list_courses(
 @router.get("/courses/{course_id}", response_model=B2BCourseDetail)
 async def get_course(
     course_id: UUID,
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "courses:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "courses:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BCourseDetail:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     c = await db.scalar(select(Course).where(Course.tenant_id == tid, Course.id == course_id))
     if c is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
@@ -208,10 +356,10 @@ async def list_classes(
     limit: int = Query(50, ge=1, le=200),
     status_filter: str | None = Query(None),
     course_id: UUID | None = Query(None),
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "classes:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "classes:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     q = select(Class, Course).join(Course, Course.id == Class.course_id).where(Class.tenant_id == tid)
     if status_filter:
         q = q.where(Class.status == status_filter.upper())
@@ -220,29 +368,39 @@ async def list_classes(
     total = int(await db.scalar(select(func.count()).select_from(q.subquery())) or 0)
     rows = (await db.execute(q.order_by(Class.start_date.desc()).offset(skip).limit(limit))).all()
 
-    data = []
-    for cls, course in rows:
-        enrollments_count = int(await db.scalar(
-            select(func.count()).select_from(Enrollment).where(
-                Enrollment.tenant_id == tid, Enrollment.class_id == cls.id
-            )
-        ) or 0)
-        # Company name from first enrollment's student
-        company_name = None
-        company_row = await db.scalar(
-            select(Student.company)
+    # N+1 elimination: batch enrollment counts and company names
+    class_ids = [cls.id for cls, _ in rows]
+    enrollments_counts = {}
+    company_names = {}
+    if class_ids:
+        enr_subq = (
+            select(Enrollment.class_id, func.count(Enrollment.id).label("cnt"))
+            .where(Enrollment.tenant_id == tid, Enrollment.class_id.in_(class_ids))
+            .group_by(Enrollment.class_id)
+        )
+        for row in (await db.execute(enr_subq)).all():
+            enrollments_counts[row.class_id] = int(row.cnt)
+
+        # Company name: first non-null company per class
+        company_subq = (
+            select(Enrollment.class_id, Student.company)
             .select_from(Enrollment)
             .join(Student, Student.id == Enrollment.student_id)
-            .where(Enrollment.tenant_id == tid, Enrollment.class_id == cls.id, Student.company.isnot(None))
-            .limit(1)
+            .where(Enrollment.tenant_id == tid, Enrollment.class_id.in_(class_ids), Student.company.isnot(None))
+            .distinct(Enrollment.class_id)
         )
-        if company_row:
-            company_name = company_row
+        for row in (await db.execute(company_subq)).all():
+            if row.class_id not in company_names:
+                company_names[row.class_id] = row.company
+
+    data = []
+    for cls, course in rows:
         data.append(B2BClass(
             id=cls.id, course_id=cls.course_id, course_name=course.name,
             status=cls.status.value, start_date=cls.start_date, end_date=cls.end_date,
             max_students=cls.max_students, location=cls.location,
-            enrollments_count=enrollments_count, company_name=company_name,
+            enrollments_count=enrollments_counts.get(cls.id, 0),
+            company_name=company_names.get(cls.id),
         ))
     return B2BPageResponse(meta=B2BPageMeta(skip=skip, limit=limit, total=total), data=data)
 
@@ -250,10 +408,10 @@ async def list_classes(
 @router.get("/classes/{class_id}", response_model=B2BClassDetail)
 async def get_class(
     class_id: UUID,
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "classes:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "classes:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BClassDetail:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     row = await db.scalar(
         select(Class).where(Class.tenant_id == tid, Class.id == class_id)
     )
@@ -298,10 +456,10 @@ async def list_students(
     limit: int = Query(50, ge=1, le=200),
     search: str | None = Query(None),
     company: str | None = Query(None),
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "students:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "students:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     q = select(Student, User).join(User, User.id == Student.user_id).where(Student.tenant_id == tid)
     if search:
         q = q.where(User.full_name.ilike(f"%{search}%"))
@@ -310,18 +468,25 @@ async def list_students(
     total = int(await db.scalar(select(func.count()).select_from(q.subquery())) or 0)
     rows = (await db.execute(q.order_by(Student.created_at.desc()).offset(skip).limit(limit))).all()
 
+    # N+1 elimination: batch enrollment counts
+    student_ids = [s.id for s, _ in rows]
+    enrollments_counts = {}
+    if student_ids:
+        enr_subq = (
+            select(Enrollment.student_id, func.count(Enrollment.id).label("cnt"))
+            .where(Enrollment.tenant_id == tid, Enrollment.student_id.in_(student_ids))
+            .group_by(Enrollment.student_id)
+        )
+        for row in (await db.execute(enr_subq)).all():
+            enrollments_counts[row.student_id] = int(row.cnt)
+
     data = []
     for student, user in rows:
-        enrollments_count = int(await db.scalar(
-            select(func.count()).select_from(Enrollment).where(
-                Enrollment.tenant_id == tid, Enrollment.student_id == student.id
-            )
-        ) or 0)
-        status = "active" if user.is_active else "inactive"
+        status_val = "active" if user.is_active else "inactive"
         data.append(B2BStudent(
             id=student.id, full_name=user.full_name or "",
-            email=user.email, status=status,
-            company=student.company, enrollments_count=enrollments_count,
+            email=user.email, status=status_val,
+            company=student.company, enrollments_count=enrollments_counts.get(student.id, 0),
         ))
     return B2BPageResponse(meta=B2BPageMeta(skip=skip, limit=limit, total=total), data=data)
 
@@ -329,10 +494,10 @@ async def list_students(
 @router.get("/students/{student_id}", response_model=B2BStudentDetail)
 async def get_student(
     student_id: UUID,
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "students:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "students:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BStudentDetail:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     row = await db.scalar(
         select(Student).where(Student.tenant_id == tid, Student.id == student_id)
     )
@@ -374,10 +539,10 @@ async def list_enrollments(
     course_id: UUID | None = Query(None),
     class_id: UUID | None = Query(None),
     student_id: UUID | None = Query(None),
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "enrollments:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "enrollments:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     q = (
         select(Enrollment, Student, User, Class, Course)
         .join(Student, Student.id == Enrollment.student_id)
@@ -397,24 +562,14 @@ async def list_enrollments(
     total = int(await db.scalar(select(func.count()).select_from(q.subquery())) or 0)
     rows = (await db.execute(q.order_by(Enrollment.enrollment_date.desc()).offset(skip).limit(limit))).all()
 
+    # N+1 elimination: batch progress computation for all enrollments
+    enr_progress = {}
+    if rows:
+        enr_progress = await _batch_compute_progress(db, tid, rows)
+
     data = []
     for enr, student, user, cls, course in rows:
-        # Calculate progress for this enrollment
-        lessons_total = int(await db.scalar(
-            select(func.count()).select_from(Lesson).where(
-                Lesson.tenant_id == tid, Lesson.course_id == course.id
-            )
-        ) or 0)
-        lessons_completed = int(await db.scalar(
-            select(func.count())
-            .select_from(LessonProgress)
-            .join(Lesson, Lesson.id == LessonProgress.lesson_id)
-            .where(
-                LessonProgress.tenant_id == tid, LessonProgress.student_id == student.id,
-                Lesson.course_id == course.id, LessonProgress.completed.is_(True)
-            )
-        ) or 0)
-        progress = round((lessons_completed / lessons_total * 100), 1) if lessons_total > 0 else 0.0
+        progress = enr_progress.get(enr.id, 0.0)
         data.append(B2BEnrollment(
             id=enr.id, student_id=student.id, student_name=user.full_name or "",
             course_name=course.name, class_id=cls.id,
@@ -424,13 +579,76 @@ async def list_enrollments(
     return B2BPageResponse(meta=B2BPageMeta(skip=skip, limit=limit, total=total), data=data)
 
 
+async def _batch_compute_progress(
+    db: AsyncSession, tid: UUID, rows: list
+) -> dict[UUID, float]:
+    """Batch-compute progress for multiple enrollments.
+
+    Returns a dict mapping enrollment_id → progress_percent (0-100).
+    Uses a single aggregated query instead of N individual queries.
+    """
+    # Collect (enrollment_id, student_id, course_id) tuples
+    entries = [(enr.id, student.id, course.id) for enr, student, _, _, course in rows]
+    if not entries:
+        return {}
+
+    student_ids = list({s for _, s, _ in entries})
+    course_ids = list({c for _, _, c in entries})
+
+    # Total lessons per course
+    total_subq = (
+        select(Lesson.course_id, func.count(Lesson.id).label("total"))
+        .where(Lesson.tenant_id == tid, Lesson.course_id.in_(course_ids))
+        .group_by(Lesson.course_id)
+    ).subquery()
+
+    # Completed lessons per (student, course)
+    completed_subq = (
+        select(LessonProgress.student_id, Lesson.course_id, func.count(LessonProgress.id).label("completed"))
+        .join(Lesson, Lesson.id == LessonProgress.lesson_id)
+        .where(
+            LessonProgress.tenant_id == tid,
+            LessonProgress.completed.is_(True),
+            LessonProgress.student_id.in_(student_ids),
+            Lesson.course_id.in_(course_ids),
+        )
+        .group_by(LessonProgress.student_id, Lesson.course_id)
+    ).subquery()
+
+    # Build a lookup: (student_id, course_id) → progress
+    progress_lookup: dict[tuple[UUID, UUID], float] = {}
+
+    # Get totals
+    totals: dict[UUID, int] = {}
+    for row in (await db.execute(select(total_subq.c.course_id, total_subq.c.total))).all():
+        totals[row.course_id] = int(row.total)
+
+    # Get completed
+    completed: dict[tuple[UUID, UUID], int] = {}
+    for row in (await db.execute(
+        select(completed_subq.c.student_id, completed_subq.c.course_id, completed_subq.c.completed)
+    )).all():
+        completed[(row.student_id, row.course_id)] = int(row.completed)
+
+    for enr_id, student_id, course_id in entries:
+        total = totals.get(course_id, 0)
+        if total == 0:
+            progress_lookup.setdefault((student_id, course_id), 0.0)
+            continue
+        comp = completed.get((student_id, course_id), 0)
+        pct = round(min(comp / total * 100, 100.0), 1)
+        progress_lookup[(student_id, course_id)] = pct
+
+    return {enr_id: progress_lookup.get((sid, cid), 0.0) for enr_id, sid, cid in entries}
+
+
 @router.get("/enrollments/{enrollment_id}", response_model=B2BEnrollmentDetail)
 async def get_enrollment(
     enrollment_id: UUID,
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "enrollments:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "enrollments:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BEnrollmentDetail:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     row = await db.scalar(
         select(Enrollment).where(Enrollment.tenant_id == tid, Enrollment.id == enrollment_id)
     )
@@ -454,7 +672,7 @@ async def get_enrollment(
             Lesson.course_id == course.id, LessonProgress.completed.is_(True)
         )
     ) or 0) if course and student else 0
-    progress = round((lessons_completed / lessons_total * 100), 1) if lessons_total > 0 else 0.0
+    progress = round(min(lessons_completed / lessons_total * 100, 100.0), 1) if lessons_total > 0 else 0.0
     return B2BEnrollmentDetail(
         id=row.id, student_id=student.id if student else None,
         student_name=user.full_name if user else "",
@@ -474,10 +692,10 @@ async def list_certificates(
     limit: int = Query(50, ge=1, le=200),
     status_filter: str | None = Query(None),
     student_id: UUID | None = Query(None),
-    client: B2BClient = Depends(require_b2b_scope("academic:read", "certificates:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "certificates:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BPageResponse:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     q = (
         select(Certificate, Enrollment, Student, User, Class, Course)
         .join(Enrollment, Enrollment.id == Certificate.enrollment_id)
@@ -510,10 +728,10 @@ async def list_certificates(
 @router.get("/courses/{course_id}/progress", response_model=B2BCourseProgress)
 async def course_progress(
     course_id: UUID,
-    client: B2BClient = Depends(require_b2b_scope("academic:read")),
-    db: AsyncSession = Depends(get_db),
+    ctx: B2BContext = Depends(require_b2b_scope("academic:read", "courses:read")),
+    db: AsyncSession = Depends(get_b2b_db),
 ) -> B2BCourseProgress:
-    tid = _b2b_tenant(client)
+    tid = ctx.tenant_id
     course = await db.scalar(select(Course).where(Course.tenant_id == tid, Course.id == course_id))
     if course is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
@@ -533,21 +751,47 @@ async def course_progress(
         )
     ) or 0)
     in_progress = total_enrollments - completed
-    lessons_total = int(await db.scalar(
-        select(func.count()).select_from(Lesson).where(
-            Lesson.tenant_id == tid, Lesson.course_id == course_id
-        )
-    ) or 0)
-    completed_lessons = int(await db.scalar(
-        select(func.count())
-        .select_from(LessonProgress)
-        .join(Lesson, Lesson.id == LessonProgress.lesson_id)
-        .where(
-            Lesson.tenant_id == tid, Lesson.course_id == course_id,
-            LessonProgress.completed.is_(True)
-        )
-    ) or 0)
-    avg_progress = round((completed_lessons / lessons_total * 100), 1) if lessons_total > 0 else 0.0
+
+    # Average progress: mean of per-enrollment progress for this course
+    # Get all enrollments for this course
+    enr_rows = (await db.execute(
+        select(Enrollment.student_id)
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(Class.tenant_id == tid, Class.course_id == course_id)
+    )).all()
+
+    if not enr_rows:
+        avg_progress = 0.0
+    else:
+        # Batch compute progress for all enrollments in this course
+        student_ids = [r.student_id for r in enr_rows]
+        lessons_total = int(await db.scalar(
+            select(func.count()).select_from(Lesson).where(
+                Lesson.tenant_id == tid, Lesson.course_id == course_id
+            )
+        ) or 0)
+        if lessons_total == 0:
+            avg_progress = 0.0
+        else:
+            completed_per_student = (await db.execute(
+                select(LessonProgress.student_id, func.count(LessonProgress.id).label("cnt"))
+                .join(Lesson, Lesson.id == LessonProgress.lesson_id)
+                .where(
+                    LessonProgress.tenant_id == tid,
+                    LessonProgress.completed.is_(True),
+                    LessonProgress.student_id.in_(student_ids),
+                    Lesson.course_id == course_id,
+                )
+                .group_by(LessonProgress.student_id)
+            )).all()
+            completed_map = {r.student_id: int(r.cnt) for r in completed_per_student}
+            progresses = []
+            for sid in student_ids:
+                comp = completed_map.get(sid, 0)
+                pct = min(comp / lessons_total * 100, 100.0)
+                progresses.append(pct)
+            avg_progress = round(sum(progresses) / len(progresses), 1) if progresses else 0.0
+
     return B2BCourseProgress(
         course_id=course.id, course_name=course.name,
         total_enrollments=total_enrollments, completed=completed,
