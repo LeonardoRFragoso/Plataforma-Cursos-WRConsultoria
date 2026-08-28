@@ -73,8 +73,11 @@ async def ask_tutor(
         for msg in payload.conversation_context
     ]
 
-    # Retrieve relevant chunks
-    retrieval_result = await retrieve(db, current_user["tenant_id"], question)
+    # Retrieve relevant chunks (with conversation context for follow-up expansion)
+    retrieval_result = await retrieve(
+        db, current_user["tenant_id"], question,
+        conversation_context=context,
+    )
 
     # Generate answer
     answer = generate_answer(question, retrieval_result, context)

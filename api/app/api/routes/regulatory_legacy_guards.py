@@ -9,7 +9,7 @@ They are hidden from OpenAPI to avoid duplicate documentation entries.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from app.api.routes import lessons as legacy_lessons
 from app.core.database import get_db
 from app.core.security import get_current_admin, get_current_tenant_id, get_current_user
 from app.core.utils import utc_now
+from app.schemas.certificate import CertificateResponse
 from app.models.class_model import Class
 from app.models.compliance import CourseComplianceProfile
 from app.models.course import Course
@@ -262,7 +263,7 @@ async def guarded_course_progress(
     return response
 
 
-@router.post("/certificates/")
+@router.post("/certificates/", response_model=CertificateResponse, status_code=status.HTTP_201_CREATED)
 async def guarded_certificate_create(
     cert_data: CertificateCreate,
     db: AsyncSession = Depends(get_db),

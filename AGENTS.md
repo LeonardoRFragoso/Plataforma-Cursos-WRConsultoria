@@ -100,6 +100,71 @@ service crashed on every deploy.
 None affect the production build output. Scheduled for a future dependency
 upgrade cycle.
 
+### Python (pip-audit)
+
+API dependencies with known vulnerabilities requiring major upgrades:
+- `starlette 0.27.0` → needs 1.x (breaking, tied to FastAPI upgrade)
+- `fastapi 0.104.1` → needs 0.109.1+ (breaking)
+- `cryptography 44.0.3` → needs 46.x+
+- `jinja2 3.1.2` → needs 3.1.6+
+- `python-multipart 0.0.6` → needs 0.0.26+
+- `requests 2.31.0` → needs 2.32.4+
+- `python-jose 3.3.0` → needs 3.4.0+
+- `pytest 7.4.3` → needs 9.0.3+ (dev-only)
+
+Scheduled for a separate security upgrade cycle to avoid breaking changes
+in this hardening PR.
+
+---
+
+## Tutor NR Retrieval Quality (PR #42)
+
+### Root Cause
+
+`plainto_tsquery` uses AND semantics (`&`) in PostgreSQL FTS, which caused
+poor retrieval for natural language questions. The `_build_fts_query`
+function correctly built an OR-based query but it was never used in the
+SQL query — the code called `plainto_tsquery` directly.
+
+### Fix
+
+1. **Hybrid retrieval** (`api/app/services/tutor/retrieval.py`): OR-based
+   `to_tsquery` with prefix matching (`:*`), ILIKE exact term matching,
+   heading boost, FTS rank capping, diversity selection, and scope-only
+   fallback.
+2. **Aliases/synonyms** (`api/app/services/tutor/aliases.py`): semantic
+   synonyms for query expansion (e.g., "trator" → retroescavadeira).
+3. **Scope disambiguation** (`api/app/services/tutor/scope.py`):
+   word-boundary matching to prevent false positives from substring matches.
+4. **Conversation context**: follow-up questions use prior turns for
+   query expansion (e.g., "E quem pode trabalhar nele?" after "O que é SEP?").
+
+### Validation
+
+- 83-case golden dataset across all 15 NR materials
+- 100% Top-1 accuracy, 0% wrong-variant rate
+- Evaluation script: `api/app/scripts/eval_tutor_retrieval.py`
+- Golden dataset: `analysis/tutor/golden-retrieval-cases.json`
+- Test suite: `api/tests/test_tutor_knowledge.py` (27 tests including
+  6 critical queries + follow-up context test)
+
+### Backend Test Fixes (14 failures → 0)
+
+- **Certificate 200 vs 201**: `regulatory_legacy_guards.py` registered a
+  guard route for `POST /certificates/` before the actual certificates
+  router. The guard route lacked `status_code=201` and
+  `response_model=CertificateResponse`.
+- **CNPJ validation**: `tests/conftest.py` now has `make_valid_cnpj()`
+  helper. Identity security tests were generating random CNPJs that
+  failed strict check-digit validation.
+
+### E2E Test Fixes (5 failures → 0)
+
+- **Tutor NR tests**: need `localStorage` token setup for router guard
+- **Strict mode**: use `getByTestId('tutor-source-chip').filter({ hasText })`
+  instead of generic text locators
+- **Compliance operations**: expand "Operações" nav group before clicking
+
 ---
 
 ## Certificate QR Validation & Demo Mode
