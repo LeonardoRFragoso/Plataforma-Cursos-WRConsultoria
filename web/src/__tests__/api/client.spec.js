@@ -93,6 +93,20 @@ describe('API Client', () => {
     expect(api.defaults.baseURL).toBe(expected)
   })
 
+  it('vite.config.js sets envDir to project root for .env discovery', () => {
+    // The vite.config.js must set envDir: '..' so that Vite loads .env
+    // from the project root (one level up from web/), not just from web/.
+    // Without this, VITE_API_URL defined in the repo-level .env is never
+    // loaded and the frontend falls back to the wrong backend port.
+    // This test reads the actual vite.config.js to verify the setting.
+    const fs = require('fs')
+    const path = require('path')
+    const configPath = path.resolve(__dirname, '../../../vite.config.js')
+    const configContent = fs.readFileSync(configPath, 'utf-8')
+    expect(configContent).toContain('envDir')
+    expect(configContent).toContain("'..'")
+  })
+
   // -----------------------------------------------------------------------
   // P0 white-screen: timeout + refresh-no-loop regression tests
   // -----------------------------------------------------------------------
