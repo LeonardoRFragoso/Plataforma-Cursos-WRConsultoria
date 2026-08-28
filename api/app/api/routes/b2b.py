@@ -775,8 +775,8 @@ async def course_progress(
     course = await db.scalar(select(Course).where(Course.tenant_id == tid, Course.id == course_id))
     if course is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-    total_enrollments = int(await db.scalar(
-        select(func.count())
+    enrollment_scope = (
+        select(Enrollment.status)
         .select_from(Enrollment)
         .join(Class, Class.id == Enrollment.class_id)
         .where(
@@ -784,19 +784,26 @@ async def course_progress(
             Enrollment.tenant_id == tid,
             Class.course_id == course_id,
         )
+        .subquery()
+    )
+    total_enrollments = int(await db.scalar(
+        select(func.count()).select_from(enrollment_scope)
     ) or 0)
     completed = int(await db.scalar(
-        select(func.count())
-        .select_from(Enrollment)
-        .join(Class, Class.id == Enrollment.class_id)
-        .where(
-            Class.tenant_id == tid,
-            Enrollment.tenant_id == tid,
-            Class.course_id == course_id,
-            Enrollment.status == EnrollmentStatus.CONCLUIDA.value,
+        select(func.count()).select_from(enrollment_scope).where(
+            enrollment_scope.c.status == EnrollmentStatus.CONCLUIDA.value,
         )
     ) or 0)
-    in_progress = total_enrollments - completed
+    # Explicit status taxonomy: cancelled/other terminal records are not
+    # considered in progress. Never derive this as total - completed.
+    in_progress = int(await db.scalar(
+        select(func.count()).select_from(enrollment_scope).where(
+            enrollment_scope.c.status.in_([
+                EnrollmentStatus.PENDENTE.value,
+                EnrollmentStatus.CONFIRMADA.value,
+            ])
+        )
+    ) or 0)
 
     # Average progress: mean of per-enrollment progress for this course
     # Get all enrollments for this course

@@ -116,6 +116,21 @@ async def _seed_progress_data():
             enrollment_date=datetime(2026, 1, 15), price=100.0,
         )
         session.add(enrollment)
+        # A cancelled record must not be classified as in_progress. It uses
+        # a separate class because the schema enforces one enrollment per
+        # student/class pair.
+        cancelled_class = Class(
+            tenant_id=TENANT_ID, course_id=course.id, responsible_admin_id=admin.id,
+            status=ClassStatus.ABERTA,
+            max_students=20, start_date=date(2026, 1, 1), end_date=date(2026, 12, 31),
+        )
+        session.add(cancelled_class)
+        await session.flush()
+        session.add(Enrollment(
+            tenant_id=TENANT_ID, student_id=student.id, class_id=cancelled_class.id,
+            status=EnrollmentStatus.CANCELADA, source=EnrollmentSource.INDIVIDUAL,
+            enrollment_date=datetime(2026, 1, 10), price=100.0,
+        ))
 
         # Mark 2 of 3 required lessons as completed
         for lesson in req_lessons[:2]:
@@ -201,6 +216,9 @@ async def test_b2b_course_progress_uses_required_only(client: httpx.AsyncClient,
     assert resp.status_code == 200
     data = resp.json()
     assert data["avg_progress_percent"] == 66.7
+    assert data["total_enrollments"] == 2
+    assert data["completed"] == 0
+    assert data["in_progress"] == 1
 
 
 @pytest.mark.asyncio
