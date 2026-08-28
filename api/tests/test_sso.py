@@ -719,11 +719,12 @@ def test_config_short_secret_rejected_in_production(monkeypatch):
 
 
 def test_config_strong_secret_accepted_in_production(monkeypatch):
-    """Secret >= 32 chars is accepted in production with HTTPS URLs."""
+    """Secret >= 32 chars + valid trusted tenant + HTTPS URLs accepted."""
     from app.core.config import Settings
 
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", str(uuid.uuid4()))
     monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
     monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
     s = Settings()
@@ -736,6 +737,57 @@ def test_config_http_url_rejected_in_production(monkeypatch):
 
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", str(uuid.uuid4()))
     monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "http://central.example.com")
     with pytest.raises(ValueError, match="HTTPS"):
         Settings()
+
+
+def test_config_trusted_tenant_empty_rejected_in_production(monkeypatch):
+    """Empty CENTRAL_WR_TRUSTED_TENANT_ID is rejected in production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", "")
+    monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
+    monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    with pytest.raises(ValueError, match="CENTRAL_WR_TRUSTED_TENANT_ID"):
+        Settings()
+
+
+def test_config_trusted_tenant_invalid_uuid_rejected_in_production(monkeypatch):
+    """Invalid UUID for CENTRAL_WR_TRUSTED_TENANT_ID is rejected in production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", "not-a-uuid")
+    monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
+    monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    with pytest.raises(ValueError, match="valid UUID"):
+        Settings()
+
+
+def test_config_trusted_tenant_valid_uuid_accepted_in_production(monkeypatch):
+    """Valid UUID for CENTRAL_WR_TRUSTED_TENANT_ID is accepted in production."""
+    from app.core.config import Settings
+
+    valid_uuid = str(uuid.uuid4())
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", valid_uuid)
+    monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
+    monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    s = Settings()
+    assert s.CENTRAL_WR_TRUSTED_TENANT_ID == valid_uuid
+
+
+def test_config_trusted_tenant_empty_allowed_in_development(monkeypatch):
+    """Empty CENTRAL_WR_TRUSTED_TENANT_ID is allowed in development."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", "")
+    s = Settings()
+    assert s.CENTRAL_WR_TRUSTED_TENANT_ID == ""

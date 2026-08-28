@@ -1,4 +1,6 @@
 
+import uuid as _uuid
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -161,6 +163,9 @@ class Settings(BaseSettings):
         In production:
         - CENTRAL_WR_SSO_CLIENT_SECRET must not be the default, must not
           be empty, and must be at least 32 characters.
+        - CENTRAL_WR_TRUSTED_TENANT_ID must be set, non-empty, and a valid
+          UUID. This prevents the defense-in-depth tenant check from being
+          silently disabled in production.
         - CENTRAL_WR_FRONTEND_URL and CENTRAL_WR_BACKEND_URL must use
           HTTPS (browser redirects must never go to http:// in production).
         """
@@ -184,6 +189,24 @@ class Settings(BaseSettings):
                 f"characters in production (got {len(secret)}). "
                 f"Use a randomly generated secret."
             )
+
+        # CENTRAL_WR_TRUSTED_TENANT_ID must be a valid UUID in production.
+        # An empty value would silently disable the defense-in-depth tenant
+        # check in _validate_claims(), allowing any Central WR tenant to SSO.
+        trusted = self.CENTRAL_WR_TRUSTED_TENANT_ID
+        if not trusted:
+            raise ValueError(
+                "CENTRAL_WR_TRUSTED_TENANT_ID must be set in production "
+                "(empty value not allowed). Set it to the UUID of the WR "
+                "tenant in Central WR — NOT the LMS's WR_TENANT_ID."
+            )
+        try:
+            _uuid.UUID(trusted)
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError(
+                f"CENTRAL_WR_TRUSTED_TENANT_ID must be a valid UUID in "
+                f"production (got '{trusted}')."
+            ) from exc
 
         # HTTPS validation for browser-facing URLs
         for field_name, url in [

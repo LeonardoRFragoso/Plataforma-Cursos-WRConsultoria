@@ -90,12 +90,42 @@ sequenceDiagram
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CENTRAL_WR_FRONTEND_URL` | `http://localhost:5173` | Central WR frontend URL (for the "Voltar à Central WR" link). |
-| `CENTRAL_WR_BACKEND_URL` | `http://localhost:8000` | Central WR backend URL (for the server-to-server exchange call). |
+| `CENTRAL_WR_FRONTEND_URL` | `http://localhost:5173` | Central WR frontend URL (HTTPS required in production). |
+| `CENTRAL_WR_BACKEND_URL` | `http://localhost:8000` | Central WR backend URL (HTTPS required in production). |
 | `CENTRAL_WR_SSO_CLIENT_ID` | `lms-wr-cursos` | OAuth client ID identifying the LMS to Central WR. |
-| `CENTRAL_WR_SSO_CLIENT_SECRET` | `change-me-sso-secret` | OAuth client secret. **Must be changed in production.** |
+| `CENTRAL_WR_SSO_CLIENT_SECRET` | `change-me-sso-secret` | OAuth client secret. **Must be >= 32 chars in production.** |
+| `CENTRAL_WR_TRUSTED_TENANT_ID` | (empty) | UUID of the Central WR tenant trusted for SSO. **Required in production.** |
 | `VITE_CENTRAL_WR_URL` | `http://localhost:5173` | Frontend env var for the "Voltar à Central WR" sidebar link. |
 | `CORS_ORIGINS` | — | Must include the Central WR frontend URL so the browser can call the LMS API. |
+
+### CENTRAL_WR_TRUSTED_TENANT_ID — Defense in Depth
+
+**This setting is OBRIGATÓRIO in production.** The config validator blocks
+startup if it is empty or not a valid UUID when `ENVIRONMENT=production`.
+
+It must contain the UUID of the WR tenant **in Central WR** — the tenant
+that is authorized to send ADMIN users via SSO.
+
+**CRITICAL: This is NOT the same as `WR_TENANT_ID`.**
+
+- `WR_TENANT_ID` (in `app/core/constants.py`) is the LMS's **internal**
+  tenant UUID — the tenant the LMS uses for its own multi-tenant isolation.
+- `CENTRAL_WR_TRUSTED_TENANT_ID` is the **Central WR** tenant UUID — the
+  tenant in the Central WR database that is authorized to use SSO for the
+  LMS.
+
+These are **independent identity namespaces**. The Central WR tenant UUID
+and the LMS `WR_TENANT_ID` are not related and must not be confused. They
+live in separate databases with separate tenant tables.
+
+When the LMS receives identity claims from Central WR, it validates that
+`claims["tenant_id"] == CENTRAL_WR_TRUSTED_TENANT_ID` **before** any user
+lookup, provisioning, or token issuance. This prevents an ADMIN from a
+different Central WR tenant (e.g. another company) from gaining SSO access
+to the LMS — even if they share the same email as an existing LMS user.
+
+In development/test, this setting may be left empty to allow local testing
+without a real Central WR tenant UUID.
 
 ## Role Mapping
 

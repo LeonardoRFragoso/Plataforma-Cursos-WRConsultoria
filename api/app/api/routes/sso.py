@@ -21,7 +21,10 @@ Claim validation (defense in depth, before any user provisioning):
 - ``source`` must be ``"central-wr"``.
 - ``role`` must be ``"ADMIN"``.
 - ``tenant_id`` must be present.
-- If ``CENTRAL_WR_TRUSTED_TENANT_ID`` is set, ``tenant_id`` must match it.
+- ``tenant_id`` must match ``CENTRAL_WR_TRUSTED_TENANT_ID``. In production
+  this setting is required (non-empty, valid UUID) — the config validator
+  blocks startup if it is missing, so the check can never be silently
+  disabled. In development/test it may be empty to allow local testing.
 """
 
 import logging
