@@ -9,6 +9,7 @@ from datetime import timedelta
 
 import pytest
 
+from app.core.config import settings
 from app.core.constants import WR_TENANT_ID
 from app.core.context import current_tenant_id
 from app.core.database import AsyncSessionLocal
@@ -792,7 +793,7 @@ async def test_download_endpoint_generates_pdf_with_qr():
 
             data = _decode_qr_from_pdf(response.body)
             expected = build_validation_url(
-                "http://localhost:5173", code
+                settings.FRONTEND_URL, code
             )
             assert data == expected
             assert "/validar-certificado?codigo=" in data

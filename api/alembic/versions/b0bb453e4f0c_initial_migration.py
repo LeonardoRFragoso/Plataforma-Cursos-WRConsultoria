@@ -159,4 +159,8 @@ def downgrade() -> None:
     op.drop_table('users')
     op.drop_index(op.f('ix_courses_code'), table_name='courses')
     op.drop_table('courses')
+    op.execute(sa.text(
+        "DROP TYPE IF EXISTS paymentmethod, paymentstatus, enrollmentstatus, "
+        "classstatus, userrole, coursetype, coursemodality, lessoncontenttype"
+    ))
     # ### end Alembic commands ###

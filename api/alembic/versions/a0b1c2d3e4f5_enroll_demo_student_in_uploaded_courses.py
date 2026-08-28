@@ -34,8 +34,10 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     tenant_id = _scalar(bind, "SELECT id FROM tenants WHERE slug = 'wr' LIMIT 1")
+    # Homologation data is optional. A clean production/test database must
+    # still be able to upgrade to head without requiring demo seed records.
     if tenant_id is None:
-        raise RuntimeError("WR tenant not found; cannot provision demo student journey")
+        return
 
     # RLS-aware migration context for tenant-scoped tables.
     bind.execute(
@@ -56,7 +58,7 @@ def upgrade() -> None:
         email=DEMO_EMAIL,
     )
     if user_id is None:
-        raise RuntimeError(f"Demo user {DEMO_EMAIL} not found")
+        return
 
     student_id = _scalar(
         bind,
@@ -65,7 +67,7 @@ def upgrade() -> None:
         user_id=user_id,
     )
     if student_id is None:
-        raise RuntimeError(f"Student profile for {DEMO_EMAIL} not found")
+        return
 
     admin_id = _scalar(
         bind,
@@ -81,7 +83,7 @@ def upgrade() -> None:
         tenant_id=tenant_id,
     )
     if admin_id is None:
-        raise RuntimeError("Active WR administrator not found")
+        return
 
     now = datetime.utcnow()
     start_date = date.today()
@@ -100,7 +102,8 @@ def upgrade() -> None:
             code=code,
         )
         if course_id is None:
-            raise RuntimeError(f"Required demo course {code} not found or inactive")
+            # The demo catalog is optional; do not block schema upgrades.
+            return
 
         existing_enrollment = _scalar(
             bind,
