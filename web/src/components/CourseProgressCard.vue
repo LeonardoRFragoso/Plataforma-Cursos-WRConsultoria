@@ -1,7 +1,15 @@
 <template>
   <div class="premium-card premium-card-hover group overflow-hidden" :data-testid="testId">
     <div class="flex flex-col gap-4 p-4 sm:flex-row sm:p-5">
-      <CourseCover :course="courseForCover" ratio="1/1" fit="cover" loading="lazy" wrapper-class="w-full sm:w-32 sm:h-32 shrink-0 rounded-2xl overflow-hidden shadow-sm" img-test-id="progress-card-cover-img" fb-test-id="progress-card-cover-fallback" />
+      <CourseCover
+        :course="courseForCover"
+        ratio="16/9"
+        fit="contain"
+        loading="lazy"
+        wrapper-class="w-full shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm sm:w-36"
+        img-test-id="progress-card-cover-img"
+        fb-test-id="progress-card-cover-fallback"
+      />
       <div class="flex min-w-0 flex-1 flex-col">
         <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.13em] text-[var(--brand-primary)]">{{ enrollment.course_code || 'Treinamento' }}</p><h3 class="mt-1 line-clamp-2 font-bold leading-snug text-slate-900">{{ enrollment.course_name }}</h3></div><StatusBadge v-if="courseState" :status="courseState" :test-id="testId + '-status'" /></div>
         <p v-if="formattedDates" class="mt-1.5 text-xs text-slate-400">{{ formattedDates }}</p>
