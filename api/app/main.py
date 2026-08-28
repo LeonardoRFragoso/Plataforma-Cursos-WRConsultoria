@@ -143,11 +143,17 @@ async def rate_limit_middleware(request: Request, call_next):
     ):
         return await call_next(request)
     backend = get_rate_limiter()
-    if not backend.is_allowed(
-        get_client_ip(request),
-        settings.RATE_LIMIT_REQUESTS,
-        settings.RATE_LIMIT_WINDOW_SECONDS,
-    ):
+    is_b2b = request.url.path.startswith("/api/v1/b2b/")
+    client_id = request.headers.get("X-B2B-Client-Id", "").strip()
+    if is_b2b and client_id:
+        rate_key = f"b2b-client:{client_id[:128]}"
+        max_requests = settings.B2B_RATE_LIMIT_REQUESTS
+        window_seconds = settings.B2B_RATE_LIMIT_WINDOW_SECONDS
+    else:
+        rate_key = f"ip:{get_client_ip(request)}"
+        max_requests = settings.RATE_LIMIT_REQUESTS
+        window_seconds = settings.RATE_LIMIT_WINDOW_SECONDS
+    if not backend.is_allowed(rate_key, max_requests, window_seconds):
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             content={"detail": "Rate limit exceeded"},

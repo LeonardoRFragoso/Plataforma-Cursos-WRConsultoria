@@ -38,6 +38,9 @@ async def bootstrap() -> None:
     if not client_secret:
         print("ERROR: B2B_CENTRAL_WR_CLIENT_SECRET must be set")
         return
+    if len(client_secret) < 32:
+        print("ERROR: B2B_CENTRAL_WR_CLIENT_SECRET must be at least 32 characters")
+        return
 
     async with AsyncSessionLocal() as db:
         tenant = await db.scalar(select(Tenant).where(Tenant.slug == tenant_slug))

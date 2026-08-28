@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     # Quando definida, o rate limiter usa Redis (compartilhado entre workers).
     RATE_LIMIT_REDIS_URL: str = ""
+    B2B_RATE_LIMIT_REQUESTS: int = 120
+    B2B_RATE_LIMIT_WINDOW_SECONDS: int = 60
     
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""

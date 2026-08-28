@@ -164,6 +164,38 @@ async def test_middleware_uses_factory_backend_not_global_limiter(client):
 
 
 @pytest.mark.asyncio
+async def test_middleware_keys_b2b_requests_by_client_id(client):
+    """B2B requests use a client-specific key instead of sharing IP quota."""
+    from app.core import rate_limit as rl_module
+    from app.core.config import settings as app_settings
+
+    original_enabled = app_settings.RATE_LIMIT_ENABLED
+    original_backend = rl_module._backend
+    original_b2b_requests = app_settings.B2B_RATE_LIMIT_REQUESTS
+    original_b2b_window = app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS
+    backend = MagicMock()
+    backend.is_allowed.return_value = True
+
+    try:
+        app_settings.RATE_LIMIT_ENABLED = True
+        app_settings.B2B_RATE_LIMIT_REQUESTS = 7
+        app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = 11
+        rl_module._backend = backend
+
+        await client.get(
+            "/api/v1/b2b/context",
+            headers={"X-B2B-Client-Id": "client-a"},
+        )
+
+        backend.is_allowed.assert_called_once_with("b2b-client:client-a", 7, 11)
+    finally:
+        app_settings.RATE_LIMIT_ENABLED = original_enabled
+        app_settings.B2B_RATE_LIMIT_REQUESTS = original_b2b_requests
+        app_settings.B2B_RATE_LIMIT_WINDOW_SECONDS = original_b2b_window
+        rl_module._backend = original_backend
+
+
+@pytest.mark.asyncio
 async def test_middleware_redis_backend_used_when_configured(client):
     """Com RATE_LIMIT_REDIS_URL definida, o middleware usa RedisBackend."""
     from app.core import rate_limit as rl_module
