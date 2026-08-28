@@ -1,6 +1,8 @@
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULT_SSO_SECRET = "change-me-sso-secret"
 
 
 def _normalize_database_url(url: str) -> str:
@@ -144,5 +146,24 @@ class Settings(BaseSettings):
 
     # Expose Swagger/OpenAPI docs. Set to false in production.
     DOCS_ENABLED: bool = True
+
+    @model_validator(mode="after")
+    def _validate_sso_secret_not_default_in_production(self) -> "Settings":
+        """Block startup in production if the SSO client secret is still
+        the insecure default value.
+
+        The default ``change-me-sso-secret`` is fine for local development
+        and tests, but must never reach a production deployment.
+        """
+        if (
+            self.ENVIRONMENT.lower() == "production"
+            and self.CENTRAL_WR_SSO_CLIENT_SECRET == _INSECURE_DEFAULT_SSO_SECRET
+        ):
+            raise ValueError(
+                "CENTRAL_WR_SSO_CLIENT_SECRET must be set to a strong secret in "
+                "production (the default 'change-me-sso-secret' is not allowed)."
+            )
+        return self
+
 
 settings = Settings()

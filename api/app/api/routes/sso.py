@@ -9,6 +9,13 @@ backend and issues the LMS's own JWT tokens.
 
 Only Central WR ``ADMIN`` users are accepted (mapped to LMS ``admin``).
 Other roles are rejected with 403.
+
+Role reconciliation:
+- Central ADMIN + LMS admin → stays admin.
+- Central ADMIN + LMS student → promoted to admin (trusted IdP).
+- Central ADMIN + LMS super_admin → stays super_admin (never downgraded).
+- Central ADMIN + no LMS user → auto-provisioned as admin.
+- Central non-ADMIN → 403, no role change.
 """
 
 import logging
@@ -50,9 +57,14 @@ class CentralWrExchangeError(Exception):
 
 async def _exchange_code_with_central(
     code: str,
+    state: str,
     target_application: str,
 ) -> dict:
     """Call the Central WR backend to exchange the authorization code.
+
+    The ``state`` (nonce) is sent to Central WR which validates it against
+    the ticket's nonce before consuming the code. This prevents CSRF and
+    code injection attacks.
 
     Returns the identity claims dict on success. Raises
     ``CentralWrExchangeError`` on any non-2xx response or network error.
@@ -61,6 +73,7 @@ async def _exchange_code_with_central(
         "client_id": settings.CENTRAL_WR_SSO_CLIENT_ID,
         "client_secret": settings.CENTRAL_WR_SSO_CLIENT_SECRET,
         "code": code,
+        "state": state,
         "target_application": target_application,
     }
     url = f"{settings.CENTRAL_WR_BACKEND_URL.rstrip('/')}/api/v1/sso/lms/exchange"
@@ -95,7 +108,7 @@ async def _exchange_code_with_central(
                 "central_status": response.status_code,
             },
         )
-        # Map Central WR 400 (expired/invalid code) → 400 on the LMS side.
+        # Map Central WR 400 (expired/invalid code/state) → 400 on the LMS side.
         mapped_status = (
             status.HTTP_400_BAD_REQUEST
             if response.status_code in (400, 401, 404)
@@ -141,6 +154,33 @@ def _map_role(central_role: str) -> UserRole:
     return lms_role
 
 
+def _reconcile_role(user: User, central_role: str) -> bool:
+    """Reconcile the LMS user's role based on the Central WR role.
+
+    Rules:
+    - Central ADMIN + LMS admin → stays admin (no change).
+    - Central ADMIN + LMS student → promoted to admin.
+    - Central ADMIN + LMS super_admin → stays super_admin (NEVER downgraded).
+    - Central non-ADMIN → caller must have already rejected with 403.
+
+    Returns True if the role was changed, False if it stayed the same.
+    """
+    normalized_central = (central_role or "").strip().upper()
+    if normalized_central != "ADMIN":
+        # Should never reach here — _map_role already rejected non-ADMIN.
+        return False
+
+    if user.role == UserRole.SUPER_ADMIN:
+        # Never downgrade super_admin.
+        return False
+
+    if user.role != UserRole.ADMIN:
+        user.role = UserRole.ADMIN
+        return True
+
+    return False
+
+
 @router.post("/exchange", response_model=SsoCallbackResponse)
 async def sso_exchange(
     body: SsoCallbackRequest,
@@ -150,19 +190,23 @@ async def sso_exchange(
     """Exchange a Central WR SSO authorization code for LMS tokens.
 
     Flow:
-    1. Call Central WR backend server-to-server to exchange the code for
-       identity claims.
-    2. Map the Central role → LMS role (ADMIN only).
+    1. Call Central WR backend server-to-server to exchange the code + state
+       for identity claims. Central validates state == ticket.nonce.
+    2. Map the Central role → LMS role (ADMIN only, 403 otherwise).
     3. Find or create the local user:
        a. Look up ``ExternalIdentity`` by provider + external_subject.
        b. If not found, look up by email within the WR tenant and link.
        c. If still not found, auto-provision a new admin user.
-    4. Issue LMS JWT tokens (same shape as normal login).
-    5. Update ``ExternalIdentity.last_login_at``.
+    4. Reconcile role: promote student → admin if Central is ADMIN.
+       Never downgrade super_admin.
+    5. Issue LMS JWT tokens (same shape as normal login).
+    6. Update ``ExternalIdentity.last_login_at``.
     """
-    # Exchange the code with Central WR.
+    # Exchange the code with Central WR (state is validated by Central).
     try:
-        claims = await _exchange_code_with_central(body.code, body.target_application)
+        claims = await _exchange_code_with_central(
+            body.code, body.state, body.target_application,
+        )
     except CentralWrExchangeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
@@ -197,6 +241,7 @@ async def sso_exchange(
     user: User | None = None
     linked_new_identity = False
     provisioned = False
+    role_changed = False
 
     if ext_identity:
         # Existing link — fetch the user.
@@ -268,6 +313,21 @@ async def sso_exchange(
             )
             db.add(ext_identity)
             provisioned = True
+
+    # 4. Reconcile role for existing users (promote student → admin,
+    #    never downgrade super_admin). Only after Central confirmed identity.
+    if not provisioned:
+        role_changed = _reconcile_role(user, central_role)
+        if role_changed:
+            logger.info(
+                "sso_role_reconciled",
+                extra={
+                    "event": "sso_role_reconciled",
+                    "user_id": str(user.id),
+                    "provider": SSO_PROVIDER,
+                    "new_role": UserRole.ADMIN.value,
+                },
+            )
 
     # Update last login timestamp.
     from app.core.utils import utc_now

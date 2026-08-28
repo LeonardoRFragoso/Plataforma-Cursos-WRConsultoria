@@ -295,3 +295,217 @@ async def test_sso_external_identity_created_on_provisioning(client, mock_exchan
         ext = result.scalar_one_or_none()
         assert ext is not None
         assert ext.user_id == uuid.UUID(payload["sub"])
+
+
+# ============================================================================
+# Role reconciliation tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_sso_existing_student_promoted_to_admin(client, mock_exchange):
+    """Central ADMIN + existing LMS student → promoted to admin."""
+    user = await _create_user(
+        "student@wr.com",
+        full_name="Existing Student",
+        role=UserRole.STUDENT,
+        external_subject="central-student-1",
+    )
+    mock_exchange.return_value = _claims(
+        sub="central-student-1",
+        email="student@wr.com",
+        role="ADMIN",
+    )
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+    payload = decode_token(response.json()["access_token"])
+    assert payload["role"] == "admin"
+
+    # Verify the user's role was updated in the database.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.id == user.id)
+        result = await session.execute(stmt)
+        updated_user = result.scalar_one()
+        assert updated_user.role == UserRole.ADMIN
+
+
+@pytest.mark.asyncio
+async def test_sso_existing_admin_stays_admin(client, mock_exchange):
+    """Central ADMIN + existing LMS admin → stays admin."""
+    user = await _create_user(
+        "admin2@wr.com",
+        full_name="Existing Admin",
+        role=UserRole.ADMIN,
+        external_subject="central-admin-2",
+    )
+    mock_exchange.return_value = _claims(
+        sub="central-admin-2",
+        email="admin2@wr.com",
+        role="ADMIN",
+    )
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+    payload = decode_token(response.json()["access_token"])
+    assert payload["role"] == "admin"
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.id == user.id)
+        result = await session.execute(stmt)
+        updated_user = result.scalar_one()
+        assert updated_user.role == UserRole.ADMIN
+
+
+@pytest.mark.asyncio
+async def test_sso_existing_super_admin_not_downgraded(client, mock_exchange):
+    """Central ADMIN + existing LMS super_admin → stays super_admin (never downgraded)."""
+    user = await _create_user(
+        "superadmin@wr.com",
+        full_name="Super Admin",
+        role=UserRole.SUPER_ADMIN,
+        external_subject="central-super-1",
+    )
+    mock_exchange.return_value = _claims(
+        sub="central-super-1",
+        email="superadmin@wr.com",
+        role="ADMIN",
+    )
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+    payload = decode_token(response.json()["access_token"])
+    assert payload["role"] == "super_admin"
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.id == user.id)
+        result = await session.execute(stmt)
+        updated_user = result.scalar_one()
+        assert updated_user.role == UserRole.SUPER_ADMIN
+
+
+@pytest.mark.asyncio
+async def test_sso_non_admin_no_role_change(client, mock_exchange):
+    """Central non-ADMIN → 403, no role change to existing user."""
+    user = await _create_user(
+        "student2@wr.com",
+        full_name="Student 2",
+        role=UserRole.STUDENT,
+        external_subject="central-student-2",
+    )
+    mock_exchange.return_value = _claims(
+        sub="central-student-2",
+        email="student2@wr.com",
+        role="STUDENT",
+    )
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 403
+
+    # Verify the user's role was NOT changed.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.id == user.id)
+        result = await session.execute(stmt)
+        unchanged_user = result.scalar_one()
+        assert unchanged_user.role == UserRole.STUDENT
+
+
+# ============================================================================
+# State parameter tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_sso_state_passed_to_central(client, mock_exchange):
+    """State parameter is forwarded to Central WR exchange call."""
+    mock_exchange.return_value = _claims()
+
+    await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "my-state-value"},
+    )
+
+    # Verify _exchange_code_with_central was called with the state.
+    mock_exchange.assert_called_once_with(
+        "valid-code",
+        "my-state-value",
+        "lms-wr-cursos",
+    )
+
+
+@pytest.mark.asyncio
+async def test_sso_empty_state_rejected_by_central(client, mock_exchange):
+    """Empty state → Central rejects, LMS propagates 400."""
+    from app.api.routes.sso import CentralWrExchangeError
+
+    mock_exchange.side_effect = CentralWrExchangeError(400, "Invalid state parameter")
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": ""},
+    )
+
+    assert response.status_code == 400
+
+
+# ============================================================================
+# RLS / tenant context tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_sso_external_identity_rls_tenant_context(client, mock_exchange):
+    """ExternalIdentity operations work with the normal get_db() tenant context.
+
+    This test proves that the SSO endpoint correctly uses the standard
+    ``get_db()`` dependency which sets ``app.current_tenant`` for RLS.
+    The test DB uses the WR tenant ID, matching production behavior.
+    """
+    mock_exchange.return_value = _claims(
+        sub="rls-test-user",
+        email="rls-test@wr.com",
+    )
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 200
+
+    # Verify ExternalIdentity was created with the correct tenant_id.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(ExternalIdentity).where(
+            ExternalIdentity.provider == SSO_PROVIDER,
+            ExternalIdentity.external_subject == "rls-test-user",
+        )
+        result = await session.execute(stmt)
+        ext = result.scalar_one_or_none()
+        assert ext is not None
+        assert str(ext.tenant_id) == str(WR_TENANT_ID)
