@@ -74,6 +74,13 @@ test.beforeEach(async ({ page }) => {
       }),
     })
   )
+
+  // Simula token de auth no localStorage para o router guard
+  await page.addInitScript(() => {
+    localStorage.setItem('access_token', 'fake-token')
+    localStorage.setItem('refresh_token', 'fake-refresh')
+    localStorage.setItem('user_role', 'student')
+  })
 })
 
 test('tutor responde pergunta sobre EPI com fonte NR-06', async ({ page }) => {
@@ -118,8 +125,8 @@ test('tutor responde sobre SEP sem precisar citar NR-10', async ({ page }) => {
   await page.fill('[data-testid="tutor-input"]', 'O que é SEP?')
   await page.click('[data-testid="tutor-send-btn"]')
 
-  await expect(page.locator('text=Sistema Elétrico de Potência')).toBeVisible()
-  await expect(page.locator('text=NR-10 SEP')).toBeVisible()
+  await expect(page.getByTestId('tutor-source-chip').filter({ hasText: 'Sistema Elétrico de Potência' })).toBeVisible()
+  await expect(page.getByTestId('tutor-source-chip').filter({ hasText: 'NR-10 SEP' })).toBeVisible()
 })
 
 test('tutor permite follow-up mantendo contexto da conversa', async ({ page }) => {
@@ -154,7 +161,7 @@ test('tutor permite follow-up mantendo contexto da conversa', async ({ page }) =
   await page.click('[data-testid="nr-tutor-toggle"]')
   await page.fill('[data-testid="tutor-input"]', 'O que é SEP?')
   await page.click('[data-testid="tutor-send-btn"]')
-  await expect(page.locator('text=Sistema Elétrico de Potência')).toBeVisible()
+  await expect(page.getByTestId('tutor-source-chip').filter({ hasText: 'Sistema Elétrico de Potência' })).toBeVisible()
 
   await page.fill('[data-testid="tutor-input"]', 'E quem pode trabalhar?')
   await page.click('[data-testid="tutor-send-btn"]')
@@ -179,6 +186,6 @@ test('tutor responde sobre diferença entre trabalhador autorizado e supervisor'
   await page.click('[data-testid="tutor-send-btn"]')
 
   await expect(page.locator('text=mais de um material')).toBeVisible()
-  await expect(page.locator('text=Trabalhador Autorizado')).toBeVisible()
-  await expect(page.locator('text=Supervisor')).toBeVisible()
+  await expect(page.getByTestId('tutor-source-chip').filter({ hasText: 'Trabalhador Autorizado' })).toBeVisible()
+  await expect(page.getByTestId('tutor-source-chip').filter({ hasText: 'Supervisor' })).toBeVisible()
 })

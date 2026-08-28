@@ -181,13 +181,23 @@ def _classify_confidence(chunks: list[RetrievedChunk]) -> tuple[str, str]:
     """Classifica confiança e nível de conhecimento.
 
     Returns: (confidence, knowledge_level)
+
+    Considera não apenas o FTS rank mas também o matching exato de termos
+    técnicos e o boost de heading, para uma classificação mais precisa.
     """
     if not chunks:
         return CONFIDENCE_LOW, "NO_CONFIDENT_SOURCE"
 
-    top_score = chunks[0].final_score
-    has_specific_source = any(c.fts_rank > 0 for c in chunks)
+    top = chunks[0]
+    top_score = top.final_score
+    # Considera evidência combinada: FTS rank OU exact term match OU heading match
+    has_specific_source = (
+        top.fts_rank > 0
+        or top.exact_term_score > 0
+        or top.heading_boost > 0
+    )
 
+    # Thresholds ajustados para o novo scoring híbrido
     if top_score >= HIGH_CONFIDENCE_THRESHOLD and has_specific_source:
         return CONFIDENCE_HIGH, "DEEP_KNOWLEDGE"
     elif top_score >= MEDIUM_CONFIDENCE_THRESHOLD and has_specific_source:

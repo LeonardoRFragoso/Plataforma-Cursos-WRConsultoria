@@ -18,7 +18,7 @@ from app.core.security import hash_password
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User, UserRole
 from app.services.one_time_token_service import OneTimeTokenService
-from tests.conftest import make_valid_cpf
+from tests.conftest import make_valid_cnpj, make_valid_cpf
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -63,7 +63,7 @@ class TestActivationTokenExposure:
             json={
                 "legal_name": "Test Company LTDA",
                 "trade_name": "TestCo",
-                "cnpj": f"{12345678000190 + hash('test1') % 100000:014d}",
+                "cnpj": make_valid_cnpj(1),
                 "rh_name": "RH",
                 "rh_email": "rh@test.com",
                 "rh_phone": "(11) 99999-9999",
@@ -105,7 +105,7 @@ class TestActivationTokenExposure:
             json={
                 "legal_name": "CSV Company LTDA",
                 "trade_name": "CSVCo",
-                "cnpj": f"{12345678000190 + hash('test2') % 100000:014d}",
+                "cnpj": make_valid_cnpj(2),
                 "rh_name": "RH",
                 "rh_email": "rh2@test.com",
                 "rh_phone": "(11) 99999-9999",
@@ -181,7 +181,7 @@ class TestActivationTokenExposure:
             json={
                 "legal_name": "Dev Company LTDA",
                 "trade_name": "DevCo",
-                "cnpj": f"{12345678000190 + hash('test3') % 100000:014d}",
+                "cnpj": make_valid_cnpj(3),
                 "rh_name": "RH",
                 "rh_email": "rh3@test.com",
                 "rh_phone": "(11) 99999-9999",
@@ -333,7 +333,7 @@ class TestEmailNormalization:
             json={
                 "legal_name": "Norm Company LTDA",
                 "trade_name": "NormCo",
-                "cnpj": f"{12345678000190 + hash('norm1') % 100000:014d}",
+                "cnpj": make_valid_cnpj(4),
                 "rh_name": "RH",
                 "rh_email": "rh@norm.com",
                 "rh_phone": "(11) 99999-9999",
@@ -376,7 +376,7 @@ class TestEmailNormalization:
             json={
                 "legal_name": "CSV Norm Company LTDA",
                 "trade_name": "CSVNormCo",
-                "cnpj": f"{12345678000190 + hash('norm3') % 100000:014d}",
+                "cnpj": make_valid_cnpj(5),
                 "rh_name": "RH",
                 "rh_email": "rh3@norm.com",
                 "rh_phone": "(11) 99999-9999",
@@ -417,7 +417,7 @@ class TestEmailNormalization:
             "/api/v1/partner-leads",
             json={
                 "company_name": "Partner Norm Corp",
-                "cnpj": f"{12345678000190 + hash('norm6') % 100000:014d}",
+                "cnpj": make_valid_cnpj(6),
                 "contact_name": "Partner Admin",
                 "contact_email": mixed_email,
                 "contact_phone": "(11) 99999-9999",

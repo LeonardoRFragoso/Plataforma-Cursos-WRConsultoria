@@ -250,6 +250,105 @@ async def test_retrieval_finds_content(setup_db, admin_headers):
 
 
 @pytest.mark.asyncio
+async def test_retrieval_critical_queries_all_15_sources(setup_db):
+    """Retrieval quality gate: 6 critical queries against all 15 sources.
+
+    This is the P0 acceptance test for the Tutor NR retrieval quality.
+    Each query must return the correct source as Top-1.
+    """
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    knowledge_dir = Path("/home/leonardo/dev/Cursos-WR/analysis")
+    contents: dict[str, str] = {}
+    storage_keys: dict[str, str] = {}
+    for source in SOURCES:
+        path = knowledge_dir / source.slug / "extracted-text.md"
+        assert path.exists(), f"Missing source: {source.slug}"
+        contents[source.slug] = path.read_text(encoding="utf-8")
+        storage_keys[source.slug] = (
+            f"tenants/{WR_TENANT_ID}/tutor-knowledge/sources/"
+            f"{source.slug}/extracted-text.md"
+        )
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+        await ingest_all(db, WR_TENANT_ID, contents, storage_keys, dry_run=False)
+        await db.commit()
+
+        # 6 critical queries with expected Top-1 source
+        critical_cases = [
+            ("Para que serve o CA do EPI?", "nr06"),
+            ("O que significa SEP?", "nr10-sep"),
+            ("Qual diferença entre NR-10 Básico e SEP?", None),  # multi-source
+            ("Como operar uma empilhadeira com segurança?", "nr11-empilhadeira"),
+            ("Qual diferença entre trabalhador autorizado e supervisor no espaço confinado?", None),
+            ("Quais cuidados existem no trabalho em altura?", "nr35"),
+        ]
+
+        for question, expected_top1 in critical_cases:
+            result = await retrieve(db, WR_TENANT_ID, question, top_k=6)
+            assert len(result.chunks) > 0, f"No chunks for: {question}"
+
+            if expected_top1:
+                top1 = result.chunks[0].source_slug
+                assert top1 == expected_top1, (
+                    f"Wrong Top-1 for '{question}': got {top1}, expected {expected_top1}"
+                )
+
+            # Multi-source queries: check both expected sources appear
+            if "NR-10 Básico e SEP" in question:
+                sources = {c.source_slug for c in result.chunks}
+                assert "nr10-basico" in sources, "NR-10 Básico missing from multi-source query"
+                assert "nr10-sep" in sources, "NR-10 SEP missing from multi-source query"
+
+            if "autorizado e supervisor" in question:
+                sources = {c.source_slug for c in result.chunks}
+                assert "nr33-autorizado" in sources, "NR-33 Autorizado missing"
+                assert "nr33-supervisor" in sources, "NR-33 Supervisor missing"
+
+
+@pytest.mark.asyncio
+async def test_retrieval_followup_context(setup_db):
+    """Follow-up question uses conversation context for query expansion."""
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    knowledge_dir = Path("/home/leonardo/dev/Cursos-WR/analysis")
+    contents: dict[str, str] = {}
+    storage_keys: dict[str, str] = {}
+    for source in SOURCES:
+        path = knowledge_dir / source.slug / "extracted-text.md"
+        if path.exists():
+            contents[source.slug] = path.read_text(encoding="utf-8")
+            storage_keys[source.slug] = (
+                f"tenants/{WR_TENANT_ID}/tutor-knowledge/sources/"
+                f"{source.slug}/extracted-text.md"
+            )
+
+    async with AsyncSessionLocal() as db:
+        db.info["tenant_id"] = WR_TENANT_ID
+        await db.execute(text(f"SET LOCAL app.current_tenant = '{WR_TENANT_ID}'"))
+        await ingest_all(db, WR_TENANT_ID, contents, storage_keys, dry_run=False)
+        await db.commit()
+
+        # Follow-up: "O que significa SEP?" then "E quem pode trabalhar nele?"
+        context = [{"role": "user", "text": "O que significa SEP?"}]
+        result = await retrieve(
+            db, WR_TENANT_ID, "E quem pode trabalhar nele?",
+            top_k=6, conversation_context=context,
+        )
+        assert len(result.chunks) > 0
+        top1 = result.chunks[0].source_slug
+        assert top1 == "nr10-sep", (
+            f"Follow-up should retrieve SEP source, got {top1}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_tutor_ask_endpoint_requires_auth(client: AsyncClient):
     response = await client.post(
         "/api/v1/tutor/ask",

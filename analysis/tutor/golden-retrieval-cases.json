@@ -1,0 +1,110 @@
+{
+  "_description": "Golden dataset para avaliação de retrieval do Tutor NR. Cada caso tem question, expected_sources (slugs que DEVEM aparecer no top-K) e forbidden_primary_sources (slugs que NÃO devem ser a fonte primária/top-1). 75+ casos cobrindo 15 fontes.",
+  "_slugs": [
+    "nr01", "nr06", "nr10-basico", "nr10-sep",
+    "nr11-empilhadeira", "nr11-guindauto", "nr11-minicarregadeira",
+    "nr11-plataforma", "nr11-ponte", "nr11-retroescavadeira",
+    "nr12", "nr18", "nr33-autorizado", "nr33-supervisor", "nr35"
+  ],
+  "cases": [
+    {"question": "Para que serve o CA do EPI?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+    {"question": "O que significa SEP?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": ["nr10-basico", "nr11-empilhadeira"]},
+    {"question": "Qual diferença entre NR-10 Básico e SEP?", "expected_sources": ["nr10-basico", "nr10-sep"], "forbidden_primary_sources": []},
+    {"question": "Como operar uma empilhadeira com segurança?", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto", "nr11-retroescavadeira"]},
+    {"question": "Qual diferença entre trabalhador autorizado e supervisor no espaço confinado?", "expected_sources": ["nr33-autorizado", "nr33-supervisor"], "forbidden_primary_sources": []},
+    {"question": "Quais cuidados existem no trabalho em altura?", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+
+    {"question": "O que é EPI?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+    {"question": "Quais os tipos de EPI?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+    {"question": "Quando devo trocar o EPI?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+    {"question": "O que é certificado de aprovação?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+    {"question": "Quem é responsável por fornecer o EPI?", "expected_sources": ["nr06"], "forbidden_primary_sources": []},
+
+    {"question": "O que é o GRO?", "expected_sources": ["nr01"], "forbidden_primary_sources": []},
+    {"question": "O que é o PGR?", "expected_sources": ["nr01"], "forbidden_primary_sources": []},
+    {"question": "Quais as disposições gerais das NRs?", "expected_sources": ["nr01"], "forbidden_primary_sources": []},
+    {"question": "Como funciona o gerenciamento de riscos ocupacionais?", "expected_sources": ["nr01"], "forbidden_primary_sources": []},
+    {"question": "O que diz a NR-01?", "expected_sources": ["nr01"], "forbidden_primary_sources": []},
+
+    {"question": "Como funciona a desenergização?", "expected_sources": ["nr10-basico"], "forbidden_primary_sources": ["nr10-sep"]},
+    {"question": "O que é choque elétrico?", "expected_sources": ["nr10-basico"], "forbidden_primary_sources": ["nr10-sep"]},
+    {"question": "Quais as medidas de controle da NR-10?", "expected_sources": ["nr10-basico"], "forbidden_primary_sources": []},
+    {"question": "O que é prontuário elétrico?", "expected_sources": ["nr10-basico"], "forbidden_primary_sources": []},
+    {"question": "NR-10 básico o que cobre?", "expected_sources": ["nr10-basico"], "forbidden_primary_sources": ["nr10-sep"]},
+
+    {"question": "O que é sistema elétrico de potência?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": ["nr10-basico"]},
+    {"question": "Como funciona uma subestação?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": []},
+    {"question": "O que é alta tensão?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": []},
+    {"question": "NR-10 SEP o que abrange?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": ["nr10-basico"]},
+    {"question": "Linha de transmissão o que é?", "expected_sources": ["nr10-sep"], "forbidden_primary_sources": []},
+
+    {"question": "Empilhadeira quem pode operar?", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto"]},
+    {"question": "O operador pode transportar pessoa na empilhadeira?", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto"]},
+    {"question": "Cuidados com empilhadeira", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto"]},
+    {"question": "NR-11 empilhadeira regras", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto"]},
+    {"question": "Como operar empilhadeira?", "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte", "nr11-guindauto"]},
+
+    {"question": "Guindauto como operar?", "expected_sources": ["nr11-guindauto"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-ponte"]},
+    {"question": "Munck quem pode operar?", "expected_sources": ["nr11-guindauto"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-ponte"]},
+    {"question": "Cuidados com guindauto", "expected_sources": ["nr11-guindauto"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "NR-11 guindauto regras", "expected_sources": ["nr11-guindauto"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Pluma o que é?", "expected_sources": ["nr11-guindauto"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+
+    {"question": "Minicarregadeira quem pode operar?", "expected_sources": ["nr11-minicarregadeira"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-guindauto"]},
+    {"question": "Bobcat como operar?", "expected_sources": ["nr11-minicarregadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Cuidados com minicarregadeira", "expected_sources": ["nr11-minicarregadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "NR-11 minicarregadeira regras", "expected_sources": ["nr11-minicarregadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Carregadeira compacta o que é?", "expected_sources": ["nr11-minicarregadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+
+    {"question": "Plataforma elevatória como operar?", "expected_sources": ["nr11-plataforma"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-guindauto"]},
+    {"question": "Cesta aérea quem pode operar?", "expected_sources": ["nr11-plataforma"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Cuidados com plataforma elevatória", "expected_sources": ["nr11-plataforma"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "NR-11 plataforma elevatória regras", "expected_sources": ["nr11-plataforma"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Cesto elevatório o que é?", "expected_sources": ["nr11-plataforma"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+
+    {"question": "Ponte rolante como operar?", "expected_sources": ["nr11-ponte"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-guindauto"]},
+    {"question": "Cuidados com ponte rolante", "expected_sources": ["nr11-ponte"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Talha o que é?", "expected_sources": ["nr11-ponte"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "NR-11 ponte rolante regras", "expected_sources": ["nr11-ponte"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Guincho o que é?", "expected_sources": ["nr11-ponte"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+
+    {"question": "Retroescavadeira como operar?", "expected_sources": ["nr11-retroescavadeira"], "forbidden_primary_sources": ["nr11-empilhadeira", "nr11-ponte"]},
+    {"question": "Cuidados com retroescavadeira", "expected_sources": ["nr11-retroescavadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Escavadeira o que é?", "expected_sources": ["nr11-retroescavadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "NR-11 retroescavadeira regras", "expected_sources": ["nr11-retroescavadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+    {"question": "Trator o que é?", "expected_sources": ["nr11-retroescavadeira"], "forbidden_primary_sources": ["nr11-empilhadeira"]},
+
+    {"question": "NR-12 o que diz?", "expected_sources": ["nr12"], "forbidden_primary_sources": []},
+    {"question": "Segurança em máquinas e equipamentos", "expected_sources": ["nr12"], "forbidden_primary_sources": []},
+    {"question": "Parada de emergência quando usar?", "expected_sources": ["nr12"], "forbidden_primary_sources": []},
+    {"question": "Proteção de máquina o que é?", "expected_sources": ["nr12"], "forbidden_primary_sources": []},
+    {"question": "NR-12 cuidados com equipamentos", "expected_sources": ["nr12"], "forbidden_primary_sources": []},
+
+    {"question": "NR-18 o que diz?", "expected_sources": ["nr18"], "forbidden_primary_sources": []},
+    {"question": "Segurança na construção civil", "expected_sources": ["nr18"], "forbidden_primary_sources": []},
+    {"question": "Andaime como usar?", "expected_sources": ["nr18"], "forbidden_primary_sources": []},
+    {"question": "Canteiro de obras cuidados", "expected_sources": ["nr18"], "forbidden_primary_sources": []},
+    {"question": "Escavação cuidados de segurança", "expected_sources": ["nr18"], "forbidden_primary_sources": []},
+
+    {"question": "O que é espaço confinado?", "expected_sources": ["nr33-autorizado"], "forbidden_primary_sources": []},
+    {"question": "Trabalhador autorizado o que faz?", "expected_sources": ["nr33-autorizado"], "forbidden_primary_sources": ["nr33-supervisor"]},
+    {"question": "Vigia o que faz no espaço confinado?", "expected_sources": ["nr33-autorizado"], "forbidden_primary_sources": ["nr33-supervisor"]},
+    {"question": "PET o que é?", "expected_sources": ["nr33-autorizado"], "forbidden_primary_sources": []},
+    {"question": "NR-33 trabalhador autorizado", "expected_sources": ["nr33-autorizado"], "forbidden_primary_sources": ["nr33-supervisor"]},
+
+    {"question": "Supervisor de entrada o que faz?", "expected_sources": ["nr33-supervisor"], "forbidden_primary_sources": ["nr33-autorizado"]},
+    {"question": "Quem é o supervisor no espaço confinado?", "expected_sources": ["nr33-supervisor"], "forbidden_primary_sources": ["nr33-autorizado"]},
+    {"question": "NR-33 supervisor responsabilidades", "expected_sources": ["nr33-supervisor"], "forbidden_primary_sources": ["nr33-autorizado"]},
+    {"question": "Supervisor de entrada em espaço confinado", "expected_sources": ["nr33-supervisor"], "forbidden_primary_sources": ["nr33-autorizado"]},
+    {"question": "Qual a função do supervisor de entrada?", "expected_sources": ["nr33-supervisor"], "forbidden_primary_sources": ["nr33-autorizado"]},
+
+    {"question": "Quando usar cinto de segurança?", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+    {"question": "Trabalho em altura acima de 2 metros", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+    {"question": "Ancoragem como fazer?", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+    {"question": "Talabarte o que é?", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+    {"question": "NR-35 cuidados com altura", "expected_sources": ["nr35"], "forbidden_primary_sources": []},
+
+    {"question": "E quem pode trabalhar nele?", "expected_context": {"prev_question": "O que significa SEP?", "expected_sources": ["nr10-sep"]}, "expected_sources": ["nr10-sep"], "forbidden_primary_sources": ["nr10-basico"]},
+    {"question": "E quem pode operar ele?", "expected_context": {"prev_question": "Como operar uma empilhadeira com segurança?", "expected_sources": ["nr11-empilhadeira"]}, "expected_sources": ["nr11-empilhadeira"], "forbidden_primary_sources": ["nr11-ponte"]}
+  ]
+}

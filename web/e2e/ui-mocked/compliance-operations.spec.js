@@ -74,6 +74,8 @@ test('admin navega até Compliance NR e o dashboard carrega', async ({ page }) =
   await page.click('button[type="submit"]')
 
   await expect(page).toHaveURL(/\/dashboard/)
+  // Expand the "Operações" nav group to reveal the Compliance NR link
+  await page.getByTestId('nav-group-operations-group').click()
   await page.getByTestId('nav-link-compliance-operations').click()
   await expect(page).toHaveURL(/\/operations\/compliance/)
 

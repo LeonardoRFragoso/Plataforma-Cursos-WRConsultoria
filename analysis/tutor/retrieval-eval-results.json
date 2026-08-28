@@ -1,0 +1,2246 @@
+{
+  "metrics": {
+    "total_cases": 83,
+    "top1_accuracy": 1.0,
+    "top1_forbidden_count": 0,
+    "top3_recall_avg": 0.9879518072289156,
+    "full_recall_avg": 1.0,
+    "multi_source_recall_avg": 1.0,
+    "multi_source_cases": 2,
+    "wrong_variant_rate": 0.0,
+    "thresholds": {
+      "top1_accuracy_target": 0.9,
+      "top3_recall_target": 0.95,
+      "wrong_variant_max": 0.05
+    },
+    "meets_thresholds": {
+      "top1": true,
+      "top3_recall": true,
+      "wrong_variant": true
+    }
+  },
+  "results": [
+    {
+      "question": "Para que serve o CA do EPI?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr12"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 9.35,
+      "detected_scope": [
+        "nr06",
+        "nr12"
+      ],
+      "exact_terms": [
+        "ca",
+        "epi",
+        "equipamento de protecao individual",
+        "certificado de aprovacao"
+      ]
+    },
+    {
+      "question": "O que significa SEP?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.4,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "sep",
+        "sistema eletrico de potencia"
+      ]
+    },
+    {
+      "question": "Qual diferença entre NR-10 Básico e SEP?",
+      "expected_sources": [
+        "nr10-basico",
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep",
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 0.5,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 10.85,
+      "detected_scope": [
+        "nr10-basico",
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "basico",
+        "sep",
+        "nr",
+        "nr 10",
+        "sistema eletrico de potencia"
+      ]
+    },
+    {
+      "question": "Como operar uma empilhadeira com segurança?",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    },
+    {
+      "question": "Qual diferença entre trabalhador autorizado e supervisor no espaço confinado?",
+      "expected_sources": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 0.5,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 11.2,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "autorizado",
+        "supervisor",
+        "espaco confinado"
+      ]
+    },
+    {
+      "question": "Quais cuidados existem no trabalho em altura?",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr35"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.4,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": [
+        "trabalho em altura"
+      ]
+    },
+    {
+      "question": "O que é EPI?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr12"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.55,
+      "detected_scope": [
+        "nr06",
+        "nr12"
+      ],
+      "exact_terms": [
+        "epi",
+        "equipamento de protecao individual"
+      ]
+    },
+    {
+      "question": "Quais os tipos de EPI?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr12"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.55,
+      "detected_scope": [
+        "nr06",
+        "nr12"
+      ],
+      "exact_terms": [
+        "epi",
+        "equipamento de protecao individual"
+      ]
+    },
+    {
+      "question": "Quando devo trocar o EPI?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr12"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.55,
+      "detected_scope": [
+        "nr06",
+        "nr12"
+      ],
+      "exact_terms": [
+        "epi",
+        "equipamento de protecao individual"
+      ]
+    },
+    {
+      "question": "O que é certificado de aprovação?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.600000023841858,
+      "detected_scope": [
+        "nr06"
+      ],
+      "exact_terms": [
+        "certificado de aprovacao"
+      ]
+    },
+    {
+      "question": "Quem é responsável por fornecer o EPI?",
+      "expected_sources": [
+        "nr06"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr12"
+      ],
+      "top1_source": "nr06",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr06"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.55,
+      "detected_scope": [
+        "nr06",
+        "nr12"
+      ],
+      "exact_terms": [
+        "epi",
+        "equipamento de protecao individual"
+      ]
+    },
+    {
+      "question": "O que é o GRO?",
+      "expected_sources": [
+        "nr01"
+      ],
+      "retrieved_sources": [
+        "nr01"
+      ],
+      "top1_source": "nr01",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr01"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 7.8,
+      "detected_scope": [
+        "nr01"
+      ],
+      "exact_terms": [
+        "gro",
+        "gerenciamento de riscos ocupacionais",
+        "gerenciamento de riscos"
+      ]
+    },
+    {
+      "question": "O que é o PGR?",
+      "expected_sources": [
+        "nr01"
+      ],
+      "retrieved_sources": [
+        "nr01"
+      ],
+      "top1_source": "nr01",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr01"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.3,
+      "detected_scope": [
+        "nr01"
+      ],
+      "exact_terms": [
+        "pgr",
+        "gerenciamento de riscos"
+      ]
+    },
+    {
+      "question": "Quais as disposições gerais das NRs?",
+      "expected_sources": [
+        "nr01"
+      ],
+      "retrieved_sources": [
+        "nr01"
+      ],
+      "top1_source": "nr01",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr01"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr01"
+      ],
+      "exact_terms": [
+        "disposicoes gerais"
+      ]
+    },
+    {
+      "question": "Como funciona o gerenciamento de riscos ocupacionais?",
+      "expected_sources": [
+        "nr01"
+      ],
+      "retrieved_sources": [
+        "nr01"
+      ],
+      "top1_source": "nr01",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr01"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.3,
+      "detected_scope": [
+        "nr01"
+      ],
+      "exact_terms": [
+        "gerenciamento de riscos ocupacionais",
+        "gerenciamento de riscos"
+      ]
+    },
+    {
+      "question": "O que diz a NR-01?",
+      "expected_sources": [
+        "nr01"
+      ],
+      "retrieved_sources": [
+        "nr01"
+      ],
+      "top1_source": "nr01",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr01"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.55,
+      "detected_scope": [
+        "nr01"
+      ],
+      "exact_terms": [
+        "nr",
+        "nr 01"
+      ]
+    },
+    {
+      "question": "Como funciona a desenergização?",
+      "expected_sources": [
+        "nr10-basico"
+      ],
+      "retrieved_sources": [
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-basico",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr10-basico"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "O que é choque elétrico?",
+      "expected_sources": [
+        "nr10-basico"
+      ],
+      "retrieved_sources": [
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-basico",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.15,
+      "detected_scope": [
+        "nr10-basico"
+      ],
+      "exact_terms": [
+        "choque eletrico"
+      ]
+    },
+    {
+      "question": "Quais as medidas de controle da NR-10?",
+      "expected_sources": [
+        "nr10-basico"
+      ],
+      "retrieved_sources": [
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-basico",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.8,
+      "detected_scope": [
+        "nr10-basico",
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "nr",
+        "nr 10"
+      ]
+    },
+    {
+      "question": "O que é prontuário elétrico?",
+      "expected_sources": [
+        "nr10-basico"
+      ],
+      "retrieved_sources": [
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-basico",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr10-basico"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "NR-10 básico o que cobre?",
+      "expected_sources": [
+        "nr10-basico"
+      ],
+      "retrieved_sources": [
+        "nr10-basico"
+      ],
+      "top1_source": "nr10-basico",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 18.3,
+      "detected_scope": [
+        "nr10-basico",
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "basico",
+        "nr",
+        "nr 10"
+      ]
+    },
+    {
+      "question": "O que é sistema elétrico de potência?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "sistema eletrico de potencia"
+      ]
+    },
+    {
+      "question": "Como funciona uma subestação?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "O que é alta tensão?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.15,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "alta tensao"
+      ]
+    },
+    {
+      "question": "NR-10 SEP o que abrange?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 19.7,
+      "detected_scope": [
+        "nr10-basico",
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "sep",
+        "nr",
+        "nr 10",
+        "sistema eletrico de potencia"
+      ]
+    },
+    {
+      "question": "Linha de transmissão o que é?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "linha de transmissao"
+      ]
+    },
+    {
+      "question": "Empilhadeira quem pode operar?",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    },
+    {
+      "question": "O operador pode transportar pessoa na empilhadeira?",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    },
+    {
+      "question": "Cuidados com empilhadeira",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    },
+    {
+      "question": "NR-11 empilhadeira regras",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 12.3,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira",
+        "nr"
+      ]
+    },
+    {
+      "question": "Como operar empilhadeira?",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    },
+    {
+      "question": "Guindauto como operar?",
+      "expected_sources": [
+        "nr11-guindauto"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto"
+      ],
+      "top1_source": "nr11-guindauto",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-guindauto"
+      ],
+      "exact_terms": [
+        "guindauto"
+      ]
+    },
+    {
+      "question": "Munck quem pode operar?",
+      "expected_sources": [
+        "nr11-guindauto"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto"
+      ],
+      "top1_source": "nr11-guindauto",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 9.35,
+      "detected_scope": [
+        "nr11-guindauto"
+      ],
+      "exact_terms": [
+        "munck",
+        "guindauto",
+        "munck",
+        "munck",
+        "caminhao munck"
+      ]
+    },
+    {
+      "question": "Cuidados com guindauto",
+      "expected_sources": [
+        "nr11-guindauto"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto"
+      ],
+      "top1_source": "nr11-guindauto",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-guindauto"
+      ],
+      "exact_terms": [
+        "guindauto"
+      ]
+    },
+    {
+      "question": "NR-11 guindauto regras",
+      "expected_sources": [
+        "nr11-guindauto"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto"
+      ],
+      "top1_source": "nr11-guindauto",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 12.3,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "guindauto",
+        "nr"
+      ]
+    },
+    {
+      "question": "Pluma o que é?",
+      "expected_sources": [
+        "nr11-guindauto"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto"
+      ],
+      "top1_source": "nr11-guindauto",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.4,
+      "detected_scope": [
+        "nr11-guindauto"
+      ],
+      "exact_terms": [
+        "pluma",
+        "guindauto"
+      ]
+    },
+    {
+      "question": "Minicarregadeira quem pode operar?",
+      "expected_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top1_source": "nr11-minicarregadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.15,
+      "detected_scope": [
+        "nr11-minicarregadeira"
+      ],
+      "exact_terms": [
+        "minicarregadeira"
+      ]
+    },
+    {
+      "question": "Bobcat como operar?",
+      "expected_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top1_source": "nr11-minicarregadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr11-minicarregadeira"
+      ],
+      "exact_terms": [
+        "bobcat",
+        "minicarregadeira"
+      ]
+    },
+    {
+      "question": "Cuidados com minicarregadeira",
+      "expected_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr11-plataforma",
+        "nr11-minicarregadeira"
+      ],
+      "top1_source": "nr11-minicarregadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.750000023841858,
+      "detected_scope": [
+        "nr11-minicarregadeira"
+      ],
+      "exact_terms": [
+        "minicarregadeira"
+      ]
+    },
+    {
+      "question": "NR-11 minicarregadeira regras",
+      "expected_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira",
+        "nr11-minicarregadeira"
+      ],
+      "top1_source": "nr11-minicarregadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 12.05,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "minicarregadeira",
+        "nr"
+      ]
+    },
+    {
+      "question": "Carregadeira compacta o que é?",
+      "expected_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top1_source": "nr11-minicarregadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-minicarregadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr11-minicarregadeira"
+      ],
+      "exact_terms": [
+        "carregadeira compacta"
+      ]
+    },
+    {
+      "question": "Plataforma elevatória como operar?",
+      "expected_sources": [
+        "nr11-plataforma"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-plataforma",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-plataforma"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr11-plataforma"
+      ],
+      "exact_terms": [
+        "plataforma elevatoria"
+      ]
+    },
+    {
+      "question": "Cesta aérea quem pode operar?",
+      "expected_sources": [
+        "nr11-plataforma"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-plataforma",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-plataforma"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 8.65,
+      "detected_scope": [
+        "nr11-plataforma"
+      ],
+      "exact_terms": [
+        "cesta aerea",
+        "plataforma elevatoria"
+      ]
+    },
+    {
+      "question": "Cuidados com plataforma elevatória",
+      "expected_sources": [
+        "nr11-plataforma"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-plataforma",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-plataforma"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr11-plataforma"
+      ],
+      "exact_terms": [
+        "plataforma elevatoria"
+      ]
+    },
+    {
+      "question": "NR-11 plataforma elevatória regras",
+      "expected_sources": [
+        "nr11-plataforma"
+      ],
+      "retrieved_sources": [
+        "nr11-ponte",
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-plataforma",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-plataforma"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 13.05,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "nr",
+        "plataforma elevatoria"
+      ]
+    },
+    {
+      "question": "Cesto elevatório o que é?",
+      "expected_sources": [
+        "nr11-plataforma"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-plataforma",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-plataforma"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 3,
+      "top_score": 0.4000000059604645,
+      "detected_scope": [],
+      "exact_terms": []
+    },
+    {
+      "question": "Ponte rolante como operar?",
+      "expected_sources": [
+        "nr11-ponte"
+      ],
+      "retrieved_sources": [
+        "nr11-ponte"
+      ],
+      "top1_source": "nr11-ponte",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-ponte"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-ponte"
+      ],
+      "exact_terms": [
+        "ponte rolante"
+      ]
+    },
+    {
+      "question": "Cuidados com ponte rolante",
+      "expected_sources": [
+        "nr11-ponte"
+      ],
+      "retrieved_sources": [
+        "nr11-ponte"
+      ],
+      "top1_source": "nr11-ponte",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-ponte"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-ponte"
+      ],
+      "exact_terms": [
+        "ponte rolante"
+      ]
+    },
+    {
+      "question": "Talha o que é?",
+      "expected_sources": [
+        "nr11-ponte"
+      ],
+      "retrieved_sources": [
+        "nr18",
+        "nr11-plataforma",
+        "nr10-sep",
+        "nr11-ponte",
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-ponte",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-ponte",
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.350000002980233,
+      "detected_scope": [
+        "nr11-ponte"
+      ],
+      "exact_terms": [
+        "talha"
+      ]
+    },
+    {
+      "question": "NR-11 ponte rolante regras",
+      "expected_sources": [
+        "nr11-ponte"
+      ],
+      "retrieved_sources": [
+        "nr11-ponte",
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr11-ponte",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-ponte"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 12.3,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "nr",
+        "ponte rolante"
+      ]
+    },
+    {
+      "question": "Guincho o que é?",
+      "expected_sources": [
+        "nr11-ponte"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto",
+        "nr11-ponte"
+      ],
+      "top1_source": "nr11-ponte",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-guindauto",
+        "nr11-ponte"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 2,
+      "top_score": 4.15,
+      "detected_scope": [
+        "nr11-ponte"
+      ],
+      "exact_terms": [
+        "guincho"
+      ]
+    },
+    {
+      "question": "Retroescavadeira como operar?",
+      "expected_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top1_source": "nr11-retroescavadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "retroescavadeira"
+      ]
+    },
+    {
+      "question": "Cuidados com retroescavadeira",
+      "expected_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top1_source": "nr11-retroescavadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "retroescavadeira"
+      ]
+    },
+    {
+      "question": "Escavadeira o que é?",
+      "expected_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma",
+        "nr11-retroescavadeira"
+      ],
+      "top1_source": "nr11-retroescavadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 5,
+      "top_score": 4.4,
+      "detected_scope": [
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "escavadeira"
+      ]
+    },
+    {
+      "question": "NR-11 retroescavadeira regras",
+      "expected_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-plataforma",
+        "nr11-retroescavadeira",
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-retroescavadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 12.3,
+      "detected_scope": [
+        "nr11-empilhadeira",
+        "nr11-guindauto",
+        "nr11-minicarregadeira",
+        "nr11-plataforma",
+        "nr11-ponte",
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": [
+        "retroescavadeira",
+        "nr"
+      ]
+    },
+    {
+      "question": "Trator o que é?",
+      "expected_sources": [
+        "nr11-retroescavadeira"
+      ],
+      "retrieved_sources": [
+        "nr10-sep",
+        "nr11-retroescavadeira"
+      ],
+      "top1_source": "nr11-retroescavadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep",
+        "nr11-retroescavadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 3,
+      "top_score": 4.0,
+      "detected_scope": [
+        "nr11-retroescavadeira"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "NR-12 o que diz?",
+      "expected_sources": [
+        "nr12"
+      ],
+      "retrieved_sources": [
+        "nr10-basico",
+        "nr12",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr12",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr12"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.8,
+      "detected_scope": [
+        "nr12"
+      ],
+      "exact_terms": [
+        "nr",
+        "nr 12"
+      ]
+    },
+    {
+      "question": "Segurança em máquinas e equipamentos",
+      "expected_sources": [
+        "nr12"
+      ],
+      "retrieved_sources": [
+        "nr10-basico",
+        "nr12",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr12",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr12"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr12"
+      ],
+      "exact_terms": [
+        "seguranca em maquinas"
+      ]
+    },
+    {
+      "question": "Parada de emergência quando usar?",
+      "expected_sources": [
+        "nr12"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr10-sep",
+        "nr12",
+        "nr35"
+      ],
+      "top1_source": "nr12",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr12"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.600000023841858,
+      "detected_scope": [
+        "nr12"
+      ],
+      "exact_terms": [
+        "parada de emergencia"
+      ]
+    },
+    {
+      "question": "Proteção de máquina o que é?",
+      "expected_sources": [
+        "nr12"
+      ],
+      "retrieved_sources": [
+        "nr10-basico",
+        "nr11-ponte",
+        "nr12"
+      ],
+      "top1_source": "nr12",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr12"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 7.5,
+      "detected_scope": [
+        "nr12"
+      ],
+      "exact_terms": [
+        "protecao de maquina"
+      ]
+    },
+    {
+      "question": "NR-12 cuidados com equipamentos",
+      "expected_sources": [
+        "nr12"
+      ],
+      "retrieved_sources": [
+        "nr10-basico",
+        "nr12",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr12",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr12"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.8,
+      "detected_scope": [
+        "nr12"
+      ],
+      "exact_terms": [
+        "nr",
+        "nr 12"
+      ]
+    },
+    {
+      "question": "NR-18 o que diz?",
+      "expected_sources": [
+        "nr18"
+      ],
+      "retrieved_sources": [
+        "nr18"
+      ],
+      "top1_source": "nr18",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr18"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.65,
+      "detected_scope": [
+        "nr18"
+      ],
+      "exact_terms": [
+        "nr",
+        "nr 18"
+      ]
+    },
+    {
+      "question": "Segurança na construção civil",
+      "expected_sources": [
+        "nr18"
+      ],
+      "retrieved_sources": [
+        "nr18"
+      ],
+      "top1_source": "nr18",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr18"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr18"
+      ],
+      "exact_terms": [
+        "construcao civil"
+      ]
+    },
+    {
+      "question": "Andaime como usar?",
+      "expected_sources": [
+        "nr18"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr18",
+        "nr33-autorizado",
+        "nr10-sep",
+        "nr10-basico"
+      ],
+      "top1_source": "nr18",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor",
+        "nr18"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.200000002980232,
+      "detected_scope": [
+        "nr18"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "Canteiro de obras cuidados",
+      "expected_sources": [
+        "nr18"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr18",
+        "nr11-plataforma"
+      ],
+      "top1_source": "nr18",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr18"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.4000000059604645,
+      "detected_scope": [
+        "nr18"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "Escavação cuidados de segurança",
+      "expected_sources": [
+        "nr18"
+      ],
+      "retrieved_sources": [
+        "nr18"
+      ],
+      "top1_source": "nr18",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr18"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.600000023841858,
+      "detected_scope": [
+        "nr18"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "O que é espaço confinado?",
+      "expected_sources": [
+        "nr33-autorizado"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-autorizado",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-autorizado"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.15,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "espaco confinado"
+      ]
+    },
+    {
+      "question": "Trabalhador autorizado o que faz?",
+      "expected_sources": [
+        "nr33-autorizado"
+      ],
+      "retrieved_sources": [
+        "nr11-minicarregadeira",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-autorizado",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-autorizado"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 1.4,
+      "detected_scope": [],
+      "exact_terms": [
+        "autorizado"
+      ]
+    },
+    {
+      "question": "Vigia o que faz no espaço confinado?",
+      "expected_sources": [
+        "nr33-autorizado"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-autorizado",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-autorizado"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 26.2,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "vigia",
+        "autorizado",
+        "espaco confinado"
+      ]
+    },
+    {
+      "question": "PET o que é?",
+      "expected_sources": [
+        "nr33-autorizado"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-autorizado",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-autorizado"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 7.8,
+      "detected_scope": [
+        "nr33-autorizado"
+      ],
+      "exact_terms": [
+        "pet",
+        "permissao de entrada"
+      ]
+    },
+    {
+      "question": "NR-33 trabalhador autorizado",
+      "expected_sources": [
+        "nr33-autorizado"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-autorizado",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-autorizado"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 18.55,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "autorizado",
+        "nr",
+        "nr 33"
+      ]
+    },
+    {
+      "question": "Supervisor de entrada o que faz?",
+      "expected_sources": [
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 21.45,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "supervisor",
+        "supervisor",
+        "espaco confinado",
+        "supervisor de entrada"
+      ]
+    },
+    {
+      "question": "Quem é o supervisor no espaço confinado?",
+      "expected_sources": [
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 14.05,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "supervisor",
+        "espaco confinado"
+      ]
+    },
+    {
+      "question": "NR-33 supervisor responsabilidades",
+      "expected_sources": [
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 13.55,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "supervisor",
+        "nr",
+        "nr 33"
+      ]
+    },
+    {
+      "question": "Supervisor de entrada em espaço confinado",
+      "expected_sources": [
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 21.45,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "supervisor",
+        "supervisor",
+        "espaco confinado",
+        "supervisor de entrada"
+      ]
+    },
+    {
+      "question": "Qual a função do supervisor de entrada?",
+      "expected_sources": [
+        "nr33-supervisor"
+      ],
+      "retrieved_sources": [
+        "nr33-supervisor",
+        "nr33-autorizado"
+      ],
+      "top1_source": "nr33-supervisor",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr33-supervisor"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 21.45,
+      "detected_scope": [
+        "nr33-autorizado",
+        "nr33-supervisor"
+      ],
+      "exact_terms": [
+        "supervisor",
+        "supervisor",
+        "espaco confinado",
+        "supervisor de entrada"
+      ]
+    },
+    {
+      "question": "Quando usar cinto de segurança?",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr35"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "Trabalho em altura acima de 2 metros",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr35"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 7.9,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": [
+        "2 metros",
+        "trabalho em altura"
+      ]
+    },
+    {
+      "question": "Ancoragem como fazer?",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr11-guindauto",
+        "nr10-sep",
+        "nr35",
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35",
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.0,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "Talabarte o que é?",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr06",
+        "nr35",
+        "nr10-basico"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35",
+        "nr10-basico"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 4.200000002980232,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": []
+    },
+    {
+      "question": "NR-35 cuidados com altura",
+      "expected_sources": [
+        "nr35"
+      ],
+      "retrieved_sources": [
+        "nr35"
+      ],
+      "top1_source": "nr35",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr35"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 8.7,
+      "detected_scope": [
+        "nr35"
+      ],
+      "exact_terms": [
+        "nr",
+        "trabalho em altura",
+        "nr 35"
+      ]
+    },
+    {
+      "question": "E quem pode trabalhar nele?",
+      "expected_sources": [
+        "nr10-sep"
+      ],
+      "retrieved_sources": [
+        "nr10-sep"
+      ],
+      "top1_source": "nr10-sep",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr10-sep"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 6.4,
+      "detected_scope": [
+        "nr10-sep"
+      ],
+      "exact_terms": [
+        "sep",
+        "sistema eletrico de potencia"
+      ]
+    },
+    {
+      "question": "E quem pode operar ele?",
+      "expected_sources": [
+        "nr11-empilhadeira"
+      ],
+      "retrieved_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top1_source": "nr11-empilhadeira",
+      "top1_correct": true,
+      "top1_forbidden": false,
+      "top3_sources": [
+        "nr11-empilhadeira"
+      ],
+      "top3_recall": 1.0,
+      "full_recall": 1.0,
+      "total_chunks": 6,
+      "top_score": 5.4,
+      "detected_scope": [
+        "nr11-empilhadeira"
+      ],
+      "exact_terms": [
+        "empilhadeira"
+      ]
+    }
+  ]
+}

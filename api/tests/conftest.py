@@ -44,6 +44,24 @@ def make_valid_cpf(seed: int | None = None) -> str:
     return f"{base}{first}{second}"
 
 
+def make_valid_cnpj(seed: int | None = None) -> str:
+    """Generate a mathematically valid 14-digit CNPJ for tests.
+
+    Uses the same check-digit algorithm as app.core.normalization so the
+    generated CNPJ always passes validate_cnpj(). Avoids all-equal-digit
+    sequences which are invalid even when check digits match.
+    """
+    rng = uuid.uuid4().int if seed is None else seed
+    base = f"{rng % 10**12:012d}"
+    # Avoid all-equal-digit bases (e.g. seed=0 → 000000000000) which produce
+    # invalid repeated CNPJs like 00000000000000.
+    if len(set(base)) == 1:
+        base = base[:-1] + ("1" if base[-1] != "1" else "2")
+    first = _compute_check_digit(base, (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+    second = _compute_check_digit(base + str(first), (6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+    return f"{base}{first}{second}"
+
+
 async def _insert_master_tenant():
     async with AsyncSessionLocal() as session:
         existing = await session.get(Tenant, WR_TENANT_ID)
