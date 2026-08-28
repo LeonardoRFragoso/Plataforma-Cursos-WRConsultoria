@@ -14,7 +14,7 @@ Requires a PostgreSQL test database (not SQLite).
 """
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 import httpx
 import pytest
@@ -127,7 +127,7 @@ async def _seed_tenant(tenant_id, slug, course_code, course_name, b2b_id, b2b_se
         enrollment = Enrollment(
             tenant_id=tenant_id, student_id=student.id, class_id=cls.id,
             status=EnrollmentStatus.CONFIRMADA, source=EnrollmentSource.INDIVIDUAL,
-            enrollment_date=datetime(2026, 1, 15, tzinfo=UTC), price=100.0,
+            enrollment_date=datetime(2026, 1, 15), price=100.0,
         )
         session.add(enrollment)
 

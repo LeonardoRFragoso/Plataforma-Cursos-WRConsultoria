@@ -386,3 +386,26 @@ async def test_b2b_context_no_secret_in_response(client: AsyncClient):
     assert "client_secret" not in data
     assert "client_secret_hash" not in data
     assert "secret" not in str(data).lower()
+
+
+# ---- ContextVar cleanup ----
+
+@pytest.mark.asyncio
+async def test_b2b_contextvar_reset_after_request(client: AsyncClient):
+    """ContextVar current_tenant_id must be reset after the B2B request ends.
+
+    get_b2b_db() uses token/reset pattern to prevent the ContextVar
+    from leaking into subsequent requests. After a B2B request completes,
+    current_tenant_id should be back to its default (None).
+    """
+    from app.core.context import current_tenant_id
+
+    # Before the request, ContextVar should be None (default)
+    assert current_tenant_id.get() is None
+
+    # Make a B2B request (which sets the ContextVar internally)
+    response = await client.get("/api/v1/b2b/summary", headers=_b2b_headers())
+    assert response.status_code == 200
+
+    # After the request, ContextVar must be reset to None
+    assert current_tenant_id.get() is None

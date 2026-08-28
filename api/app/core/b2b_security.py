@@ -108,17 +108,22 @@ async def get_b2b_db(ctx: B2BContext = Depends(get_b2b_context)) -> AsyncSession
     This is the ONLY db dependency B2B routes should use. It guarantees:
     - ``app.current_tenant`` is set to the client's tenant_id
     - RLS policies filter all queries to that tenant
-    - The ContextVar is kept consistent
+    - The ContextVar is kept consistent and **restored** after the
+      request (via ``ContextVar.reset(token)``) to prevent leakage
+      into subsequent requests.
     - No string interpolation in SQL (uses ``set_config`` with params)
     """
-    async with AsyncSessionLocal() as session:
-        session.info["tenant_id"] = ctx.tenant_id
-        await session.execute(
-            text("SELECT set_config('app.current_tenant', :tid, true)"),
-            {"tid": str(ctx.tenant_id)},
-        )
-        current_tenant_id.set(ctx.tenant_id)
-        yield session
+    token = current_tenant_id.set(ctx.tenant_id)
+    try:
+        async with AsyncSessionLocal() as session:
+            session.info["tenant_id"] = ctx.tenant_id
+            await session.execute(
+                text("SELECT set_config('app.current_tenant', :tid, true)"),
+                {"tid": str(ctx.tenant_id)},
+            )
+            yield session
+    finally:
+        current_tenant_id.reset(token)
 
 
 def require_b2b_scope(*scopes: str):
