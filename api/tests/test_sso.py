@@ -317,8 +317,8 @@ async def test_sso_external_identity_created_on_provisioning(client, mock_exchan
 
 
 @pytest.mark.asyncio
-async def test_sso_existing_student_promoted_to_admin(client, mock_exchange):
-    """Central ADMIN + existing LMS student → promoted to admin."""
+async def test_sso_existing_student_rejected_without_promotion(client, mock_exchange):
+    """Central ADMIN + existing LMS student → rejected, never promoted."""
     user = await _create_user(
         "student@wr.com",
         full_name="Existing Student",
@@ -336,18 +336,16 @@ async def test_sso_existing_student_promoted_to_admin(client, mock_exchange):
         json={"code": "valid-code", "state": "state123"},
     )
 
-    assert response.status_code == 200
-    payload = decode_token(response.json()["access_token"])
-    assert payload["role"] == "admin"
+    assert response.status_code == 403
 
-    # Verify the user's role was updated in the database.
+    # Verify the user's role was not changed in the database.
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
         stmt = select(User).where(User.id == user.id)
         result = await session.execute(stmt)
-        updated_user = result.scalar_one()
-        assert updated_user.role == UserRole.ADMIN
+        unchanged_user = result.scalar_one()
+        assert unchanged_user.role == UserRole.STUDENT
 
 
 @pytest.mark.asyncio

@@ -37,10 +37,10 @@ class B2BContextResponse(BaseModel):
     api_version: str = "1"
 
 
-class B2BPageResponse(BaseModel):
-    """Generic paginated response for B2B list endpoints."""
+class B2BPageResponse[T](BaseModel):
+    """Typed paginated response for B2B list endpoints."""
     meta: B2BPageMeta
-    data: list
+    data: list[T]
 
 
 # ---- Summary (dashboard) ----

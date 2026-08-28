@@ -258,7 +258,7 @@ async def _compute_avg_progress(db: AsyncSession, tid: UUID) -> float:
 
 # ---- Courses ----
 
-@router.get("/courses", response_model=B2BPageResponse)
+@router.get("/courses", response_model=B2BPageResponse[B2BCourse])
 async def list_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -351,7 +351,7 @@ async def get_course(
 
 # ---- Classes ----
 
-@router.get("/classes", response_model=B2BPageResponse)
+@router.get("/classes", response_model=B2BPageResponse[B2BClass])
 async def list_classes(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -463,7 +463,7 @@ async def get_class(
 
 # ---- Students ----
 
-@router.get("/students", response_model=B2BPageResponse)
+@router.get("/students", response_model=B2BPageResponse[B2BStudent])
 async def list_students(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -551,7 +551,7 @@ async def get_student(
 
 # ---- Enrollments ----
 
-@router.get("/enrollments", response_model=B2BPageResponse)
+@router.get("/enrollments", response_model=B2BPageResponse[B2BEnrollment])
 async def list_enrollments(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -719,7 +719,7 @@ async def get_enrollment(
 
 # ---- Certificates ----
 
-@router.get("/certificates", response_model=B2BPageResponse)
+@router.get("/certificates", response_model=B2BPageResponse[B2BCertificate])
 async def list_certificates(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),

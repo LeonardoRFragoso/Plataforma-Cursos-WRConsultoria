@@ -12,7 +12,7 @@ Other roles are rejected with 403.
 
 Role reconciliation:
 - Central ADMIN + LMS admin → stays admin.
-- Central ADMIN + LMS student → promoted to admin (trusted IdP).
+- Central ADMIN + LMS student → rejected with 403; never promoted.
 - Central ADMIN + LMS super_admin → stays super_admin (never downgraded).
 - Central ADMIN + no LMS user → auto-provisioned as admin.
 - Central non-ADMIN → 403, no role change.
@@ -241,11 +241,12 @@ def _reconcile_role(user: User, central_role: str) -> bool:
 
     Rules:
     - Central ADMIN + LMS admin → stays admin (no change).
-    - Central ADMIN + LMS student → promoted to admin.
+    - Central ADMIN + LMS student → rejected; never promoted.
     - Central ADMIN + LMS super_admin → stays super_admin (NEVER downgraded).
     - Central non-ADMIN → caller must have already rejected with 403.
 
     Returns True if the role was changed, False if it stayed the same.
+    Raises 403 for an existing local user without an administrative role.
     """
     normalized_central = (central_role or "").strip().upper()
     if normalized_central != "ADMIN":
@@ -257,8 +258,18 @@ def _reconcile_role(user: User, central_role: str) -> bool:
         return False
 
     if user.role != UserRole.ADMIN:
-        user.role = UserRole.ADMIN
-        return True
+        logger.warning(
+            "sso_existing_user_role_not_allowed",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "existing_user_not_admin",
+                "user_id": str(user.id),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário local não possui perfil administrativo",
+        )
 
     return False
 
@@ -283,8 +294,8 @@ async def sso_exchange(
        a. Look up ``ExternalIdentity`` by provider + external_subject.
        b. If not found, look up by email within the WR tenant and link.
        c. If still not found, auto-provision a new admin user.
-    5. Reconcile role: promote student → admin if Central is ADMIN.
-       Never downgrade super_admin.
+    5. Reconcile role: existing local students are rejected; existing
+       administrators retain their role. Never downgrade super_admin.
     6. Issue LMS JWT tokens (same shape as normal login).
     7. Update ``ExternalIdentity.last_login_at``.
     """
