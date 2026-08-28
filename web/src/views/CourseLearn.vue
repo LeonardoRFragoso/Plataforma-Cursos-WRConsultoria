@@ -33,9 +33,9 @@
           <CourseCover
             :course="course"
             ratio="16/9"
-            fit="cover"
+            fit="contain"
             loading="lazy"
-            wrapper-class="w-full sm:w-32 sm:h-20 shrink-0 rounded-xl overflow-hidden"
+            wrapper-class="w-full shrink-0 overflow-hidden rounded-xl bg-white sm:w-32"
             img-test-id="courselearn-context-img"
             fb-test-id="courselearn-context-fallback"
           />
@@ -64,6 +64,9 @@
                 {{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }}
               </span>
             </p>
+            <p v-if="progressError" class="mt-2 text-xs font-semibold text-amber-700" data-testid="progress-load-error">
+              O progresso não pôde ser atualizado agora. As aulas continuam disponíveis abaixo.
+            </p>
           </div>
         </div>
       </section>
@@ -75,42 +78,65 @@
             <h3 class="mt-1 font-bold text-slate-900">Aulas do curso</h3>
           </div>
           <div class="max-h-[68vh] space-y-1 overflow-y-auto p-2">
-            <button
-              v-for="lesson in lessons"
-              :key="lesson.id"
-              type="button"
-              data-testid="lesson-row"
-              :data-lesson-id="lesson.id"
-              :data-lesson-order="lesson.order"
-              :data-lesson-required="lesson.is_required ? 'true' : 'false'"
-              :data-lesson-completed="lesson.completed ? 'true' : 'false'"
-              :class="[
-                'flex w-full items-center gap-3 rounded-xl p-3 text-left text-sm transition',
-                selectedLesson?.id === lesson.id
-                  ? 'bg-[var(--brand-primary-soft)] text-slate-900'
-                  : 'text-slate-600 hover:bg-slate-50',
-              ]"
-              @click="selectLesson(lesson)"
+            <div v-if="journeyLoading" class="p-6 text-center text-sm text-slate-400" data-testid="lessons-loading">
+              Carregando aulas…
+            </div>
+            <div
+              v-else-if="lessonsError"
+              class="m-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+              data-testid="lessons-load-error"
             >
-              <span
-                :class="[
-                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black',
-                  lesson.completed
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : selectedLesson?.id === lesson.id
-                      ? 'bg-white text-[var(--brand-primary)]'
-                      : 'bg-slate-100 text-slate-500',
-                ]"
+              <p class="font-bold">Não foi possível carregar as aulas.</p>
+              <p class="mt-1 text-xs leading-5 text-amber-800/80">{{ lessonsError }}</p>
+              <button
+                type="button"
+                class="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900"
+                data-testid="lessons-retry-button"
+                @click="reloadStudentJourney"
               >
-                {{ lesson.completed ? '✓' : lesson.order }}
-              </span>
-              <span class="min-w-0 flex-1 truncate font-semibold" data-testid="lesson-title">{{ lesson.title }}</span>
-              <span v-if="lesson.completed" data-testid="lesson-completed" class="sr-only">Concluída</span>
-              <span v-else-if="lesson.is_free_preview" class="text-[10px] font-bold text-[var(--brand-primary)]">Preview</span>
-              <span v-else-if="!lesson.is_required" data-testid="lesson-optional" class="text-[10px] text-slate-400">Opcional</span>
-              <span v-else data-testid="lesson-required" class="text-[10px] text-slate-400">Obrigatória</span>
-            </button>
-            <p v-if="lessons.length === 0" class="p-6 text-center text-sm text-slate-400">Nenhuma aula disponível.</p>
+                Tentar novamente
+              </button>
+            </div>
+            <template v-else>
+              <button
+                v-for="lesson in lessons"
+                :key="lesson.id"
+                type="button"
+                data-testid="lesson-row"
+                :data-lesson-id="lesson.id"
+                :data-lesson-order="lesson.order"
+                :data-lesson-required="lesson.is_required ? 'true' : 'false'"
+                :data-lesson-completed="lesson.completed ? 'true' : 'false'"
+                :class="[
+                  'flex w-full items-center gap-3 rounded-xl p-3 text-left text-sm transition',
+                  selectedLesson?.id === lesson.id
+                    ? 'bg-[var(--brand-primary-soft)] text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-50',
+                ]"
+                @click="selectLesson(lesson)"
+              >
+                <span
+                  :class="[
+                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black',
+                    lesson.completed
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : selectedLesson?.id === lesson.id
+                        ? 'bg-white text-[var(--brand-primary)]'
+                        : 'bg-slate-100 text-slate-500',
+                  ]"
+                >
+                  {{ lesson.completed ? '✓' : lesson.order }}
+                </span>
+                <span class="min-w-0 flex-1 truncate font-semibold" data-testid="lesson-title">{{ lesson.title }}</span>
+                <span v-if="lesson.completed" data-testid="lesson-completed" class="sr-only">Concluída</span>
+                <span v-else-if="lesson.is_free_preview" class="text-[10px] font-bold text-[var(--brand-primary)]">Preview</span>
+                <span v-else-if="!lesson.is_required" data-testid="lesson-optional" class="text-[10px] text-slate-400">Opcional</span>
+                <span v-else data-testid="lesson-required" class="text-[10px] text-slate-400">Obrigatória</span>
+              </button>
+              <p v-if="lessons.length === 0" class="p-6 text-center text-sm text-slate-400" data-testid="lessons-empty">
+                Nenhuma aula foi cadastrada para este curso.
+              </p>
+            </template>
           </div>
         </aside>
 
@@ -185,8 +211,22 @@
               <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]">
                 <NavIcon name="catalog" />
               </div>
-              <p class="mt-4 font-bold text-slate-800">Selecione uma aula para começar</p>
-              <p class="mt-1 text-sm text-slate-400">Seu progresso é salvo automaticamente.</p>
+              <template v-if="journeyLoading">
+                <p class="mt-4 font-bold text-slate-800">Carregando conteúdo do curso</p>
+                <p class="mt-1 text-sm text-slate-400">Aguarde enquanto consultamos suas aulas.</p>
+              </template>
+              <template v-else-if="lessonsError">
+                <p class="mt-4 font-bold text-slate-800">As aulas não puderam ser carregadas</p>
+                <p class="mt-1 text-sm text-slate-400">Use “Tentar novamente” na lista de aulas. Seu acesso não foi marcado como vazio.</p>
+              </template>
+              <template v-else-if="lessons.length === 0">
+                <p class="mt-4 font-bold text-slate-800">Este curso ainda não possui aulas cadastradas</p>
+                <p class="mt-1 text-sm text-slate-400">Se você esperava conteúdo aqui, entre em contato com a administração.</p>
+              </template>
+              <template v-else>
+                <p class="mt-4 font-bold text-slate-800">Selecione uma aula para começar</p>
+                <p class="mt-1 text-sm text-slate-400">Seu progresso é salvo automaticamente.</p>
+              </template>
             </div>
           </div>
         </main>
@@ -383,6 +423,9 @@ const demoEnrolling = ref(false)
 const videoRef = ref(null)
 const currentTime = ref(0)
 const videoDuration = ref(0)
+const journeyLoading = ref(true)
+const lessonsError = ref('')
+const progressError = ref('')
 
 const assessmentSession = ref(null)
 const assessmentAnswers = ref({})
@@ -421,6 +464,13 @@ const certificateValidationCode = computed(
   () => certificateResult.value?.validation_code || assessment.value.certificate_validation_code || null,
 )
 
+const getApiErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (error?.code === 'ECONNABORTED') return 'A conexão com o servidor excedeu o tempo limite.'
+  return error?.message || fallback
+}
+
 const loadCourse = async () => {
   try {
     course.value = (await api.get(`/api/v1/courses/${courseId}`)).data
@@ -430,18 +480,29 @@ const loadCourse = async () => {
 }
 
 const loadLessons = async () => {
+  lessonsError.value = ''
   try {
     lessons.value = (await api.get(`/api/v1/lessons/courses/${courseId}/lessons`)).data
   } catch (error) {
-    if (error.response?.status === 403) notEnrolled.value = true
+    if (error.response?.status === 403) {
+      notEnrolled.value = true
+      return
+    }
+    lessons.value = []
+    lessonsError.value = getApiErrorMessage(error, 'Não foi possível carregar as aulas deste curso.')
   }
 }
 
 const loadProgress = async () => {
+  progressError.value = ''
   try {
     progress.value = (await api.get(`/api/v1/lessons/courses/${courseId}/my-progress`)).data
   } catch (error) {
-    if (error.response?.status === 403) notEnrolled.value = true
+    if (error.response?.status === 403) {
+      notEnrolled.value = true
+      return
+    }
+    progressError.value = getApiErrorMessage(error, 'Não foi possível atualizar o progresso do curso.')
   }
 }
 
@@ -463,7 +524,12 @@ const loadAssessment = async () => {
 }
 
 const reloadStudentJourney = async () => {
-  await Promise.all([loadLessons(), loadProgress(), loadAssessment()])
+  journeyLoading.value = true
+  try {
+    await Promise.all([loadLessons(), loadProgress(), loadAssessment()])
+  } finally {
+    journeyLoading.value = false
+  }
 }
 
 const activateDemoAccess = async () => {
@@ -622,7 +688,7 @@ const confirmCompletion = async () => {
 
 onMounted(async () => {
   await loadCourse()
-  await Promise.all([loadLessons(), loadProgress(), loadAssessment()])
+  await reloadStudentJourney()
 })
 
 onBeforeUnmount(() => {
