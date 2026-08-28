@@ -16,6 +16,12 @@ Role reconciliation:
 - Central ADMIN + LMS super_admin → stays super_admin (never downgraded).
 - Central ADMIN + no LMS user → auto-provisioned as admin.
 - Central non-ADMIN → 403, no role change.
+
+Claim validation (defense in depth, before any user provisioning):
+- ``source`` must be ``"central-wr"``.
+- ``role`` must be ``"ADMIN"``.
+- ``tenant_id`` must be present.
+- If ``CENTRAL_WR_TRUSTED_TENANT_ID`` is set, ``tenant_id`` must match it.
 """
 
 import logging
@@ -39,6 +45,7 @@ logger = logging.getLogger("app.sso")
 router = APIRouter()
 
 SSO_PROVIDER = "central-wr"
+_EXPECTED_SOURCE = "central-wr"
 
 # Central WR role → LMS role mapping. Only ADMIN is accepted for now.
 _CENTRAL_ROLE_MAP = {
@@ -131,6 +138,78 @@ async def _exchange_code_with_central(
     return claims
 
 
+def _validate_claims(claims: dict) -> None:
+    """Validate the identity claims returned by Central WR.
+
+    This is defense in depth — even if Central WR is compromised or a bug
+    causes it to return unexpected claims, the LMS must not provision or
+    link any user.
+
+    Raises HTTPException (403 or 502) on any validation failure.
+    """
+    source = claims.get("source")
+    if source != _EXPECTED_SOURCE:
+        logger.warning(
+            "sso_claims_invalid_source",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "invalid_source",
+                "source": source,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Origem de identidade não confiável",
+        )
+
+    central_role = (claims.get("role") or "").strip().upper()
+    if central_role != "ADMIN":
+        logger.warning(
+            "sso_claims_role_not_allowed",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "role_not_allowed",
+                "central_role": central_role,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas administradores podem acessar via SSO",
+        )
+
+    central_tenant_id = claims.get("tenant_id")
+    if not central_tenant_id:
+        logger.warning(
+            "sso_claims_missing_tenant",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "missing_tenant",
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Resposta inválida da Central WR",
+        )
+
+    # If CENTRAL_WR_TRUSTED_TENANT_ID is configured, validate that the
+    # Central WR tenant_id matches it. This prevents an ADMIN from a
+    # different Central WR tenant from getting SSO access.
+    trusted = settings.CENTRAL_WR_TRUSTED_TENANT_ID
+    if trusted and str(central_tenant_id) != str(trusted):
+        logger.warning(
+            "sso_claims_tenant_not_trusted",
+            extra={
+                "event": "sso_login_failed",
+                "reason": "tenant_not_trusted",
+                "central_tenant_id": central_tenant_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant da Central WR não autorizado",
+        )
+
+
 def _map_role(central_role: str) -> UserRole:
     """Map a Central WR role to an LMS role.
 
@@ -192,15 +271,19 @@ async def sso_exchange(
     Flow:
     1. Call Central WR backend server-to-server to exchange the code + state
        for identity claims. Central validates state == ticket.nonce.
-    2. Map the Central role → LMS role (ADMIN only, 403 otherwise).
-    3. Find or create the local user:
+    2. **Validate claims** (source, role, tenant_id, trusted tenant).
+       This happens BEFORE any user lookup or provisioning — if claims
+       are invalid, no user is created, no ExternalIdentity is linked,
+       and no role is changed.
+    3. Map the Central role → LMS role (ADMIN only, 403 otherwise).
+    4. Find or create the local user:
        a. Look up ``ExternalIdentity`` by provider + external_subject.
        b. If not found, look up by email within the WR tenant and link.
        c. If still not found, auto-provision a new admin user.
-    4. Reconcile role: promote student → admin if Central is ADMIN.
+    5. Reconcile role: promote student → admin if Central is ADMIN.
        Never downgrade super_admin.
-    5. Issue LMS JWT tokens (same shape as normal login).
-    6. Update ``ExternalIdentity.last_login_at``.
+    6. Issue LMS JWT tokens (same shape as normal login).
+    7. Update ``ExternalIdentity.last_login_at``.
     """
     # Exchange the code with Central WR (state is validated by Central).
     try:
@@ -224,6 +307,11 @@ async def sso_exchange(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Resposta inválida da Central WR",
         )
+
+    # Validate claims BEFORE any user provisioning or ExternalIdentity
+    # creation. This is the critical defense-in-depth check — an ADMIN
+    # from an unauthorized Central WR tenant must never get access.
+    _validate_claims(claims)
 
     # Map the role (raises 403 for non-ADMIN).
     lms_role = _map_role(central_role)

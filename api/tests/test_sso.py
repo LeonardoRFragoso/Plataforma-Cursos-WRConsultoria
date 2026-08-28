@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.core.config import settings
 from app.core.constants import WR_TENANT_ID
 from app.core.database import AsyncSessionLocal
 from app.core.security import decode_token
@@ -509,3 +510,232 @@ async def test_sso_external_identity_rls_tenant_context(client, mock_exchange):
         ext = result.scalar_one_or_none()
         assert ext is not None
         assert str(ext.tenant_id) == str(WR_TENANT_ID)
+
+
+# ============================================================================
+# Claim validation tests (defense in depth)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_sso_invalid_source_rejected_403(client, mock_exchange):
+    """Claims with source != 'central-wr' → 403, no provisioning."""
+    mock_exchange.return_value = {
+        "sub": "evil-user",
+        "email": "evil@wr.com",
+        "name": "Evil",
+        "role": "ADMIN",
+        "tenant_id": str(WR_TENANT_ID),
+        "source": "evil-idp",
+    }
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 403
+
+    # No user should be provisioned.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.email == "evil@wr.com")
+        result = await session.execute(stmt)
+        assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_sso_missing_tenant_id_rejected(client, mock_exchange):
+    """Claims without tenant_id → 502, no provisioning."""
+    mock_exchange.return_value = {
+        "sub": "no-tenant-user",
+        "email": "notenant@wr.com",
+        "name": "No Tenant",
+        "role": "ADMIN",
+        "source": "central-wr",
+    }
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 502
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.email == "notenant@wr.com")
+        result = await session.execute(stmt)
+        assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_sso_unauthorized_central_tenant_rejected_403(client, mock_exchange, monkeypatch):
+    """Claims with tenant_id != CENTRAL_WR_TRUSTED_TENANT_ID → 403."""
+    # Set a trusted tenant ID that doesn't match the claims.
+    monkeypatch.setattr(settings, "CENTRAL_WR_TRUSTED_TENANT_ID", str(uuid.uuid4()))
+
+    mock_exchange.return_value = _claims()
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 403
+
+    # No user should be provisioned or linked.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(ExternalIdentity).where(
+            ExternalIdentity.provider == SSO_PROVIDER,
+            ExternalIdentity.external_subject == "central-user-123",
+        )
+        result = await session.execute(stmt)
+        assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_sso_non_admin_role_rejected_by_claims_validation(client, mock_exchange):
+    """Claims with role != ADMIN → 403 via _validate_claims, no provisioning."""
+    mock_exchange.return_value = _claims(role="STUDENT")
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    assert response.status_code == 403
+
+
+# ============================================================================
+# CRITICAL: Cross-tenant escalation test
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_sso_cross_tenant_escalation_blocked(client, mock_exchange, monkeypatch):
+    """CRITICAL: ADMIN from unauthorized Central WR tenant cannot escalate.
+
+    Scenario:
+    - Central WR has Tenant A (WR) and Tenant B (other company).
+    - LMS has an existing super_admin: ceo@wr.com.
+    - Central WR Tenant B has an ADMIN with the same email: ceo@wr.com.
+    - That Tenant B ADMIN attempts SSO.
+
+    Expected result:
+    - 403 before account linking.
+    - LMS super_admin remains intact.
+    - No ExternalIdentity created.
+    - No LMS JWT issued.
+    """
+    # Set the trusted Central WR tenant to the WR tenant.
+    monkeypatch.setattr(settings, "CENTRAL_WR_TRUSTED_TENANT_ID", str(WR_TENANT_ID))
+
+    # Create the existing LMS super_admin.
+    super_admin = await _create_user(
+        "ceo@wr.com",
+        full_name="CEO WR",
+        role=UserRole.SUPER_ADMIN,
+        external_subject=None,
+    )
+
+    # Central WR returns claims for a DIFFERENT tenant (Tenant B).
+    other_tenant_id = uuid.uuid4()
+    mock_exchange.return_value = {
+        "sub": "tenant-b-admin",
+        "email": "ceo@wr.com",
+        "name": "CEO from Tenant B",
+        "role": "ADMIN",
+        "tenant_id": str(other_tenant_id),
+        "source": "central-wr",
+    }
+
+    response = await client.post(
+        "/api/v1/sso/exchange",
+        json={"code": "valid-code", "state": "state123"},
+    )
+
+    # Must be 403 — tenant not trusted.
+    assert response.status_code == 403
+
+    # Verify the super_admin's role was NOT changed.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(User).where(User.id == super_admin.id)
+        result = await session.execute(stmt)
+        unchanged = result.scalar_one()
+        assert unchanged.role == UserRole.SUPER_ADMIN
+
+    # Verify NO ExternalIdentity was created for the Tenant B admin.
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(ExternalIdentity).where(
+            ExternalIdentity.provider == SSO_PROVIDER,
+            ExternalIdentity.external_subject == "tenant-b-admin",
+        )
+        result = await session.execute(stmt)
+        assert result.scalar_one_or_none() is None
+
+
+# ============================================================================
+# Config validation tests
+# ============================================================================
+
+
+def test_config_default_secret_rejected_in_production(monkeypatch):
+    """Default secret is rejected when ENVIRONMENT=production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "change-me-sso-secret")
+    with pytest.raises(ValueError, match="change-me-sso-secret"):
+        Settings()
+
+
+def test_config_empty_secret_rejected_in_production(monkeypatch):
+    """Empty secret is rejected in production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "")
+    with pytest.raises(ValueError, match="empty"):
+        Settings()
+
+
+def test_config_short_secret_rejected_in_production(monkeypatch):
+    """Secret shorter than 32 chars is rejected in production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "short-secret-20-chars!!")
+    with pytest.raises(ValueError, match="32"):
+        Settings()
+
+
+def test_config_strong_secret_accepted_in_production(monkeypatch):
+    """Secret >= 32 chars is accepted in production with HTTPS URLs."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
+    monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    s = Settings()
+    assert s.CENTRAL_WR_SSO_CLIENT_SECRET == "a" * 32
+
+
+def test_config_http_url_rejected_in_production(monkeypatch):
+    """HTTP URLs are rejected for SSO URLs in production."""
+    from app.core.config import Settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CENTRAL_WR_SSO_CLIENT_SECRET", "a" * 32)
+    monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "http://central.example.com")
+    with pytest.raises(ValueError, match="HTTPS"):
+        Settings()

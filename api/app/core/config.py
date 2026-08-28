@@ -3,6 +3,7 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_SSO_SECRET = "change-me-sso-secret"
+_MIN_SECRET_LENGTH = 32
 
 
 def _normalize_database_url(url: str) -> str:
@@ -62,6 +63,12 @@ class Settings(BaseSettings):
     CENTRAL_WR_BACKEND_URL: str = "http://localhost:8000"
     CENTRAL_WR_SSO_CLIENT_ID: str = "lms-wr-cursos"
     CENTRAL_WR_SSO_CLIENT_SECRET: str = "change-me-sso-secret"
+    # The tenant_id (UUID) of the Central WR tenant that is trusted to
+    # send ADMIN users via SSO. This is the Central WR tenant UUID — it
+    # is NOT the same as WR_TENANT_ID (the LMS's internal tenant).
+    # When set, the LMS validates that claims["tenant_id"] matches this
+    # value before provisioning or linking any user.
+    CENTRAL_WR_TRUSTED_TENANT_ID: str = ""
 
     # Demo/staging seed gate. The demo seed script refuses to run unless
     # this is true AND ENVIRONMENT != production.
@@ -148,21 +155,47 @@ class Settings(BaseSettings):
     DOCS_ENABLED: bool = True
 
     @model_validator(mode="after")
-    def _validate_sso_secret_not_default_in_production(self) -> "Settings":
-        """Block startup in production if the SSO client secret is still
-        the insecure default value.
+    def _validate_sso_production_hardening(self) -> "Settings":
+        """Block startup in production if SSO configuration is insecure.
 
-        The default ``change-me-sso-secret`` is fine for local development
-        and tests, but must never reach a production deployment.
+        In production:
+        - CENTRAL_WR_SSO_CLIENT_SECRET must not be the default, must not
+          be empty, and must be at least 32 characters.
+        - CENTRAL_WR_FRONTEND_URL and CENTRAL_WR_BACKEND_URL must use
+          HTTPS (browser redirects must never go to http:// in production).
         """
-        if (
-            self.ENVIRONMENT.lower() == "production"
-            and self.CENTRAL_WR_SSO_CLIENT_SECRET == _INSECURE_DEFAULT_SSO_SECRET
-        ):
+        if self.ENVIRONMENT.lower() != "production":
+            return self
+
+        secret = self.CENTRAL_WR_SSO_CLIENT_SECRET
+        if not secret:
+            raise ValueError(
+                "CENTRAL_WR_SSO_CLIENT_SECRET must be set in production "
+                "(empty value not allowed)."
+            )
+        if secret == _INSECURE_DEFAULT_SSO_SECRET:
             raise ValueError(
                 "CENTRAL_WR_SSO_CLIENT_SECRET must be set to a strong secret in "
                 "production (the default 'change-me-sso-secret' is not allowed)."
             )
+        if len(secret) < _MIN_SECRET_LENGTH:
+            raise ValueError(
+                f"CENTRAL_WR_SSO_CLIENT_SECRET must be at least {_MIN_SECRET_LENGTH} "
+                f"characters in production (got {len(secret)}). "
+                f"Use a randomly generated secret."
+            )
+
+        # HTTPS validation for browser-facing URLs
+        for field_name, url in [
+            ("CENTRAL_WR_FRONTEND_URL", self.CENTRAL_WR_FRONTEND_URL),
+            ("CENTRAL_WR_BACKEND_URL", self.CENTRAL_WR_BACKEND_URL),
+        ]:
+            if url and not url.startswith("https://"):
+                raise ValueError(
+                    f"{field_name} must use HTTPS in production (got '{url}'). "
+                    f"Browser redirects must never go to http://."
+                )
+
         return self
 
 
