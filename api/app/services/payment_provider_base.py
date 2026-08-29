@@ -192,6 +192,14 @@ async def resolve_provider(
        back to another provider silently).
     2. ``PAYMENT_PROVIDER`` global default (must also be enabled).
 
+    Rollout safety:
+    - In non-production with ``PAYMENT_PROVIDERS_ENABLED`` empty, all
+      recognized providers (ASAAS, MERCADO_PAGO) are allowed. This
+      preserves backward compatibility for existing staging tenants.
+    - In production, an empty ``PAYMENT_PROVIDERS_ENABLED`` causes startup
+      to fail (enforced in Settings validator). So resolve_provider only
+      sees an empty list in non-production.
+
     Credentials are fetched from `TenantSecret` (encrypted). Falls back
     to legacy ``tenant.settings["mp_access_token"]`` for Mercado Pago
     during the migration window.
@@ -204,6 +212,12 @@ async def resolve_provider(
     )
 
     enabled_providers = _settings.payment_providers_enabled_list
+    _RECOGNIZED = {"ASAAS", "MERCADO_PAGO"}
+
+    # Non-production backward compat: empty enabled list = all recognized
+    # providers allowed (legacy/staging behavior).
+    if not enabled_providers:
+        enabled_providers = sorted(_RECOGNIZED)
 
     settings = tenant_settings or {}
     configured = (settings.get("payment_provider") or "").upper()

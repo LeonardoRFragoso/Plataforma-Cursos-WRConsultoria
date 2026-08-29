@@ -738,6 +738,8 @@ def test_config_strong_secret_accepted_in_production(monkeypatch):
     monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", str(uuid.uuid4()))
     monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
     monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "ASAAS")
+    monkeypatch.setenv("PAYMENT_PROVIDERS_ENABLED", "ASAAS")
     s = Settings()
     assert s.CENTRAL_WR_SSO_CLIENT_SECRET == "a" * 32
 
@@ -790,6 +792,8 @@ def test_config_trusted_tenant_valid_uuid_accepted_in_production(monkeypatch):
     monkeypatch.setenv("CENTRAL_WR_TRUSTED_TENANT_ID", valid_uuid)
     monkeypatch.setenv("CENTRAL_WR_FRONTEND_URL", "https://central.example.com")
     monkeypatch.setenv("CENTRAL_WR_BACKEND_URL", "https://central-api.example.com")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "ASAAS")
+    monkeypatch.setenv("PAYMENT_PROVIDERS_ENABLED", "ASAAS")
     s = Settings()
     assert s.CENTRAL_WR_TRUSTED_TENANT_ID == valid_uuid
 

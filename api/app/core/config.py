@@ -176,14 +176,17 @@ class Settings(BaseSettings):
 
     @property
     def payment_providers_enabled_list(self) -> list[str]:
-        """Return the list of enabled payment providers (uppercased).
+        """Return the list of explicitly enabled payment providers (uppercased).
 
-        If PAYMENT_PROVIDERS_ENABLED is empty, defaults to [PAYMENT_PROVIDER]
-        for backwards compatibility.
+        Returns [] if PAYMENT_PROVIDERS_ENABLED is empty. In non-production
+        environments, resolve_provider() treats an empty list as "all
+        recognized providers allowed" (legacy/staging backward compat).
+        In production, an empty list causes startup to fail (explicit config
+        required).
         """
         raw = self.PAYMENT_PROVIDERS_ENABLED.strip()
         if not raw:
-            return [self.PAYMENT_PROVIDER.upper()]
+            return []
         return [p.strip().upper() for p in raw.split(",") if p.strip()]
 
     @model_validator(mode="after")
@@ -248,6 +251,29 @@ class Settings(BaseSettings):
                     f"{field_name} must use HTTPS in production (got '{url}'). "
                     f"Browser redirects must never go to http://."
                 )
+
+        # Payment provider explicit configuration required in production.
+        # PAYMENT_PROVIDERS_ENABLED must not be empty, PAYMENT_PROVIDER must
+        # be in the enabled list, and all enabled providers must be recognized.
+        enabled = self.payment_providers_enabled_list
+        if not enabled:
+            raise ValueError(
+                "PAYMENT_PROVIDERS_ENABLED must not be empty in production. "
+                "Set it explicitly (e.g., 'ASAAS' or 'ASAAS,MERCADO_PAGO')."
+            )
+        recognized = {"ASAAS", "MERCADO_PAGO"}
+        unknown = set(enabled) - recognized
+        if unknown:
+            raise ValueError(
+                f"PAYMENT_PROVIDERS_ENABLED contains unrecognized providers: "
+                f"{', '.join(sorted(unknown))}. Recognized: {', '.join(sorted(recognized))}."
+            )
+        default = self.PAYMENT_PROVIDER.upper()
+        if default not in enabled:
+            raise ValueError(
+                f"PAYMENT_PROVIDER '{default}' must be in "
+                f"PAYMENT_PROVIDERS_ENABLED ({', '.join(enabled)}) in production."
+            )
 
         return self
 

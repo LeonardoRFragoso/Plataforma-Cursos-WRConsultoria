@@ -9,9 +9,10 @@ to prevent duplicate transactional email deliveries (duplicate webhooks,
 retries, concurrent handlers).
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f7a8b9c0d1e2"
@@ -28,7 +29,7 @@ def upgrade() -> None:
         sa.Column("dedup_key", sa.String(256), nullable=False),
         sa.Column("notification_type", sa.String(64), nullable=False, index=True),
         sa.Column("entity_id", postgresql.UUID(as_uuid=True), nullable=True, index=True),
-        sa.Column("status", sa.String(32), nullable=False, server_default="SENT"),
+        sa.Column("status", sa.String(32), nullable=False, server_default="PENDING"),
         sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_notification_events_dedup_key", "notification_events", ["dedup_key"], unique=True)

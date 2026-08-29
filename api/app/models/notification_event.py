@@ -42,6 +42,6 @@ class NotificationEvent(Base):
     notification_type = Column(String(64), nullable=False, index=True)
     # Entity ID the notification is about (payment_id, enrollment_id, etc.)
     entity_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    # Delivery status: "SENT", "SKIPPED", "FAILED"
-    status = Column(String(32), nullable=False, default="SENT")
+    # Delivery status: "PENDING", "SENT", "FAILED"
+    status = Column(String(32), nullable=False, default="PENDING")
     created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
