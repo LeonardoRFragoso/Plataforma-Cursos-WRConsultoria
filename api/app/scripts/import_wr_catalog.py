@@ -479,8 +479,13 @@ def plan_compliance_profile(
       After future matrix update (status != REVIEW_REQUIRED), blocker is
       removed but status stays REVIEW_REQUIRED (no auto-promote).
     - ARCHIVED profiles are never reactivated.
+    - REGULATORY REVALIDATION: if existing.status == COMPLIANCE_READY and
+      at least one MATERIAL compliance field changes (or a new blocker is
+      added), target_status is downgraded to REVIEW_REQUIRED. A previously
+      approved profile cannot silently stay approved when its regulatory
+      parameters change.
     - No auto-promote: once REVIEW_REQUIRED, status stays REVIEW_REQUIRED
-      even if the blocker is resolved.
+      even if the blocker is resolved or all material fields match again.
     - Blockers are deduplicated by code (idempotent).
     - External blockers (not managed by this reconciler) are always preserved.
     - Resolved blockers are removed from the list, but status remains REVIEW_REQUIRED.
@@ -570,7 +575,71 @@ def plan_compliance_profile(
     existing_blockers = list(existing.compliance_blockers) if existing and existing.compliance_blockers else []
     merged_blockers, blocker_changes = _merge_blockers(existing_blockers, blockers_to_add, blockers_to_remove)
 
-    # Determine target status
+    # -----------------------------------------------------------------------
+    # MATERIAL COMPLIANCE FIELDS — used for regulatory revalidation.
+    # These are the fields whose change invalidates a previous COMPLIANCE_READY
+    # approval. MANUAL-OWNED fields are NOT included (they have their own
+    # lifecycles and don't invalidate regulatory approval).
+    # -----------------------------------------------------------------------
+    MATERIAL_FIELDS = [
+        "regulatory_standard",
+        "regulatory_version",
+        "delivery_mode",
+        "workload_source",
+        "workload_minutes",
+        "normative_minimum_minutes",
+        "requires_practical_component",
+        "requires_final_assessment",
+        "validity_period_months",
+        "prerequisites",
+        "compliance_blockers",
+    ]
+
+    # Build target state (without status — status is computed after material
+    # changes are detected to avoid an artificial cycle).
+    target_state_no_status = {
+        "regulatory_standard": standard,
+        "regulatory_version": version,
+        "delivery_mode": delivery_mode,
+        "workload_source": reg["workload_source"],
+        "workload_minutes": workload_minutes,
+        "normative_minimum_minutes": normative_minimum_minutes,
+        "requires_practical_component": requires_practical,
+        "requires_final_assessment": True,
+        "validity_period_months": target_validity,
+        "prerequisites": target_prerequisites,
+        "certificate_required_fields": target_cert_fields,
+        "compliance_blockers": merged_blockers,
+    }
+
+    # Compute material changes BEFORE deciding status (avoids artificial cycle
+    # where status change itself would be counted as a material change).
+    material_changes: list[dict] = []
+    if existing is not None:
+        existing_values = {
+            "regulatory_standard": existing.regulatory_standard,
+            "regulatory_version": existing.regulatory_version,
+            "delivery_mode": existing.delivery_mode,
+            "workload_source": existing.workload_source,
+            "workload_minutes": existing.workload_minutes,
+            "normative_minimum_minutes": existing.normative_minimum_minutes,
+            "requires_practical_component": existing.requires_practical_component,
+            "requires_final_assessment": existing.requires_final_assessment,
+            "validity_period_months": existing.validity_period_months,
+            "prerequisites": existing.prerequisites,
+            "compliance_blockers": list(existing.compliance_blockers) if existing.compliance_blockers else [],
+        }
+        for field_name in MATERIAL_FIELDS:
+            target_val = target_state_no_status.get(field_name)
+            current_val = existing_values.get(field_name)
+            if current_val != target_val:
+                material_changes.append({"field": field_name, "before": current_val, "after": target_val})
+
+    # Check if a new blocker was added (also invalidates COMPLIANCE_READY)
+    new_blocker_added = any(c["action"] == "added" for c in blocker_changes)
+
+    # Determine target status — computed AFTER material_changes to avoid
+    # the artificial cycle where status change would be counted as material.
     if existing is None:
         # New profile
         target_status = (
@@ -586,29 +655,20 @@ def plan_compliance_profile(
         # Never auto-promote back — once REVIEW_REQUIRED, stays REVIEW_REQUIRED
         # even after blocker resolution.
         target_status = ComplianceStatus.REVIEW_REQUIRED
+    elif existing.status == ComplianceStatus.COMPLIANCE_READY and (material_changes or new_blocker_added):
+        # REGULATORY REVALIDATION: a previously approved profile cannot stay
+        # COMPLIANCE_READY when material compliance fields change or a new
+        # blocker is added. Downgrade to REVIEW_REQUIRED for human re-approval.
+        target_status = ComplianceStatus.REVIEW_REQUIRED
     else:
-        # No force, no NR-18 review, matrix is not REVIEW_REQUIRED.
-        # Do NOT auto-promote. Keep existing status (could be DRAFT, IN_REVIEW,
-        # or COMPLIANCE_READY — reconciliation never upgrades status).
+        # No force, no NR-18 review, matrix is not REVIEW_REQUIRED, and either:
+        # - status is DRAFT/IN_REVIEW/REVIEW_REQUIRED (preserve, no auto-promote), or
+        # - status is COMPLIANCE_READY with no material changes (stay approved).
         target_status = existing.status
 
-    # Build target state — only MATRIX-OWNED fields are included for comparison.
-    # MANUAL-OWNED fields are preserved and NOT reported as changes.
-    target_state = {
-        "regulatory_standard": standard,
-        "regulatory_version": version,
-        "delivery_mode": delivery_mode,
-        "workload_source": reg["workload_source"],
-        "workload_minutes": workload_minutes,
-        "normative_minimum_minutes": normative_minimum_minutes,
-        "requires_practical_component": requires_practical,
-        "requires_final_assessment": True,
-        "validity_period_months": target_validity,
-        "prerequisites": target_prerequisites,
-        "certificate_required_fields": target_cert_fields,
-        "status": target_status,
-        "compliance_blockers": merged_blockers,
-    }
+    # Build final target state with status
+    target_state = dict(target_state_no_status)
+    target_state["status"] = target_status
 
     if existing is None:
         # New profile — all fields are "changes"
