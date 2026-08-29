@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     B2B_PREAUTH_RATE_LIMIT_REQUESTS: int = 200
     B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
     
+    # Global default payment provider. Per-tenant settings["payment_provider"]
+    # overrides this. Accepted values: "ASAAS", "MERCADO_PAGO".
+    # When set to "ASAAS", Mercado Pago mock mode is NOT required to be false
+    # in production (it's a legacy/inactive provider for that tenant).
+    PAYMENT_PROVIDER: str = "MERCADO_PAGO"
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
     MERCADO_PAGO_MOCK_MODE: bool = False

@@ -51,17 +51,28 @@ def validate_tenant_secret_encryption_key() -> list[str]:
 
 
 def validate_mercado_pago_mock_mode() -> list[str]:
-    """Verifica se MERCADO_PAGO_MOCK_MODE não está ativo em produção."""
+    """Verifica se MERCADO_PAGO_MOCK_MODE não está ativo em produção.
+
+    Only validates when Mercado Pago is the active provider (default or
+    explicitly configured). When Asaas is the active provider, Mercado Pago
+    is a legacy/inactive code path and its mock mode is irrelevant.
+    """
     issues = []
-    if settings.MERCADO_PAGO_MOCK_MODE:
+    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
+    if active_provider == "MERCADO_PAGO" and settings.MERCADO_PAGO_MOCK_MODE:
         issues.append("MERCADO_PAGO_MOCK_MODE must be false in production")
     return issues
 
 
 def validate_asaas_mock_mode() -> list[str]:
-    """Verifica se ASAAS_MOCK_MODE não está ativo em produção."""
+    """Verifica se ASAAS_MOCK_MODE não está ativo em produção.
+
+    Only validates when Asaas is the active provider. When Mercado Pago is
+    active, Asaas mock mode is irrelevant (Asaas code path is not used).
+    """
     issues = []
-    if getattr(settings, "ASAAS_MOCK_MODE", False):
+    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
+    if active_provider == "ASAAS" and getattr(settings, "ASAAS_MOCK_MODE", False):
         issues.append("ASAAS_MOCK_MODE must be false in production")
     return issues
 
@@ -78,9 +89,13 @@ def validate_email_mock_mode() -> list[str]:
 
 
 def validate_asaas_webhook_base_url() -> list[str]:
-    """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção."""
+    """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção.
+
+    Only validates when Asaas is the active provider.
+    """
     issues = []
-    if not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
+    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
+    if active_provider == "ASAAS" and not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
         issues.append(
             "ASAAS_WEBHOOK_BASE_URL is empty — must be set in production "
             "for Asaas webhook registration"

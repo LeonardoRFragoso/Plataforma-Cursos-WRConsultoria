@@ -265,6 +265,160 @@ Se você não criou esta conta, ignore este email.
             from_name=tenant_name,
         )
 
+    async def send_payment_approved(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        amount: str,
+        payment_method: str,
+        course_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Notify that a payment has been approved."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        safe_course_url = escape(course_url, quote=True)
+        safe_amount = escape(str(amount))
+        safe_method = escape(payment_method)
+        subject = f"Pagamento confirmado — {course_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Seu pagamento para o curso <strong>{safe_course}</strong> foi confirmado.</p>
+            <p style="color: #6B7280; font-size: 14px;">Valor: {safe_amount} · Método: {safe_method}</p>
+            <p><a href="{safe_course_url}" style="display: inline-block; padding: 10px 20px; background: #16a34a; color: white; text-decoration: none; border-radius: 5px;">Acessar curso</a></p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Seu pagamento para o curso {course_name} foi confirmado.\n"
+            f"Valor: {amount} · Método: {payment_method}\n"
+            f"Acesse: {course_url}"
+        )
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_course_completed(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        certificate_url: str | None = None,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Notify that a course has been completed."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        safe_cert_url = escape(certificate_url, quote=True) if certificate_url else None
+        subject = f"Curso concluído — {course_name}"
+        cert_html = ""
+        cert_text = ""
+        if certificate_url:
+            cert_html = f'<p><a href="{safe_cert_url}" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 5px;">Ver certificado</a></p>'
+            cert_text = f"\nCertificado: {certificate_url}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Parabéns! Você concluiu o curso <strong>{safe_course}</strong>.</p>
+            {cert_html}
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Parabéns! Você concluiu o curso {course_name}."
+            f"{cert_text}"
+        )
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_certificate_issued(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        certificate_number: str,
+        validation_url: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Notify that a certificate has been issued."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        safe_cert_num = escape(certificate_number)
+        safe_validation_url = escape(validation_url, quote=True)
+        subject = f"Certificado emitido — {course_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Seu certificado do curso <strong>{safe_course}</strong> foi emitido.</p>
+            <p style="color: #6B7280; font-size: 14px;">Certificado nº {safe_cert_num}</p>
+            <p><a href="{safe_validation_url}" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 5px;">Validar certificado</a></p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Seu certificado do curso {course_name} foi emitido.\n"
+            f"Certificado nº {certificate_number}\n"
+            f"Validar: {validation_url}"
+        )
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
+    async def send_certificate_expiration_warning(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        course_name: str,
+        certificate_number: str,
+        expires_at: str,
+        tenant_name: str = "Plataforma",
+    ) -> bool:
+        """Warn that a certificate/training is nearing expiration."""
+        safe_name = escape(full_name)
+        safe_course = escape(course_name)
+        safe_tenant = escape(tenant_name)
+        safe_cert_num = escape(certificate_number)
+        safe_expires = escape(expires_at)
+        subject = f"Certificado próximo do vencimento — {course_name}"
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">{safe_tenant}</h2>
+            <p>Olá, {safe_name}.</p>
+            <p>Seu certificado do curso <strong>{safe_course}</strong> (nº {safe_cert_num}) vence em <strong>{safe_expires}</strong>.</p>
+            <p>Para manter sua certificação atualizada, verifique os requisitos de reciclagem.</p>
+        </body>
+        </html>
+        """
+        text = (
+            f"{tenant_name}\n\nOlá, {full_name}.\n\n"
+            f"Seu certificado do curso {course_name} (nº {certificate_number}) "
+            f"vence em {expires_at}.\n"
+            f"Verifique os requisitos de reciclagem."
+        )
+        return await self.send_email(
+            to=to, subject=subject, html_body=html, text_body=text, from_name=tenant_name
+        )
+
     @property
     def sent_emails(self) -> list[dict[str, Any]]:
         """List of sent emails (for test inspection in mock mode)."""

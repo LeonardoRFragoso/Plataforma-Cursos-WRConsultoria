@@ -170,3 +170,170 @@ async def send_course_access_notification(
             enrollment.id,
         )
     return False
+
+
+async def send_payment_approved_notification(
+    db: AsyncSession,
+    enrollment: Enrollment,
+    *,
+    amount: str,
+    payment_method: str,
+) -> bool:
+    """Notify a student that their payment has been approved."""
+    if not _email_enabled():
+        return False
+    try:
+        stmt = (
+            select(User, Course, Tenant)
+            .select_from(Enrollment)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .join(Tenant, Enrollment.tenant_id == Tenant.id)
+            .where(Enrollment.id == enrollment.id)
+        )
+        row = (await db.execute(stmt)).first()
+        if not row:
+            return False
+        user, course, tenant = row
+        frontend_url = _tenant_frontend_url(tenant)
+        course_url = f"{frontend_url}/courses/{course.id}/learn"
+        return await get_email_service().send_payment_approved(
+            to=user.email,
+            full_name=user.full_name,
+            course_name=course.name,
+            amount=amount,
+            payment_method=payment_method,
+            course_url=course_url,
+            tenant_name=tenant.name,
+        )
+    except EmailServiceError:
+        logger.warning("Payment-approved email failed for enrollment %s", enrollment.id)
+    except Exception:
+        logger.exception("Unexpected payment-approved notification failure for enrollment %s", enrollment.id)
+    return False
+
+
+async def send_course_completed_notification(
+    db: AsyncSession,
+    enrollment: Enrollment,
+    *,
+    certificate_url: str | None = None,
+) -> bool:
+    """Notify a student that their course has been completed."""
+    if not _email_enabled():
+        return False
+    try:
+        stmt = (
+            select(User, Course, Tenant)
+            .select_from(Enrollment)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .join(Tenant, Enrollment.tenant_id == Tenant.id)
+            .where(Enrollment.id == enrollment.id)
+        )
+        row = (await db.execute(stmt)).first()
+        if not row:
+            return False
+        user, course, tenant = row
+        return await get_email_service().send_course_completed(
+            to=user.email,
+            full_name=user.full_name,
+            course_name=course.name,
+            certificate_url=certificate_url,
+            tenant_name=tenant.name,
+        )
+    except EmailServiceError:
+        logger.warning("Course-completed email failed for enrollment %s", enrollment.id)
+    except Exception:
+        logger.exception("Unexpected course-completed notification failure for enrollment %s", enrollment.id)
+    return False
+
+
+async def send_certificate_issued_notification(
+    db: AsyncSession,
+    enrollment: Enrollment,
+    *,
+    certificate_number: str,
+    validation_code: str,
+) -> bool:
+    """Notify a student that their certificate has been issued."""
+    if not _email_enabled():
+        return False
+    try:
+        stmt = (
+            select(User, Course, Tenant)
+            .select_from(Enrollment)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .join(Tenant, Enrollment.tenant_id == Tenant.id)
+            .where(Enrollment.id == enrollment.id)
+        )
+        row = (await db.execute(stmt)).first()
+        if not row:
+            return False
+        user, course, tenant = row
+        frontend_url = _tenant_frontend_url(tenant)
+        validation_url = f"{frontend_url}/validar-certificado?codigo={validation_code}"
+        return await get_email_service().send_certificate_issued(
+            to=user.email,
+            full_name=user.full_name,
+            course_name=course.name,
+            certificate_number=certificate_number,
+            validation_url=validation_url,
+            tenant_name=tenant.name,
+        )
+    except EmailServiceError:
+        logger.warning("Certificate-issued email failed for enrollment %s", enrollment.id)
+    except Exception:
+        logger.exception("Unexpected certificate-issued notification failure for enrollment %s", enrollment.id)
+    return False
+
+
+async def send_certificate_expiration_notification(
+    db: AsyncSession,
+    *,
+    enrollment_id: UUID,
+    tenant_id: UUID,
+    certificate_number: str,
+    expires_at: str,
+) -> bool:
+    """Warn a student that their certificate is nearing expiration."""
+    if not _email_enabled():
+        return False
+    try:
+        stmt = (
+            select(User, Course, Tenant)
+            .select_from(Enrollment)
+            .join(Student, Enrollment.student_id == Student.id)
+            .join(User, Student.user_id == User.id)
+            .join(Class, Enrollment.class_id == Class.id)
+            .join(Course, Class.course_id == Course.id)
+            .join(Tenant, Enrollment.tenant_id == Tenant.id)
+            .where(
+                Enrollment.id == enrollment_id,
+                Enrollment.tenant_id == tenant_id,
+            )
+        )
+        row = (await db.execute(stmt)).first()
+        if not row:
+            return False
+        user, course, tenant = row
+        return await get_email_service().send_certificate_expiration_warning(
+            to=user.email,
+            full_name=user.full_name,
+            course_name=course.name,
+            certificate_number=certificate_number,
+            expires_at=expires_at,
+            tenant_name=tenant.name,
+        )
+    except EmailServiceError:
+        logger.warning("Certificate-expiration email failed for enrollment %s", enrollment_id)
+    except Exception:
+        logger.exception("Unexpected certificate-expiration notification failure for enrollment %s", enrollment_id)
+    return False

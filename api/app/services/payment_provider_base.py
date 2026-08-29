@@ -28,6 +28,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings as _settings
 from app.models.payment import PaymentMethod, PaymentProvider
 
 
@@ -201,6 +202,8 @@ async def resolve_provider(
 
     settings = tenant_settings or {}
     configured = (settings.get("payment_provider") or "").upper()
+    if not configured:
+        configured = getattr(_settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
 
     if configured == PaymentProvider.ASAAS.value:
         api_key = await get_asaas_api_key(db, tenant_id)
