@@ -88,10 +88,17 @@ class Settings(BaseSettings):
     B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
     
     # Global default payment provider. Per-tenant settings["payment_provider"]
-    # overrides this. Accepted values: "ASAAS", "MERCADO_PAGO".
-    # When set to "ASAAS", Mercado Pago mock mode is NOT required to be false
-    # in production (it's a legacy/inactive provider for that tenant).
+    # overrides this, BUT only if the selected provider is in
+    # PAYMENT_PROVIDERS_ENABLED. If a tenant selects a provider that is not
+    # enabled, resolve_provider() fails closed (raises).
+    # Accepted values: "ASAAS", "MERCADO_PAGO".
     PAYMENT_PROVIDER: str = "MERCADO_PAGO"
+    # Comma-separated list of providers that are allowed to be used at runtime.
+    # If empty, defaults to [PAYMENT_PROVIDER] for backwards compatibility.
+    # In production, ALL providers in this list must pass their respective
+    # safety validations (mock mode off, webhook URL set, etc.).
+    # Example: "ASAAS,MERCADO_PAGO" for multi-provider.
+    PAYMENT_PROVIDERS_ENABLED: str = ""
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
     MERCADO_PAGO_MOCK_MODE: bool = False
@@ -166,6 +173,18 @@ class Settings(BaseSettings):
 
     # Expose Swagger/OpenAPI docs. Set to false in production.
     DOCS_ENABLED: bool = True
+
+    @property
+    def payment_providers_enabled_list(self) -> list[str]:
+        """Return the list of enabled payment providers (uppercased).
+
+        If PAYMENT_PROVIDERS_ENABLED is empty, defaults to [PAYMENT_PROVIDER]
+        for backwards compatibility.
+        """
+        raw = self.PAYMENT_PROVIDERS_ENABLED.strip()
+        if not raw:
+            return [self.PAYMENT_PROVIDER.upper()]
+        return [p.strip().upper() for p in raw.split(",") if p.strip()]
 
     @model_validator(mode="after")
     def _validate_sso_production_hardening(self) -> "Settings":

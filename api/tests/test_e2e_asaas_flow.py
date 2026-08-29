@@ -117,6 +117,7 @@ async def test_e2e_asaas_full_lifecycle(client, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
     monkeypatch.setattr(settings, "MERCADO_PAGO_MOCK_MODE", True)
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
 
     admin_headers = _headers(ctx["admin_id"], "admin")
     student_headers = _headers(ctx["student_user_id"], "student")
@@ -232,6 +233,7 @@ async def test_e2e_asaas_checkout_idempotency(client, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
     monkeypatch.setattr(settings, "MERCADO_PAGO_MOCK_MODE", True)
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
 
     admin_headers = _headers(ctx["admin_id"], "admin")
     student_headers = _headers(ctx["student_user_id"], "student")

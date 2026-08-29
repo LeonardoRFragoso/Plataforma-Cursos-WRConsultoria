@@ -22,6 +22,7 @@ from app.models.student import Student
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.email_service import EmailServiceError, get_email_service
+from app.services.notification_idempotency import check_and_record, make_dedup_key
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +179,20 @@ async def send_payment_approved_notification(
     *,
     amount: str,
     payment_method: str,
+    payment_id: UUID | None = None,
 ) -> bool:
-    """Notify a student that their payment has been approved."""
+    """Notify a student that their payment has been approved.
+
+    Idempotent: if called twice with the same payment_id, only the first
+    call sends an email. Subsequent calls return False (skipped).
+    """
     if not _email_enabled():
         return False
+    # Idempotency check — prevent duplicate emails from duplicate webhooks
+    if payment_id is not None:
+        dedup_key = make_dedup_key("payment-approved", payment_id)
+        if not await check_and_record(db, enrollment.tenant_id, dedup_key, "payment_approved", entity_id=payment_id):
+            return False
     try:
         stmt = (
             select(User, Course, Tenant)
@@ -191,7 +202,14 @@ async def send_payment_approved_notification(
             .join(Class, Enrollment.class_id == Class.id)
             .join(Course, Class.course_id == Course.id)
             .join(Tenant, Enrollment.tenant_id == Tenant.id)
-            .where(Enrollment.id == enrollment.id)
+            .where(
+                Enrollment.id == enrollment.id,
+                Enrollment.tenant_id == enrollment.tenant_id,
+                Student.tenant_id == enrollment.tenant_id,
+                User.tenant_id == enrollment.tenant_id,
+                Class.tenant_id == enrollment.tenant_id,
+                Course.tenant_id == enrollment.tenant_id,
+            )
         )
         row = (await db.execute(stmt)).first()
         if not row:
@@ -221,8 +239,16 @@ async def send_course_completed_notification(
     *,
     certificate_url: str | None = None,
 ) -> bool:
-    """Notify a student that their course has been completed."""
+    """Notify a student that their course has been completed.
+
+    Idempotent: if called twice for the same enrollment, only the first
+    call sends an email.
+    """
     if not _email_enabled():
+        return False
+    # Idempotency check — prevent duplicate emails from reprocessing
+    dedup_key = make_dedup_key("course-completed", enrollment.id)
+    if not await check_and_record(db, enrollment.tenant_id, dedup_key, "course_completed", entity_id=enrollment.id):
         return False
     try:
         stmt = (
@@ -233,7 +259,14 @@ async def send_course_completed_notification(
             .join(Class, Enrollment.class_id == Class.id)
             .join(Course, Class.course_id == Course.id)
             .join(Tenant, Enrollment.tenant_id == Tenant.id)
-            .where(Enrollment.id == enrollment.id)
+            .where(
+                Enrollment.id == enrollment.id,
+                Enrollment.tenant_id == enrollment.tenant_id,
+                Student.tenant_id == enrollment.tenant_id,
+                User.tenant_id == enrollment.tenant_id,
+                Class.tenant_id == enrollment.tenant_id,
+                Course.tenant_id == enrollment.tenant_id,
+            )
         )
         row = (await db.execute(stmt)).first()
         if not row:
@@ -259,9 +292,19 @@ async def send_certificate_issued_notification(
     *,
     certificate_number: str,
     validation_code: str,
+    certificate_id: UUID | None = None,
 ) -> bool:
-    """Notify a student that their certificate has been issued."""
+    """Notify a student that their certificate has been issued.
+
+    Idempotent: if called twice for the same certificate_id, only the first
+    call sends an email.
+    """
     if not _email_enabled():
+        return False
+    # Idempotency check — prevent duplicate emails from reprocessing
+    cert_key = certificate_id or enrollment.id
+    dedup_key = make_dedup_key("certificate-issued", cert_key)
+    if not await check_and_record(db, enrollment.tenant_id, dedup_key, "certificate_issued", entity_id=cert_key):
         return False
     try:
         stmt = (
@@ -272,7 +315,14 @@ async def send_certificate_issued_notification(
             .join(Class, Enrollment.class_id == Class.id)
             .join(Course, Class.course_id == Course.id)
             .join(Tenant, Enrollment.tenant_id == Tenant.id)
-            .where(Enrollment.id == enrollment.id)
+            .where(
+                Enrollment.id == enrollment.id,
+                Enrollment.tenant_id == enrollment.tenant_id,
+                Student.tenant_id == enrollment.tenant_id,
+                User.tenant_id == enrollment.tenant_id,
+                Class.tenant_id == enrollment.tenant_id,
+                Course.tenant_id == enrollment.tenant_id,
+            )
         )
         row = (await db.execute(stmt)).first()
         if not row:
@@ -302,9 +352,20 @@ async def send_certificate_expiration_notification(
     tenant_id: UUID,
     certificate_number: str,
     expires_at: str,
+    certificate_id: UUID | None = None,
+    window: str = "30d",
 ) -> bool:
-    """Warn a student that their certificate is nearing expiration."""
+    """Warn a student that their certificate is nearing expiration.
+
+    Idempotent: if called twice for the same certificate_id + window,
+    only the first call sends an email.
+    """
     if not _email_enabled():
+        return False
+    # Idempotency check — prevent duplicate expiration warnings per window
+    cert_key = certificate_id or enrollment_id
+    dedup_key = f"certificate-expiration:{cert_key}:{window}"
+    if not await check_and_record(db, tenant_id, dedup_key, "certificate_expiration", entity_id=cert_key):
         return False
     try:
         stmt = (
@@ -318,6 +379,10 @@ async def send_certificate_expiration_notification(
             .where(
                 Enrollment.id == enrollment_id,
                 Enrollment.tenant_id == tenant_id,
+                Student.tenant_id == tenant_id,
+                User.tenant_id == tenant_id,
+                Class.tenant_id == tenant_id,
+                Course.tenant_id == tenant_id,
             )
         )
         row = (await db.execute(stmt)).first()

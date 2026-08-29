@@ -32,6 +32,7 @@ def prod_settings(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.CORS_ORIGINS", ["https://app.example.com"])
     monkeypatch.setattr("app.core.config.settings.RATE_LIMIT_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "MERCADO_PAGO")
+    monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "MERCADO_PAGO")
     monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", False)
     monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
     monkeypatch.setattr("app.core.config.settings.EMAIL_MOCK_MODE", False)
@@ -85,33 +86,39 @@ class TestIndividualValidators:
         finally:
             settings.TENANT_SECRET_ENCRYPTION_KEY = original
 
-    def test_mercado_pago_mock_mode_true_when_active(self):
+    def test_mercado_pago_mock_mode_true_when_enabled(self):
         from app.core.config import settings
 
         original_mock = settings.MERCADO_PAGO_MOCK_MODE
         original_provider = settings.PAYMENT_PROVIDER
+        original_enabled = settings.PAYMENT_PROVIDERS_ENABLED
         settings.MERCADO_PAGO_MOCK_MODE = True
         settings.PAYMENT_PROVIDER = "MERCADO_PAGO"
+        settings.PAYMENT_PROVIDERS_ENABLED = "MERCADO_PAGO"
         try:
             issues = validate_mercado_pago_mock_mode()
             assert len(issues) == 1
         finally:
             settings.MERCADO_PAGO_MOCK_MODE = original_mock
             settings.PAYMENT_PROVIDER = original_provider
+            settings.PAYMENT_PROVIDERS_ENABLED = original_enabled
 
-    def test_mercado_pago_mock_mode_true_when_asaas_active(self):
+    def test_mercado_pago_mock_mode_true_when_not_enabled(self):
         from app.core.config import settings
 
         original_mock = settings.MERCADO_PAGO_MOCK_MODE
         original_provider = settings.PAYMENT_PROVIDER
+        original_enabled = settings.PAYMENT_PROVIDERS_ENABLED
         settings.MERCADO_PAGO_MOCK_MODE = True
         settings.PAYMENT_PROVIDER = "ASAAS"
+        settings.PAYMENT_PROVIDERS_ENABLED = "ASAAS"
         try:
             issues = validate_mercado_pago_mock_mode()
             assert len(issues) == 0
         finally:
             settings.MERCADO_PAGO_MOCK_MODE = original_mock
             settings.PAYMENT_PROVIDER = original_provider
+            settings.PAYMENT_PROVIDERS_ENABLED = original_enabled
 
     def test_e2e_test_mode_true(self, monkeypatch):
         monkeypatch.setenv("E2E_TEST_MODE", "true")
@@ -211,47 +218,82 @@ class TestValidateProductionConfig:
 class TestProviderAwareValidatorMatrix:
     """Provider-aware production validation matrix.
 
-    Verifies that production validation is fail-closed for the ACTIVE
-    provider but does not block startup for inactive/legacy providers.
+    Verifies that production validation checks ALL enabled providers
+    (PAYMENT_PROVIDERS_ENABLED), not just the default. Providers that
+    are not enabled are not validated (their mock mode is irrelevant).
     """
 
-    def test_asaas_active_mp_mock_does_not_block(self, prod_settings, monkeypatch):
-        """Asaas active + Mercado Pago mock → PASS (MP is legacy)."""
+    def test_asaas_enabled_mp_not_enabled_mp_mock_does_not_block(self, prod_settings, monkeypatch):
+        """Only Asaas enabled + MP mock → PASS (MP is not enabled)."""
         monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS")
         monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", True)
         monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
         monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "https://api.example.com")
         validate_production_config()  # should not raise
 
-    def test_asaas_active_asaas_mock_blocks(self, prod_settings, monkeypatch):
-        """Asaas active + ASAAS_MOCK_MODE=true → FAIL."""
+    def test_asaas_enabled_asaas_mock_blocks(self, prod_settings, monkeypatch):
+        """Asaas enabled + ASAAS_MOCK_MODE=true → FAIL."""
         monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS")
         monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", True)
         with pytest.raises(RuntimeError, match="ASAAS_MOCK_MODE"):
             validate_production_config()
 
-    def test_asaas_active_webhook_missing_blocks(self, prod_settings, monkeypatch):
-        """Asaas active + webhook base URL missing → FAIL."""
+    def test_asaas_enabled_webhook_missing_blocks(self, prod_settings, monkeypatch):
+        """Asaas enabled + webhook base URL missing → FAIL."""
         monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS")
         monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
         monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "")
         with pytest.raises(RuntimeError, match="ASAAS_WEBHOOK_BASE_URL"):
             validate_production_config()
 
-    def test_mp_active_mp_mock_blocks(self, prod_settings, monkeypatch):
-        """Mercado Pago active + MP mock → FAIL."""
+    def test_mp_enabled_mp_mock_blocks(self, prod_settings, monkeypatch):
+        """Mercado Pago enabled + MP mock → FAIL."""
         monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "MERCADO_PAGO")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "MERCADO_PAGO")
         monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", True)
         with pytest.raises(RuntimeError, match="MERCADO_PAGO_MOCK_MODE"):
             validate_production_config()
 
-    def test_mp_active_asaas_mock_does_not_block(self, prod_settings, monkeypatch):
-        """Mercado Pago active + Asaas mock → PASS (Asaas is inactive)."""
+    def test_mp_enabled_asaas_not_enabled_asaas_mock_does_not_block(self, prod_settings, monkeypatch):
+        """Only MP enabled + Asaas mock → PASS (Asaas is not enabled)."""
         monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "MERCADO_PAGO")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "MERCADO_PAGO")
         monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", False)
         monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", True)
         monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "")
         validate_production_config()  # should not raise
+
+    def test_multi_provider_both_must_pass(self, prod_settings, monkeypatch):
+        """Both enabled + both mock → FAIL (both must pass)."""
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
+        monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", True)
+        monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", True)
+        monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "https://api.example.com")
+        with pytest.raises(RuntimeError, match="ASAAS_MOCK_MODE"):
+            validate_production_config()
+
+    def test_multi_provider_both_clean_passes(self, prod_settings, monkeypatch):
+        """Both enabled + both clean → PASS."""
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
+        monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
+        monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", False)
+        monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "https://api.example.com")
+        validate_production_config()  # should not raise
+
+    def test_multi_provider_mp_mock_blocks(self, prod_settings, monkeypatch):
+        """Both enabled + only MP mock → FAIL (MP must also pass)."""
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDER", "ASAAS")
+        monkeypatch.setattr("app.core.config.settings.PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
+        monkeypatch.setattr("app.core.config.settings.ASAAS_MOCK_MODE", False)
+        monkeypatch.setattr("app.core.config.settings.MERCADO_PAGO_MOCK_MODE", True)
+        monkeypatch.setattr("app.core.config.settings.ASAAS_WEBHOOK_BASE_URL", "https://api.example.com")
+        with pytest.raises(RuntimeError, match="MERCADO_PAGO_MOCK_MODE"):
+            validate_production_config()
 
     def test_email_disabled_mock_mode_does_not_block(self, prod_settings, monkeypatch):
         """EMAIL_ENABLED=false + EMAIL_MOCK_MODE=true → PASS."""

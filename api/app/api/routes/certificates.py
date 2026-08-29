@@ -179,6 +179,20 @@ async def create_certificate(
     )
     await db.commit()
     await db.refresh(certificate)
+
+    # Send certificate-issued notification AFTER commit (best-effort)
+    from app.services.transactional_notifications import (
+        send_certificate_issued_notification,
+    )
+
+    await send_certificate_issued_notification(
+        db,
+        enrollment,
+        certificate_number=certificate.certificate_number,
+        validation_code=certificate.validation_code,
+        certificate_id=certificate.id,
+    )
+
     return certificate
 
 

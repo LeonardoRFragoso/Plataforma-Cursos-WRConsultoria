@@ -53,13 +53,12 @@ def validate_tenant_secret_encryption_key() -> list[str]:
 def validate_mercado_pago_mock_mode() -> list[str]:
     """Verifica se MERCADO_PAGO_MOCK_MODE não está ativo em produção.
 
-    Only validates when Mercado Pago is the active provider (default or
-    explicitly configured). When Asaas is the active provider, Mercado Pago
-    is a legacy/inactive code path and its mock mode is irrelevant.
+    Validates when MERCADO_PAGO is in PAYMENT_PROVIDERS_ENABLED.
+    All enabled providers must pass safety validation in production.
     """
     issues = []
-    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
-    if active_provider == "MERCADO_PAGO" and settings.MERCADO_PAGO_MOCK_MODE:
+    enabled = settings.payment_providers_enabled_list
+    if "MERCADO_PAGO" in enabled and settings.MERCADO_PAGO_MOCK_MODE:
         issues.append("MERCADO_PAGO_MOCK_MODE must be false in production")
     return issues
 
@@ -67,12 +66,12 @@ def validate_mercado_pago_mock_mode() -> list[str]:
 def validate_asaas_mock_mode() -> list[str]:
     """Verifica se ASAAS_MOCK_MODE não está ativo em produção.
 
-    Only validates when Asaas is the active provider. When Mercado Pago is
-    active, Asaas mock mode is irrelevant (Asaas code path is not used).
+    Validates when ASAAS is in PAYMENT_PROVIDERS_ENABLED.
+    All enabled providers must pass safety validation in production.
     """
     issues = []
-    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
-    if active_provider == "ASAAS" and getattr(settings, "ASAAS_MOCK_MODE", False):
+    enabled = settings.payment_providers_enabled_list
+    if "ASAAS" in enabled and getattr(settings, "ASAAS_MOCK_MODE", False):
         issues.append("ASAAS_MOCK_MODE must be false in production")
     return issues
 
@@ -91,11 +90,11 @@ def validate_email_mock_mode() -> list[str]:
 def validate_asaas_webhook_base_url() -> list[str]:
     """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção.
 
-    Only validates when Asaas is the active provider.
+    Validates when ASAAS is in PAYMENT_PROVIDERS_ENABLED.
     """
     issues = []
-    active_provider = getattr(settings, "PAYMENT_PROVIDER", "MERCADO_PAGO").upper()
-    if active_provider == "ASAAS" and not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
+    enabled = settings.payment_providers_enabled_list
+    if "ASAAS" in enabled and not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
         issues.append(
             "ASAAS_WEBHOOK_BASE_URL is empty — must be set in production "
             "for Asaas webhook registration"
