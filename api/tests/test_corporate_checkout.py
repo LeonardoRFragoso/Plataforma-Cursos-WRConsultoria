@@ -79,6 +79,7 @@ async def test_corporate_checkout_asaas_mock(client, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
     monkeypatch.setattr(settings, "MERCADO_PAGO_MOCK_MODE", True)
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
 
     admin_id = await _create_admin("corp_checkout@wr.test", WR_TENANT_ID)
     ctx = await _create_company_payment()
@@ -166,6 +167,7 @@ async def test_corporate_checkout_idempotent(client, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "ASAAS_MOCK_MODE", True)
     monkeypatch.setattr(settings, "MERCADO_PAGO_MOCK_MODE", True)
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_ENABLED", "ASAAS,MERCADO_PAGO")
 
     admin_id = await _create_admin("corp_idem@wr.test", WR_TENANT_ID)
     ctx = await _create_company_payment()

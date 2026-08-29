@@ -644,10 +644,38 @@ async def update_lesson_progress(
             progress.completed_at = utc_now()
 
     await db.flush()
+    completed_enrollment = None
+    certificate_id = None
     if progress.completed:
-        await _maybe_create_certificate(db, student_id, lesson.course_id, tenant_id)
+        completed_enrollment, certificate_id = await _maybe_create_certificate(
+            db, student_id, lesson.course_id, tenant_id
+        )
 
     await db.commit()
+
+    # Send notifications AFTER commit — emails are best-effort side effects
+    # and must never roll back the completed enrollment/certificate.
+    if completed_enrollment is not None:
+        from app.services.transactional_notifications import (
+            send_certificate_issued_notification,
+            send_course_completed_notification,
+        )
+
+        await send_course_completed_notification(db, completed_enrollment)
+        if certificate_id is not None:
+            # Fetch certificate details for the notification
+            from app.models.certificate import Certificate
+
+            cert = await db.get(Certificate, certificate_id)
+            if cert:
+                await send_certificate_issued_notification(
+                    db,
+                    completed_enrollment,
+                    certificate_number=cert.certificate_number,
+                    validation_code=cert.validation_code,
+                    certificate_id=cert.id,
+                )
+
     await db.refresh(progress)
     return progress
 
@@ -898,12 +926,15 @@ async def get_course_student_progress(
 
 async def _maybe_create_certificate(
     db: AsyncSession, student_id: UUID, course_id: UUID, tenant_id: UUID
-):
+) -> tuple[Enrollment | None, UUID | None]:
     """Issue the trusted certificate and conclude the correct enrollment once all required lessons are complete.
 
     The partial unique index allows historical revoked/superseded certificates while
     keeping at most one ACTIVE certificate for an enrollment. The insert is
     idempotent under concurrent/repeated completion requests.
+
+    Returns (enrollment, certificate_id) if the enrollment was newly completed,
+    (None, None) otherwise. The caller should send notifications AFTER committing.
     """
     total_lessons = (
         await db.execute(
@@ -933,7 +964,7 @@ async def _maybe_create_certificate(
     ).scalar() or 0
 
     if total_lessons == 0 or completed_lessons < total_lessons:
-        return
+        return None, None
 
     enrollment = (
         await db.execute(
@@ -962,7 +993,7 @@ async def _maybe_create_certificate(
         )
     ).scalar_one_or_none()
     if not enrollment:
-        return
+        return None, None
 
     course = await _load_course_tenant_filtered(db, course_id, tenant_id)
     max_version = await db.scalar(
@@ -1033,3 +1064,4 @@ async def _maybe_create_certificate(
         )
 
     enrollment.status = EnrollmentStatus.CONCLUIDA
+    return enrollment, inserted_id

@@ -51,17 +51,27 @@ def validate_tenant_secret_encryption_key() -> list[str]:
 
 
 def validate_mercado_pago_mock_mode() -> list[str]:
-    """Verifica se MERCADO_PAGO_MOCK_MODE não está ativo em produção."""
+    """Verifica se MERCADO_PAGO_MOCK_MODE não está ativo em produção.
+
+    Validates when MERCADO_PAGO is in PAYMENT_PROVIDERS_ENABLED.
+    All enabled providers must pass safety validation in production.
+    """
     issues = []
-    if settings.MERCADO_PAGO_MOCK_MODE:
+    enabled = settings.payment_providers_enabled_list
+    if "MERCADO_PAGO" in enabled and settings.MERCADO_PAGO_MOCK_MODE:
         issues.append("MERCADO_PAGO_MOCK_MODE must be false in production")
     return issues
 
 
 def validate_asaas_mock_mode() -> list[str]:
-    """Verifica se ASAAS_MOCK_MODE não está ativo em produção."""
+    """Verifica se ASAAS_MOCK_MODE não está ativo em produção.
+
+    Validates when ASAAS is in PAYMENT_PROVIDERS_ENABLED.
+    All enabled providers must pass safety validation in production.
+    """
     issues = []
-    if getattr(settings, "ASAAS_MOCK_MODE", False):
+    enabled = settings.payment_providers_enabled_list
+    if "ASAAS" in enabled and getattr(settings, "ASAAS_MOCK_MODE", False):
         issues.append("ASAAS_MOCK_MODE must be false in production")
     return issues
 
@@ -78,9 +88,13 @@ def validate_email_mock_mode() -> list[str]:
 
 
 def validate_asaas_webhook_base_url() -> list[str]:
-    """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção."""
+    """Verifica se ASAAS_WEBHOOK_BASE_URL está definida em produção.
+
+    Validates when ASAAS is in PAYMENT_PROVIDERS_ENABLED.
+    """
     issues = []
-    if not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
+    enabled = settings.payment_providers_enabled_list
+    if "ASAAS" in enabled and not getattr(settings, "ASAAS_WEBHOOK_BASE_URL", ""):
         issues.append(
             "ASAAS_WEBHOOK_BASE_URL is empty — must be set in production "
             "for Asaas webhook registration"

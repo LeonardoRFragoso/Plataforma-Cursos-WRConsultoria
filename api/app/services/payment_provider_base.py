@@ -28,6 +28,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings as _settings
 from app.models.payment import PaymentMethod, PaymentProvider
 
 
@@ -185,8 +186,19 @@ async def resolve_provider(
     """Resolve the active payment provider for a tenant.
 
     Selection order:
-    1. ``tenant.settings["payment_provider"]`` if set and recognized.
-    2. ``MERCADO_PAGO`` (legacy default).
+    1. ``tenant.settings["payment_provider"]`` if set, recognized, AND
+       in ``PAYMENT_PROVIDERS_ENABLED``. If the tenant selects a provider
+       that is not enabled, fails closed with an error (does NOT fall
+       back to another provider silently).
+    2. ``PAYMENT_PROVIDER`` global default (must also be enabled).
+
+    Rollout safety:
+    - In non-production with ``PAYMENT_PROVIDERS_ENABLED`` empty, all
+      recognized providers (ASAAS, MERCADO_PAGO) are allowed. This
+      preserves backward compatibility for existing staging tenants.
+    - In production, an empty ``PAYMENT_PROVIDERS_ENABLED`` causes startup
+      to fail (enforced in Settings validator). So resolve_provider only
+      sees an empty list in non-production.
 
     Credentials are fetched from `TenantSecret` (encrypted). Falls back
     to legacy ``tenant.settings["mp_access_token"]`` for Mercado Pago
@@ -199,8 +211,29 @@ async def resolve_provider(
         get_mercado_pago_access_token,
     )
 
+    enabled_providers = _settings.payment_providers_enabled_list
+    _RECOGNIZED = {"ASAAS", "MERCADO_PAGO"}
+
+    # Non-production backward compat: empty enabled list = all recognized
+    # providers allowed (legacy/staging behavior).
+    if not enabled_providers:
+        enabled_providers = sorted(_RECOGNIZED)
+
     settings = tenant_settings or {}
     configured = (settings.get("payment_provider") or "").upper()
+    if not configured:
+        configured = _settings.PAYMENT_PROVIDER.upper()
+
+    # Fail closed: if the tenant selected a provider that is not enabled,
+    # raise an error. Do NOT silently fall back to another provider.
+    if configured not in enabled_providers:
+        raise PaymentProviderError(
+            f"Payment provider '{configured}' is not enabled for this deployment. "
+            f"Enabled providers: {', '.join(enabled_providers)}. "
+            f"Tenant cannot use a provider that is not explicitly enabled.",
+            status_code=403,
+            provider_error_code="provider_not_enabled",
+        )
 
     if configured == PaymentProvider.ASAAS.value:
         api_key = await get_asaas_api_key(db, tenant_id)

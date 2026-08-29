@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     B2B_PREAUTH_RATE_LIMIT_REQUESTS: int = 200
     B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
     
+    # Global default payment provider. Per-tenant settings["payment_provider"]
+    # overrides this, BUT only if the selected provider is in
+    # PAYMENT_PROVIDERS_ENABLED. If a tenant selects a provider that is not
+    # enabled, resolve_provider() fails closed (raises).
+    # Accepted values: "ASAAS", "MERCADO_PAGO".
+    PAYMENT_PROVIDER: str = "MERCADO_PAGO"
+    # Comma-separated list of providers that are allowed to be used at runtime.
+    # If empty, defaults to [PAYMENT_PROVIDER] for backwards compatibility.
+    # In production, ALL providers in this list must pass their respective
+    # safety validations (mock mode off, webhook URL set, etc.).
+    # Example: "ASAAS,MERCADO_PAGO" for multi-provider.
+    PAYMENT_PROVIDERS_ENABLED: str = ""
     MERCADO_PAGO_ACCESS_TOKEN: str = ""
     MERCADO_PAGO_PUBLIC_KEY: str = ""
     MERCADO_PAGO_MOCK_MODE: bool = False
@@ -100,6 +112,9 @@ class Settings(BaseSettings):
     # ASAAS_MOCK_MODE makes AsaasProvider return deterministic fakes
     # without touching the network (tests/staging only).
     ASAAS_MOCK_MODE: bool = False
+    # Stale PENDING lease: if a NotificationEvent stays PENDING longer than
+    # this, another worker may re-acquire it (the original worker likely died).
+    NOTIFICATION_PENDING_LEASE_SECONDS: int = 300
     # Base URL for the backend's public API. Used to build the Asaas
     # webhook callback URL: {API_BASE_URL}/api/v1/integrations/asaas/webhook/{slug}
     # In production this MUST be the publicly reachable URL.
@@ -161,6 +176,21 @@ class Settings(BaseSettings):
 
     # Expose Swagger/OpenAPI docs. Set to false in production.
     DOCS_ENABLED: bool = True
+
+    @property
+    def payment_providers_enabled_list(self) -> list[str]:
+        """Return the list of explicitly enabled payment providers (uppercased).
+
+        Returns [] if PAYMENT_PROVIDERS_ENABLED is empty. In non-production
+        environments, resolve_provider() treats an empty list as "all
+        recognized providers allowed" (legacy/staging backward compat).
+        In production, an empty list causes startup to fail (explicit config
+        required).
+        """
+        raw = self.PAYMENT_PROVIDERS_ENABLED.strip()
+        if not raw:
+            return []
+        return [p.strip().upper() for p in raw.split(",") if p.strip()]
 
     @model_validator(mode="after")
     def _validate_sso_production_hardening(self) -> "Settings":
@@ -224,6 +254,29 @@ class Settings(BaseSettings):
                     f"{field_name} must use HTTPS in production (got '{url}'). "
                     f"Browser redirects must never go to http://."
                 )
+
+        # Payment provider explicit configuration required in production.
+        # PAYMENT_PROVIDERS_ENABLED must not be empty, PAYMENT_PROVIDER must
+        # be in the enabled list, and all enabled providers must be recognized.
+        enabled = self.payment_providers_enabled_list
+        if not enabled:
+            raise ValueError(
+                "PAYMENT_PROVIDERS_ENABLED must not be empty in production. "
+                "Set it explicitly (e.g., 'ASAAS' or 'ASAAS,MERCADO_PAGO')."
+            )
+        recognized = {"ASAAS", "MERCADO_PAGO"}
+        unknown = set(enabled) - recognized
+        if unknown:
+            raise ValueError(
+                f"PAYMENT_PROVIDERS_ENABLED contains unrecognized providers: "
+                f"{', '.join(sorted(unknown))}. Recognized: {', '.join(sorted(recognized))}."
+            )
+        default = self.PAYMENT_PROVIDER.upper()
+        if default not in enabled:
+            raise ValueError(
+                f"PAYMENT_PROVIDER '{default}' must be in "
+                f"PAYMENT_PROVIDERS_ENABLED ({', '.join(enabled)}) in production."
+            )
 
         return self
 

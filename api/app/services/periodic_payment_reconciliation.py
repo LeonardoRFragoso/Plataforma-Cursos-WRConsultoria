@@ -28,7 +28,10 @@ from app.services.tenant_secret_service import (
     get_asaas_api_key,
     get_mercado_pago_access_token,
 )
-from app.services.transactional_notifications import send_course_access_notification
+from app.services.transactional_notifications import (
+    send_course_access_notification,
+    send_payment_approved_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +167,7 @@ async def reconcile_tenant_payments(
     ).scalars().all()
 
     providers: dict[PaymentProvider, object] = {}
-    newly_confirmed_enrollments: list[Enrollment] = []
+    newly_confirmed_enrollments: list[tuple[Enrollment, Payment]] = []
     summary = {
         "scanned": len(payments),
         "reconciled": 0,
@@ -237,7 +240,7 @@ async def reconcile_tenant_payments(
                     if enrollment:
                         reconcile_result = await reconcile_payment_status(payment, enrollment, target)
                         if reconcile_result.get("enrollment_newly_confirmed"):
-                            newly_confirmed_enrollments.append(enrollment)
+                            newly_confirmed_enrollments.append((enrollment, payment))
                     else:
                         payment.status = target
                         if target == PaymentStatus.APROVADO:
@@ -297,11 +300,20 @@ async def reconcile_tenant_payments(
     # Mirror the B2C webhook contract: notification is an after-commit side
     # effect and can never roll back payment/enrollment state.
     seen_enrollments: set[UUID] = set()
-    for enrollment in newly_confirmed_enrollments:
+    for enrollment, payment in newly_confirmed_enrollments:
         if enrollment.id in seen_enrollments:
             continue
         seen_enrollments.add(enrollment.id)
         if await send_course_access_notification(db, enrollment):
             summary["access_notifications_sent"] += 1
+        # Also send payment-approved notification (idempotent via payment_id)
+        if payment.status == PaymentStatus.APROVADO:
+            await send_payment_approved_notification(
+                db,
+                enrollment,
+                amount=str(payment.amount),
+                payment_method=payment.method.value if payment.method else "UNKNOWN",
+                payment_id=payment.id,
+            )
 
     return summary

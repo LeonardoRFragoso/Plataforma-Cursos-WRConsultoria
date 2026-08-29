@@ -13,9 +13,11 @@ from app.core.secrets import (
 
 
 def test_asaas_mock_mode_rejected_in_production():
-    """ASAAS_MOCK_MODE=true must be rejected in production."""
+    """ASAAS_MOCK_MODE=true must be rejected in production when Asaas is enabled."""
     with patch("app.core.secrets.settings") as mock_settings:
         mock_settings.ENVIRONMENT = "production"
+        mock_settings.PAYMENT_PROVIDER = "ASAAS"
+        mock_settings.payment_providers_enabled_list = ["ASAAS"]
         mock_settings.ASAAS_MOCK_MODE = True
         mock_settings.EMAIL_MOCK_MODE = False
         mock_settings.EMAIL_ENABLED = True
@@ -29,10 +31,10 @@ def test_asaas_mock_mode_ok_in_development():
     """ASAAS_MOCK_MODE=true is OK in development."""
     with patch("app.core.secrets.settings") as mock_settings:
         mock_settings.ENVIRONMENT = "development"
+        mock_settings.PAYMENT_PROVIDER = "ASAAS"
+        mock_settings.payment_providers_enabled_list = ["ASAAS"]
         mock_settings.ASAAS_MOCK_MODE = True
         issues = validate_asaas_mock_mode()
-        # validate_asaas_mock_mode checks the setting regardless of env,
-        # but validate_production_config only runs in production
         assert len(issues) == 1  # The setting is flagged
 
 
@@ -58,9 +60,11 @@ def test_email_mock_mode_ok_when_email_disabled():
 
 
 def test_asaas_webhook_base_url_required_in_production():
-    """ASAAS_WEBHOOK_BASE_URL must be set in production."""
+    """ASAAS_WEBHOOK_BASE_URL must be set in production when Asaas is enabled."""
     with patch("app.core.secrets.settings") as mock_settings:
         mock_settings.ENVIRONMENT = "production"
+        mock_settings.PAYMENT_PROVIDER = "ASAAS"
+        mock_settings.payment_providers_enabled_list = ["ASAAS"]
         mock_settings.ASAAS_WEBHOOK_BASE_URL = ""
         issues = validate_asaas_webhook_base_url()
         assert len(issues) == 1
@@ -74,6 +78,8 @@ def test_production_config_rejects_asaas_mock_mode():
         mock_settings.SECRET_KEY = "x" * 32
         mock_settings.ALLOWED_HOSTS = ["example.com"]
         mock_settings.TENANT_SECRET_ENCRYPTION_KEY = "test_key"
+        mock_settings.PAYMENT_PROVIDER = "ASAAS"
+        mock_settings.payment_providers_enabled_list = ["ASAAS"]
         mock_settings.MERCADO_PAGO_MOCK_MODE = False
         mock_settings.ASAAS_MOCK_MODE = True
         mock_settings.EMAIL_MOCK_MODE = False
@@ -96,6 +102,8 @@ def test_production_config_rejects_email_mock_mode():
         mock_settings.SECRET_KEY = "x" * 32
         mock_settings.ALLOWED_HOSTS = ["example.com"]
         mock_settings.TENANT_SECRET_ENCRYPTION_KEY = "test_key"
+        mock_settings.PAYMENT_PROVIDER = "MERCADO_PAGO"
+        mock_settings.payment_providers_enabled_list = ["MERCADO_PAGO"]
         mock_settings.MERCADO_PAGO_MOCK_MODE = False
         mock_settings.ASAAS_MOCK_MODE = False
         mock_settings.EMAIL_MOCK_MODE = True
@@ -117,6 +125,8 @@ def test_production_config_ok_with_valid_settings():
         mock_settings.SECRET_KEY = "x" * 32
         mock_settings.ALLOWED_HOSTS = ["example.com"]
         mock_settings.TENANT_SECRET_ENCRYPTION_KEY = "test_key"
+        mock_settings.PAYMENT_PROVIDER = "MERCADO_PAGO"
+        mock_settings.payment_providers_enabled_list = ["MERCADO_PAGO"]
         mock_settings.MERCADO_PAGO_MOCK_MODE = False
         mock_settings.ASAAS_MOCK_MODE = False
         mock_settings.EMAIL_MOCK_MODE = False

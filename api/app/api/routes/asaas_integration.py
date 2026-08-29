@@ -45,7 +45,10 @@ from app.services.tenant_secret_service import (
     get_tenant_secret,
     set_tenant_secret,
 )
-from app.services.transactional_notifications import send_course_access_notification
+from app.services.transactional_notifications import (
+    send_course_access_notification,
+    send_payment_approved_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -573,6 +576,15 @@ async def asaas_webhook(
 
     if should_notify_course_access and enrollment:
         await send_course_access_notification(db, enrollment)
+        # Also send payment-approved notification (idempotent via payment_id)
+        if new_status == PaymentStatus.APROVADO:
+            await send_payment_approved_notification(
+                db,
+                enrollment,
+                amount=str(payment.amount),
+                payment_method=payment.method.value if payment.method else "UNKNOWN",
+                payment_id=payment.id,
+            )
 
     return {
         "status": "ok",
