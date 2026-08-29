@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -142,6 +143,7 @@ class CourseComplianceProfile(Base):
     validity_period_months = Column(Integer, nullable=True)
     prerequisites = Column(Text, nullable=True)
     certificate_required_fields = Column(JSONB, nullable=False, default=list)
+    compliance_blockers = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
     technical_responsible_id = Column(
         UUID(as_uuid=True),
         ForeignKey("training_professionals.id", ondelete="SET NULL"),
