@@ -45,3 +45,7 @@ class NotificationEvent(Base):
     # Delivery status: "PENDING", "SENT", "FAILED"
     status = Column(String(32), nullable=False, default="PENDING")
     created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
+    # Updated whenever status changes (PENDING→SENT, PENDING→FAILED, FAILED→PENDING retry).
+    # Used for stale PENDING lease recovery: if a PENDING row is older than
+    # NOTIFICATION_PENDING_LEASE_SECONDS, it can be re-acquired by another worker.
+    updated_at = Column(DateTime, default=utc_now, nullable=False)

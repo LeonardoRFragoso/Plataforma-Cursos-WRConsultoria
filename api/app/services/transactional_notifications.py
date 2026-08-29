@@ -235,7 +235,10 @@ async def send_payment_approved_notification(
             tenant_name=tenant.name,
         )
         if dedup_key:
-            await mark_sent(dedup_key)
+            if result is True:
+                await mark_sent(dedup_key)
+            else:
+                await mark_failed(dedup_key)
         return result
     except EmailServiceError:
         logger.warning("Payment-approved email failed for enrollment %s", enrollment.id)
@@ -295,7 +298,10 @@ async def send_course_completed_notification(
             certificate_url=certificate_url,
             tenant_name=tenant.name,
         )
-        await mark_sent(dedup_key)
+        if result is True:
+            await mark_sent(dedup_key)
+        else:
+            await mark_failed(dedup_key)
         return result
     except EmailServiceError:
         logger.warning("Course-completed email failed for enrollment %s", enrollment.id)
@@ -359,7 +365,10 @@ async def send_certificate_issued_notification(
             validation_url=validation_url,
             tenant_name=tenant.name,
         )
-        await mark_sent(dedup_key)
+        if result is True:
+            await mark_sent(dedup_key)
+        else:
+            await mark_failed(dedup_key)
         return result
     except EmailServiceError:
         logger.warning("Certificate-issued email failed for enrollment %s", enrollment.id)
@@ -423,7 +432,10 @@ async def send_certificate_expiration_notification(
             expires_at=expires_at,
             tenant_name=tenant.name,
         )
-        await mark_sent(dedup_key)
+        if result is True:
+            await mark_sent(dedup_key)
+        else:
+            await mark_failed(dedup_key)
         return result
     except EmailServiceError:
         logger.warning("Certificate-expiration email failed for enrollment %s", enrollment_id)

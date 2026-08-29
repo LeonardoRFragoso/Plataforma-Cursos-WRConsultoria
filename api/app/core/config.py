@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     # ASAAS_MOCK_MODE makes AsaasProvider return deterministic fakes
     # without touching the network (tests/staging only).
     ASAAS_MOCK_MODE: bool = False
+    # Stale PENDING lease: if a NotificationEvent stays PENDING longer than
+    # this, another worker may re-acquire it (the original worker likely died).
+    NOTIFICATION_PENDING_LEASE_SECONDS: int = 300
     # Base URL for the backend's public API. Used to build the Asaas
     # webhook callback URL: {API_BASE_URL}/api/v1/integrations/asaas/webhook/{slug}
     # In production this MUST be the publicly reachable URL.

@@ -31,6 +31,7 @@ def upgrade() -> None:
         sa.Column("entity_id", postgresql.UUID(as_uuid=True), nullable=True, index=True),
         sa.Column("status", sa.String(32), nullable=False, server_default="PENDING"),
         sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_notification_events_dedup_key", "notification_events", ["dedup_key"], unique=True)
     op.create_index("ix_notification_events_tenant_type", "notification_events", ["tenant_id", "notification_type"])

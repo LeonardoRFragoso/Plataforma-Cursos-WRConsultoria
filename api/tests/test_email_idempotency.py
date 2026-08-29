@@ -41,6 +41,7 @@ from app.services.notification_idempotency import (
     reserve,
 )
 from app.services.transactional_notifications import (
+    send_certificate_issued_notification,
     send_course_completed_notification,
     send_payment_approved_notification,
 )
@@ -436,3 +437,265 @@ async def test_mark_failed_updates_status():
             select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
         )
         assert event.status == STATUS_FAILED
+
+
+# ============================================================================
+# Blocker: send_email returns False (no exception) → must mark FAILED, not SENT
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_send_returns_false_marks_failed_payment(monkeypatch):
+    """send_payment_approved returns False (no exception) → FAILED, not SENT."""
+    monkeypatch.setattr(settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(settings, "EMAIL_MOCK_MODE", True)
+    reset_email_service()
+
+    enrollment_id = await _seed_enrollment()
+    payment_id = uuid.uuid4()
+    dedup_key = make_dedup_key("payment-approved", payment_id)
+
+    # Patch send to return False (SMTP not configured / provider returns False)
+    with patch.object(
+        get_email_service(),
+        "send_payment_approved",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        async with AsyncSessionLocal() as db:
+            enrollment = await db.get(Enrollment, enrollment_id)
+            result = await send_payment_approved_notification(
+                db, enrollment, amount="150.00", payment_method="PIX", payment_id=payment_id
+            )
+
+    assert result is False
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event is not None
+        assert event.status == STATUS_FAILED
+
+    # Retry with True → SENT
+    async with AsyncSessionLocal() as db:
+        enrollment = await db.get(Enrollment, enrollment_id)
+        result = await send_payment_approved_notification(
+            db, enrollment, amount="150.00", payment_method="PIX", payment_id=payment_id
+        )
+
+    assert result is True
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event.status == STATUS_SENT
+
+
+@pytest.mark.asyncio
+async def test_send_returns_false_marks_failed_course_completed(monkeypatch):
+    """send_course_completed returns False → FAILED, retry → SENT."""
+    monkeypatch.setattr(settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(settings, "EMAIL_MOCK_MODE", True)
+    reset_email_service()
+
+    enrollment_id = await _seed_enrollment()
+    dedup_key = make_dedup_key("course-completed", enrollment_id)
+
+    with patch.object(
+        get_email_service(),
+        "send_course_completed",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        async with AsyncSessionLocal() as db:
+            enrollment = await db.get(Enrollment, enrollment_id)
+            result = await send_course_completed_notification(db, enrollment)
+
+    assert result is False
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event.status == STATUS_FAILED
+
+    # Retry with True
+    async with AsyncSessionLocal() as db:
+        enrollment = await db.get(Enrollment, enrollment_id)
+        result = await send_course_completed_notification(db, enrollment)
+
+    assert result is True
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event.status == STATUS_SENT
+
+
+@pytest.mark.asyncio
+async def test_send_returns_false_marks_failed_certificate_issued(monkeypatch):
+    """send_certificate_issued returns False → FAILED, retry → SENT."""
+    monkeypatch.setattr(settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(settings, "EMAIL_MOCK_MODE", True)
+    reset_email_service()
+
+    enrollment_id = await _seed_enrollment()
+    cert_id = uuid.uuid4()
+    dedup_key = make_dedup_key("certificate-issued", cert_id)
+
+    with patch.object(
+        get_email_service(),
+        "send_certificate_issued",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        async with AsyncSessionLocal() as db:
+            enrollment = await db.get(Enrollment, enrollment_id)
+            result = await send_certificate_issued_notification(
+                db,
+                enrollment,
+                certificate_number="CERT-001",
+                validation_code="VAL-001",
+                certificate_id=cert_id,
+            )
+
+    assert result is False
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event.status == STATUS_FAILED
+
+    # Retry with True
+    async with AsyncSessionLocal() as db:
+        enrollment = await db.get(Enrollment, enrollment_id)
+        result = await send_certificate_issued_notification(
+            db,
+            enrollment,
+            certificate_number="CERT-001",
+            validation_code="VAL-001",
+            certificate_id=cert_id,
+        )
+
+    assert result is True
+
+    async with AsyncSessionLocal() as db:
+        event = await db.scalar(
+            select(NotificationEvent).where(NotificationEvent.dedup_key == dedup_key)
+        )
+        assert event.status == STATUS_SENT
+
+
+# ============================================================================
+# Blocker: Atomic FAILED retry — concurrent reserve on FAILED → exactly 1 winner
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_concurrent_failed_retry_one_winner():
+    """Two concurrent reserve() calls on a FAILED row → exactly 1 True, 1 False."""
+    tenant_id = uuid.uuid4()
+    dedup_key = f"test-concurrent-failed-{uuid.uuid4()}"
+
+    # Create and fail
+    await reserve(tenant_id, dedup_key, "test_type")
+    await mark_failed(dedup_key)
+
+    # Two concurrent retries
+    r1, r2 = await asyncio.gather(
+        reserve(tenant_id, dedup_key, "test_type"),
+        reserve(tenant_id, dedup_key, "test_type"),
+    )
+
+    winners = [r for r in (r1, r2) if r is True]
+    losers = [r for r in (r1, r2) if r is False]
+    assert len(winners) == 1
+    assert len(losers) == 1
+
+
+# ============================================================================
+# Blocker: Stale PENDING recovery — old PENDING can be re-acquired
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_stale_pending_recovery(monkeypatch):
+    """PENDING older than lease timeout → can be re-acquired by exactly 1 worker."""
+    tenant_id = uuid.uuid4()
+    dedup_key = f"test-stale-pending-{uuid.uuid4()}"
+
+    # Create a PENDING row
+    await reserve(tenant_id, dedup_key, "test_type")
+
+    # Make it stale by backdating updated_at
+    from datetime import timedelta
+
+    stale_time = utc_now() - timedelta(seconds=settings.NOTIFICATION_PENDING_LEASE_SECONDS + 60)
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import text as sa_text
+
+        await db.execute(
+            sa_text("UPDATE notification_events SET updated_at = :ts WHERE dedup_key = :key"),
+            {"ts": stale_time, "key": dedup_key},
+        )
+        await db.commit()
+
+    # Now reserve should succeed (stale recovery)
+    r = await reserve(tenant_id, dedup_key, "test_type")
+    assert r is True
+
+    # Second concurrent reserve on the same stale-then-recovered row → False
+    r2 = await reserve(tenant_id, dedup_key, "test_type")
+    assert r2 is False
+
+
+@pytest.mark.asyncio
+async def test_recent_pending_not_recoverable():
+    """PENDING newer than lease timeout → cannot be re-acquired."""
+    tenant_id = uuid.uuid4()
+    dedup_key = f"test-recent-pending-{uuid.uuid4()}"
+
+    # Create a PENDING row (fresh)
+    await reserve(tenant_id, dedup_key, "test_type")
+
+    # Immediately try to re-acquire → should fail (recent PENDING)
+    r = await reserve(tenant_id, dedup_key, "test_type")
+    assert r is False
+
+
+@pytest.mark.asyncio
+async def test_concurrent_stale_pending_recovery_one_winner(monkeypatch):
+    """Two concurrent reserve() on stale PENDING → exactly 1 True, 1 False."""
+    tenant_id = uuid.uuid4()
+    dedup_key = f"test-concurrent-stale-{uuid.uuid4()}"
+
+    # Create PENDING
+    await reserve(tenant_id, dedup_key, "test_type")
+
+    # Backdate
+    from datetime import timedelta
+
+    stale_time = utc_now() - timedelta(seconds=settings.NOTIFICATION_PENDING_LEASE_SECONDS + 60)
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import text as sa_text
+
+        await db.execute(
+            sa_text("UPDATE notification_events SET updated_at = :ts WHERE dedup_key = :key"),
+            {"ts": stale_time, "key": dedup_key},
+        )
+        await db.commit()
+
+    # Two concurrent stale recoveries
+    r1, r2 = await asyncio.gather(
+        reserve(tenant_id, dedup_key, "test_type"),
+        reserve(tenant_id, dedup_key, "test_type"),
+    )
+
+    winners = [r for r in (r1, r2) if r is True]
+    losers = [r for r in (r1, r2) if r is False]
+    assert len(winners) == 1
+    assert len(losers) == 1
