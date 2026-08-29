@@ -229,8 +229,18 @@ async def evaluate_regulatory_state(
     blockers: list[str] = []
     state = RegulatoryCompletionState.ENROLLED
 
+    # Compliance blockers check: if profile.compliance_blockers is non-empty,
+    # block official certificate issuance regardless of profile.status.
+    # This is a fail-closed guard — even if an admin or bug sets
+    # status=COMPLIANCE_READY while blockers are present, the gate blocks.
+    profile_blockers = list(profile.compliance_blockers) if profile.compliance_blockers else []
+
     if enrollment.status == EnrollmentStatus.CANCELADA:
         state = RegulatoryCompletionState.CANCELLED
+    elif profile_blockers:
+        state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
+        blocker_codes = [b["code"] for b in profile_blockers if isinstance(b, dict)]
+        blockers.append(f"Compliance blockers present: {', '.join(blocker_codes)}")
     elif profile.status != ComplianceStatus.COMPLIANCE_READY:
         state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
         blockers.append("Course compliance profile requires review")

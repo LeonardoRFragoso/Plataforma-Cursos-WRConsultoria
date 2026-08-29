@@ -373,16 +373,21 @@ async def test_manual_review_propagates_to_profile():
         assert course_after.modality == CourseModality.SEMIPRESENCIAL, "Course must not be modified"
         assert course_after.carga_horaria == 16
 
-        # Profile must be REVIEW_REQUIRED with blocker
+        # Profile must be REVIEW_REQUIRED with compliance blocker
         profile = await _get_profile(WR_TENANT_ID, "NR-33-AUT")
         assert profile is not None
         assert profile.status == ComplianceStatus.REVIEW_REQUIRED, \
             "Profile must be REVIEW_REQUIRED when Course has history conflict"
         assert profile.delivery_mode == "PRESENCIAL", \
             "Profile delivery_mode must still reflect the regulatory target"
-        assert profile.prerequisites is not None
-        assert "COURSE_FIELD_HISTORY_CONFLICT" in profile.prerequisites, \
-            "Profile must record the blocker reason"
+        # Blocker must be in compliance_blockers, NOT prerequisites
+        blocker_codes = [b["code"] for b in profile.compliance_blockers]
+        assert "COURSE_FIELD_HISTORY_CONFLICT" in blocker_codes, \
+            "Profile must record the blocker in compliance_blockers"
+        # Prerequisites must NOT contain the blocker (academic only)
+        if profile.prerequisites:
+            assert "COURSE_FIELD_HISTORY_CONFLICT" not in profile.prerequisites, \
+                "Blocker must NOT be in prerequisites"
     finally:
         await _cleanup_tenant(WR_TENANT_ID)
 
@@ -741,7 +746,10 @@ async def test_manual_review_includes_enrollment_details_no_cpf():
         assert "status" in detail
         assert "class_id" in detail
         assert "certificate_count" in detail
-        assert "is_demo" in detail
+        assert "demo_classification" in detail
+        assert "evidence_codes" in detail
+        # is_demo must NOT be present (replaced by demo_classification)
+        assert "is_demo" not in detail
         # NO CPF anywhere in the detail
         detail_str = str(detail)
         assert "cpf" not in detail_str.lower()

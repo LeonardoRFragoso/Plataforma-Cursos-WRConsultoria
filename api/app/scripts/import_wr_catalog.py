@@ -27,6 +27,7 @@ import asyncio
 import hashlib
 import json
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
 
@@ -39,6 +40,12 @@ from app.models.course import Course, CourseModality
 from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial
 from app.models.tenant import Tenant
+
+# Demo markers reused for demo_classification. These MUST stay in sync with
+# app/scripts/create_demo_certificate.py and app/services/certificate_service.py.
+DEMO_CERTIFICATE_PREFIX = "DEMO-"
+DEMO_EMAIL_DOMAIN = "demo.local"
+DEMO_CLASS_LOCATION = "DEMO-CERT-EAD"
 
 MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "wr_course_content_manifest.json"
 
@@ -360,34 +367,108 @@ _NR_STANDARD = {
 }
 
 
-async def upsert_regulatory_compliance_profile(
-    db: AsyncSession,
-    tenant_id: UUID,
+# ---------------------------------------------------------------------------
+# Compliance blocker codes stored in CourseComplianceProfile.compliance_blockers
+# ---------------------------------------------------------------------------
+BLOCKER_COURSE_FIELD_HISTORY_CONFLICT = "COURSE_FIELD_HISTORY_CONFLICT"
+BLOCKER_NR18_VARIANT_CONFIRMATION_REQUIRED = "NR18_VARIANT_CONFIRMATION_REQUIRED"
+BLOCKER_SOURCE_REGULATORY_RECONCILIATION = "REGULATORY_RECONCILIATION"
+
+
+@dataclass
+class ComplianceProfilePlan:
+    """Pure plan for a single course's compliance profile reconciliation.
+
+    Computed by ``plan_compliance_profile()`` and consumed identically by
+    dry-run (report only) and apply (mutate DB). This guarantees dry-run /
+    apply parity — there is exactly one implementation of the rules.
+    """
+
+    action: str  # CREATED, UPDATED, NO_CHANGE, SKIPPED
+    code: str
+    current_state: dict | None = None
+    target_state: dict = field(default_factory=dict)
+    changes: list[dict] = field(default_factory=list)
+    target_status: str = ComplianceStatus.DRAFT
+    target_blockers: list[dict] = field(default_factory=list)
+    blocker_changes: list[dict] = field(default_factory=list)
+
+
+def _build_blocker(code: str, details: dict | None = None) -> dict:
+    """Build a compliance blocker dict in the canonical format."""
+    return {
+        "code": code,
+        "source": BLOCKER_SOURCE_REGULATORY_RECONCILIATION,
+        "details": details or {},
+    }
+
+
+def _merge_blockers(
+    existing: list[dict],
+    to_add: list[dict],
+    to_remove_codes: set[str],
+) -> tuple[list[dict], list[dict]]:
+    """Merge compliance blockers idempotently.
+
+    - ``to_add``: blockers that should be present (deduplicated by code).
+    - ``to_remove_codes``: blocker codes that should be removed (resolved).
+
+    Returns (merged_blockers, blocker_changes) where blocker_changes is a
+    list of ``{"action": "added"|"removed", "code": ...}`` for reporting.
+    """
+    by_code: dict[str, dict] = {}
+    for b in existing:
+        by_code[b["code"]] = b
+
+    changes: list[dict] = []
+
+    # Remove resolved blockers
+    for code in to_remove_codes:
+        if code in by_code:
+            del by_code[code]
+            changes.append({"action": "removed", "code": code})
+
+    # Add new blockers (idempotent — no duplication)
+    for blocker in to_add:
+        if blocker["code"] not in by_code:
+            by_code[blocker["code"]] = blocker
+            changes.append({"action": "added", "code": blocker["code"]})
+
+    return list(by_code.values()), changes
+
+
+def plan_compliance_profile(
     course: Course,
     entry: dict,
+    existing: CourseComplianceProfile | None,
     force_review_required: bool = False,
-    review_blocker: str | None = None,
-) -> tuple[CourseComplianceProfile | None, str]:
-    """Idempotently upsert a CourseComplianceProfile from REGULATORY_WORKLOAD.
+    review_blocker_fields: list[str] | None = None,
+) -> ComplianceProfilePlan:
+    """Pure planner for compliance profile reconciliation.
 
-    Only updates fields managed by the regulatory matrix. Does NOT
-    overwrite manually-approved fields (technical_responsible_id,
-    pedagogical_project_version_id, certificate_required_fields,
-    next_compliance_review_at, minimum_score).
+    Computes the target state for a course's compliance profile based on
+    REGULATORY_WORKLOAD, the existing profile (if any), and any history
+    conflict (force_review_required). Returns a plan that can be applied
+    identically by dry-run and apply.
 
-    When ``force_review_required`` is True (Course field change blocked by
-    historical records), the profile status is set to REVIEW_REQUIRED
-    regardless of the matrix default, and ``review_blocker`` is recorded
-    in prerequisites as a blocker note.
-
-    Returns (profile, action) where action is "CREATED", "UPDATED", or
-    "NO_CHANGE". Returns (None, "SKIPPED") if the course code has no
-    regulatory matrix entry.
+    Rules:
+    - ``force_review_required=True`` → target_status=REVIEW_REQUIRED,
+      COURSE_FIELD_HISTORY_CONFLICT blocker added.
+    - NR-18-F (matrix status=REVIEW_REQUIRED) → target_status=REVIEW_REQUIRED,
+      NR18_VARIANT_CONFIRMATION_REQUIRED blocker added.
+    - ARCHIVED profiles are never reactivated. If existing.status == ARCHIVED,
+      the plan reports the need for manual review but does not change status.
+    - No auto-promote: once REVIEW_REQUIRED, status stays REVIEW_REQUIRED
+      even if the blocker is resolved. Only human/technical approval can
+      promote back to COMPLIANCE_READY.
+    - Blockers are deduplicated by code (idempotent).
+    - Resolved blockers (force_review_required=False) are removed from the
+      list, but status remains REVIEW_REQUIRED.
     """
     code = entry.get("code", "")
     reg = REGULATORY_WORKLOAD.get(code)
     if reg is None:
-        return None, "SKIPPED"
+        return ComplianceProfilePlan(action="SKIPPED", code=code)
 
     nr_family = entry.get("nr_family", "")
     standard, version = _NR_STANDARD.get(nr_family, (nr_family, "REVIEW_REQUIRED"))
@@ -403,18 +484,30 @@ async def upsert_regulatory_compliance_profile(
     # Determine delivery_mode — use regulatory override if set, else course modality
     delivery_mode = reg.get("modality") or course.modality.value
 
-    # Determine status — REVIEW_REQUIRED for NR-18-F or forced by history conflict
-    status = reg.get("status", ComplianceStatus.DRAFT)
-    if force_review_required:
-        status = ComplianceStatus.REVIEW_REQUIRED
+    # Determine base status from matrix
+    matrix_status = reg.get("status", ComplianceStatus.DRAFT)
 
-    # Prerequisites
-    prerequisites = reg.get("prerequisite")
-    prerequisite_text = f"Requer conclusão do curso {prerequisites}" if prerequisites else None
-    # Append blocker note to prerequisites when forced review
-    if force_review_required and review_blocker:
-        blocker_note = f"[BLOCKER] {review_blocker}"
-        prerequisite_text = f"{prerequisite_text}; {blocker_note}" if prerequisite_text else blocker_note
+    # Determine target blockers
+    blockers_to_add: list[dict] = []
+    blockers_to_remove: set[str] = set()
+
+    is_nr18_f = code == "NR-18-F"
+
+    # NR-18-F: always has NR18_VARIANT_CONFIRMATION_REQUIRED blocker
+    if is_nr18_f:
+        blockers_to_add.append(_build_blocker(BLOCKER_NR18_VARIANT_CONFIRMATION_REQUIRED))
+
+    # History conflict blocker
+    if force_review_required:
+        blockers_to_add.append(
+            _build_blocker(
+                BLOCKER_COURSE_FIELD_HISTORY_CONFLICT,
+                {"fields": review_blocker_fields or ["modality"]},
+            )
+        )
+    else:
+        # No history conflict → remove the blocker if it was previously present
+        blockers_to_remove.add(BLOCKER_COURSE_FIELD_HISTORY_CONFLICT)
 
     # Validity period
     validity_months = reg.get("validity_months")
@@ -422,6 +515,170 @@ async def upsert_regulatory_compliance_profile(
     # Practical component
     requires_practical = reg.get("requires_practical_component", False)
 
+    # Prerequisites — academic only, NO compliance blockers mixed in
+    prerequisites = reg.get("prerequisite")
+    prerequisite_text = f"Requer conclusão do curso {prerequisites}" if prerequisites else None
+
+    # Compute target blockers by merging with existing
+    existing_blockers = list(existing.compliance_blockers) if existing and existing.compliance_blockers else []
+    merged_blockers, blocker_changes = _merge_blockers(existing_blockers, blockers_to_add, blockers_to_remove)
+
+    # Determine target status
+    if existing is None:
+        # New profile
+        target_status = (
+            ComplianceStatus.REVIEW_REQUIRED
+            if (force_review_required or is_nr18_f or matrix_status == ComplianceStatus.REVIEW_REQUIRED)
+            else matrix_status
+        )
+    elif existing.status == ComplianceStatus.ARCHIVED:
+        # ARCHIVED: never reactivate. Keep status, report manual review needed.
+        target_status = ComplianceStatus.ARCHIVED
+    elif force_review_required or is_nr18_f or matrix_status == ComplianceStatus.REVIEW_REQUIRED:
+        # Force REVIEW_REQUIRED from DRAFT, IN_REVIEW, or COMPLIANCE_READY.
+        # Never auto-promote back — once REVIEW_REQUIRED, stays REVIEW_REQUIRED
+        # even after blocker resolution.
+        target_status = ComplianceStatus.REVIEW_REQUIRED
+    else:
+        # No force, no NR-18, matrix is not REVIEW_REQUIRED.
+        # Do NOT auto-promote. Keep existing status (could be DRAFT, IN_REVIEW,
+        # or COMPLIANCE_READY — reconciliation never upgrades status).
+        target_status = existing.status
+
+    # Build target state
+    target_state = {
+        "regulatory_standard": standard,
+        "regulatory_version": version,
+        "delivery_mode": delivery_mode,
+        "workload_source": reg["workload_source"],
+        "workload_minutes": workload_minutes,
+        "normative_minimum_minutes": normative_minimum_minutes,
+        "requires_practical_component": requires_practical,
+        "requires_final_assessment": True,
+        "validity_period_months": validity_months,
+        "prerequisites": prerequisite_text,
+        "certificate_required_fields": [],
+        "status": target_status,
+        "compliance_blockers": merged_blockers,
+    }
+
+    if existing is None:
+        # New profile — all fields are "changes"
+        current_state = None
+        changes = [{"field": k, "after": v} for k, v in target_state.items()]
+        action = "CREATED"
+    else:
+        current_state = {
+            "regulatory_standard": existing.regulatory_standard,
+            "regulatory_version": existing.regulatory_version,
+            "delivery_mode": existing.delivery_mode,
+            "workload_source": existing.workload_source,
+            "workload_minutes": existing.workload_minutes,
+            "normative_minimum_minutes": existing.normative_minimum_minutes,
+            "requires_practical_component": existing.requires_practical_component,
+            "requires_final_assessment": existing.requires_final_assessment,
+            "validity_period_months": existing.validity_period_months,
+            "prerequisites": existing.prerequisites,
+            "certificate_required_fields": existing.certificate_required_fields,
+            "status": existing.status,
+            "compliance_blockers": list(existing.compliance_blockers) if existing.compliance_blockers else [],
+        }
+
+        changes: list[dict] = []
+        for k, target_val in target_state.items():
+            current_val = current_state.get(k)
+            # Compare — handle list/dict equality
+            if current_val != target_val:
+                changes.append({"field": k, "before": current_val, "after": target_val})
+
+        action = "UPDATED" if changes else "NO_CHANGE"
+
+    return ComplianceProfilePlan(
+        action=action,
+        code=code,
+        current_state=current_state,
+        target_state=target_state,
+        changes=changes,
+        target_status=target_status,
+        target_blockers=merged_blockers,
+        blocker_changes=blocker_changes,
+    )
+
+
+def _apply_plan_to_profile(
+    plan: ComplianceProfilePlan,
+    tenant_id: UUID,
+    course_id: UUID,
+    existing: CourseComplianceProfile | None,
+) -> CourseComplianceProfile:
+    """Apply a plan to a profile object (mutates existing or creates new).
+
+    This is the ONLY place that mutates profile fields. Called by apply mode.
+    """
+    if existing is None:
+        profile = CourseComplianceProfile(
+            tenant_id=tenant_id,
+            course_id=course_id,
+            regulatory_standard=plan.target_state["regulatory_standard"],
+            regulatory_version=plan.target_state["regulatory_version"],
+            delivery_mode=plan.target_state["delivery_mode"],
+            workload_source=plan.target_state["workload_source"],
+            workload_minutes=plan.target_state["workload_minutes"],
+            normative_minimum_minutes=plan.target_state["normative_minimum_minutes"],
+            requires_practical_component=plan.target_state["requires_practical_component"],
+            requires_final_assessment=plan.target_state["requires_final_assessment"],
+            validity_period_months=plan.target_state["validity_period_months"],
+            prerequisites=plan.target_state["prerequisites"],
+            certificate_required_fields=[],
+            compliance_blockers=plan.target_blockers,
+            status=plan.target_status,
+        )
+        return profile
+
+    # Update existing profile — only matrix-managed fields
+    existing.regulatory_standard = plan.target_state["regulatory_standard"]
+    existing.regulatory_version = plan.target_state["regulatory_version"]
+    existing.delivery_mode = plan.target_state["delivery_mode"]
+    existing.workload_source = plan.target_state["workload_source"]
+    existing.workload_minutes = plan.target_state["workload_minutes"]
+    existing.normative_minimum_minutes = plan.target_state["normative_minimum_minutes"]
+    existing.requires_practical_component = plan.target_state["requires_practical_component"]
+    existing.requires_final_assessment = plan.target_state["requires_final_assessment"]
+    if plan.target_state["validity_period_months"] is not None:
+        existing.validity_period_months = plan.target_state["validity_period_months"]
+    existing.prerequisites = plan.target_state["prerequisites"]
+    existing.compliance_blockers = plan.target_blockers
+
+    # Status: only downgrade to REVIEW_REQUIRED, never auto-promote
+    if plan.target_status == ComplianceStatus.REVIEW_REQUIRED and existing.status != ComplianceStatus.ARCHIVED:
+        existing.status = ComplianceStatus.REVIEW_REQUIRED
+
+    return existing
+
+
+async def upsert_regulatory_compliance_profile(
+    db: AsyncSession,
+    tenant_id: UUID,
+    course: Course,
+    entry: dict,
+    force_review_required: bool = False,
+    review_blocker_fields: list[str] | None = None,
+) -> tuple[CourseComplianceProfile | None, str, ComplianceProfilePlan | None]:
+    """Idempotently upsert a CourseComplianceProfile from REGULATORY_WORKLOAD.
+
+    Uses ``plan_compliance_profile()`` to compute the plan, then applies it
+    (in apply mode). Returns (profile, action, plan).
+
+    When ``force_review_required`` is True (Course field change blocked by
+    historical records), the profile status is set to REVIEW_REQUIRED
+    regardless of current status (DRAFT, IN_REVIEW, or COMPLIANCE_READY).
+    ARCHIVED profiles are never reactivated. The blocker is stored in
+    ``compliance_blockers`` (NOT prerequisites).
+
+    Returns (profile, action, plan) where action is "CREATED", "UPDATED",
+    or "NO_CHANGE". Returns (None, "SKIPPED", plan) if the course code has
+    no regulatory matrix entry.
+    """
     # Check if profile already exists
     result = await db.execute(
         select(CourseComplianceProfile).where(
@@ -429,75 +686,74 @@ async def upsert_regulatory_compliance_profile(
             CourseComplianceProfile.course_id == course.id,
         )
     )
-    profile = result.scalar_one_or_none()
+    existing = result.scalar_one_or_none()
 
-    if profile is None:
-        # Create new profile with regulatory matrix values
-        profile = CourseComplianceProfile(
-            tenant_id=tenant_id,
-            course_id=course.id,
-            regulatory_standard=standard,
-            regulatory_version=version,
-            delivery_mode=delivery_mode,
-            workload_source=reg["workload_source"],
-            workload_minutes=workload_minutes,
-            normative_minimum_minutes=normative_minimum_minutes,
-            requires_practical_component=requires_practical,
-            requires_final_assessment=True,
-            validity_period_months=validity_months,
-            prerequisites=prerequisite_text,
-            certificate_required_fields=[],
-            status=status,
-        )
+    plan = plan_compliance_profile(
+        course=course,
+        entry=entry,
+        existing=existing,
+        force_review_required=force_review_required,
+        review_blocker_fields=review_blocker_fields,
+    )
+
+    if plan.action == "SKIPPED":
+        return None, "SKIPPED", plan
+
+    # Apply the plan (mutate DB)
+    profile = _apply_plan_to_profile(plan, tenant_id, course.id, existing)
+    if existing is None:
         db.add(profile)
-        return profile, "CREATED"
 
-    # Track whether any field actually changed
-    changed = False
+    return profile, plan.action, plan
 
-    # Update ONLY the fields managed by the regulatory matrix.
-    # Never overwrite manually-configured fields.
-    if profile.regulatory_standard != standard:
-        profile.regulatory_standard = standard
-        changed = True
-    if profile.regulatory_version != version:
-        profile.regulatory_version = version
-        changed = True
-    if profile.delivery_mode != delivery_mode:
-        profile.delivery_mode = delivery_mode
-        changed = True
-    if profile.workload_source != reg["workload_source"]:
-        profile.workload_source = reg["workload_source"]
-        changed = True
-    if profile.workload_minutes != workload_minutes:
-        profile.workload_minutes = workload_minutes
-        changed = True
-    if profile.normative_minimum_minutes != normative_minimum_minutes:
-        profile.normative_minimum_minutes = normative_minimum_minutes
-        changed = True
-    if profile.requires_practical_component != requires_practical:
-        profile.requires_practical_component = requires_practical
-        changed = True
-    if validity_months is not None and profile.validity_period_months != validity_months:
-        profile.validity_period_months = validity_months
-        changed = True
-    if prerequisite_text is not None and profile.prerequisites != prerequisite_text:
-        profile.prerequisites = prerequisite_text
-        changed = True
-    # Only set status to REVIEW_REQUIRED if it was DRAFT (don't downgrade
-    # a COMPLIANCE_READY profile — that requires manual review).
-    if status == ComplianceStatus.REVIEW_REQUIRED and profile.status == ComplianceStatus.DRAFT:
-        profile.status = status
-        changed = True
 
-    return profile, "UPDATED" if changed else "NO_CHANGE"
+def _classify_enrollment_demo(
+    cert_nums: list[str],
+    user_email: str | None,
+    class_location: str | None,
+) -> tuple[str, list[str]]:
+    """Classify an enrollment as demo, non-demo, or unknown.
+
+    Uses known demo markers (certificate prefix, email domain, class location)
+    as positive evidence. Returns (classification, evidence_codes).
+
+    Classification:
+    - CONFIRMED_DEMO: at least one positive demo evidence marker found.
+    - UNKNOWN: no positive demo evidence. NEVER assume NON_DEMO from absence
+      of evidence (fail-closed).
+
+    CONFIRMED_NON_DEMO is only returned when there is positive evidence of
+    operational/production origin. Since no reliable criteria for that exist
+    in the current data model, UNKNOWN is used instead.
+
+    No PII is returned — only classification and evidence codes.
+    """
+    evidence_codes: list[str] = []
+
+    # Evidence: certificate number prefixed with DEMO-
+    if any(c.startswith(DEMO_CERTIFICATE_PREFIX) for c in cert_nums):
+        evidence_codes.append("DEMO_CERTIFICATE_PREFIX")
+
+    # Evidence: user email domain is a known demo domain
+    if user_email and user_email.split("@")[-1].endswith(DEMO_EMAIL_DOMAIN):
+        evidence_codes.append("DEMO_USER_EMAIL_DOMAIN")
+
+    # Evidence: class location matches the known demo class marker
+    if class_location == DEMO_CLASS_LOCATION:
+        evidence_codes.append("DEMO_CLASS_LOCATION")
+
+    if evidence_codes:
+        return "CONFIRMED_DEMO", evidence_codes
+    # Fail-closed: absence of demo evidence does NOT confirm NON_DEMO.
+    return "UNKNOWN", []
 
 
 async def _course_has_historical_records(db: AsyncSession, tenant_id: UUID, course_id: UUID) -> dict:
     """Check if a course has enrollments or certificates that could be
     retroactively reinterpreted by a Course field change.
 
-    Returns a dict with counts and per-enrollment detail (no CPF):
+    Returns a dict with counts and per-enrollment detail (no CPF, no email,
+    no full name — only demo_classification and evidence_codes):
         {"enrollments": N, "certificates": N, "details": [...]}
     Used by reconcile_regulatory_course_fields to decide whether a Course
     field change is safe or must be flagged MANUAL_REVIEW_REQUIRED.
@@ -505,11 +761,15 @@ async def _course_has_historical_records(db: AsyncSession, tenant_id: UUID, cour
     from app.models.certificate import Certificate
     from app.models.class_model import Class
     from app.models.enrollment import Enrollment
+    from app.models.student import Student
+    from app.models.user import User
 
-    # Load enrollments for classes of this course (with class + cert info)
+    # Load enrollments for classes of this course (with class + student + user info)
     enr_result = await db.execute(
-        select(Enrollment, Class)
+        select(Enrollment, Class, Student, User)
         .join(Class, Class.id == Enrollment.class_id)
+        .join(Student, Student.id == Enrollment.student_id)
+        .join(User, User.id == Student.user_id)
         .where(
             Enrollment.tenant_id == tenant_id,
             Class.course_id == course_id,
@@ -532,16 +792,20 @@ async def _course_has_historical_records(db: AsyncSession, tenant_id: UUID, cour
             cert_counts.setdefault(eid, []).append(cert_num)
 
     details = []
-    for enrollment, cls in rows:
+    for enrollment, cls, _student, user in rows:
         cert_nums = cert_counts.get(enrollment.id, [])
-        # Detect demo certificates by prefix
-        is_demo = any(c.startswith("DEMO-") for c in cert_nums)
+        demo_classification, evidence_codes = _classify_enrollment_demo(
+            cert_nums=cert_nums,
+            user_email=user.email if user else None,
+            class_location=cls.location if cls else None,
+        )
         details.append({
             "enrollment_id": str(enrollment.id),
             "status": enrollment.status.value if hasattr(enrollment.status, "value") else str(enrollment.status),
             "class_id": str(cls.id),
             "certificate_count": len(cert_nums),
-            "is_demo": is_demo,
+            "demo_classification": demo_classification,
+            "evidence_codes": evidence_codes,
         })
 
     return {
@@ -595,8 +859,9 @@ async def reconcile_regulatory_course_fields(
         "COURSE_FIELD_NO_CHANGE": [],
     }
     # Codes that have history conflicts — passed to reconcile_regulatory_compliance
-    # so the profile is created as REVIEW_REQUIRED with a blocker reason.
-    manual_review_codes: set[str] = set()
+    # so the profile is created as REVIEW_REQUIRED with a compliance blocker.
+    # Maps code → list of conflicting field names (for blocker details).
+    manual_review_codes: dict[str, list[str]] = {}
 
     # Load all existing courses for this tenant
     result = await db.execute(select(Course).where(Course.tenant_id == tenant_id))
@@ -651,7 +916,8 @@ async def reconcile_regulatory_course_fields(
         # do NOT modify Course fields silently. Flag for manual review.
         history = await _course_has_historical_records(db, tenant_id, course.id)
         if history["enrollments"] > 0 or history["certificates"] > 0:
-            manual_review_codes.add(code)
+            conflict_fields = [c["field"] for c in planned_changes]
+            manual_review_codes[code] = conflict_fields
             report["MANUAL_REVIEW_REQUIRED"].append({
                 "code": code,
                 "reason": (
@@ -696,21 +962,24 @@ async def reconcile_regulatory_compliance(
     tenant_id: UUID,
     manifest: dict,
     dry_run: bool = True,
-    manual_review_codes: set[str] | None = None,
+    manual_review_codes: dict[str, list[str]] | set[str] | None = None,
 ) -> dict:
     """Reconcile all 14 priority courses with their regulatory profiles.
 
-    Calls upsert_regulatory_compliance_profile for each course that has
-    an entry in REGULATORY_WORKLOAD.
+    Uses ``plan_compliance_profile()`` to compute the plan for each course,
+    ensuring dry-run / apply parity. In dry-run mode the plan is reported
+    but NOT applied. In apply mode the plan is applied to the DB.
 
     ``manual_review_codes``: codes whose Course field changes were blocked
-    by historical records. For these, the profile is created/updated with
-    status=REVIEW_REQUIRED and a blocker reason, so the readiness gate
+    by historical records. Can be a dict mapping code → conflicting fields,
+    or a set of codes (fields default to ["modality"]). For these, the
+    profile is created/updated with status=REVIEW_REQUIRED and a
+    COURSE_FIELD_HISTORY_CONFLICT compliance blocker, so the readiness gate
     blocks official certificate issuance until the divergence is resolved.
 
     Report uses namespaced keys to avoid collisions with field_report:
     - PROFILE_CREATED
-    - PROFILE_UPDATED
+    - PROFILE_UPDATED (includes ``changes`` list)
     - PROFILE_NO_CHANGE
     - PROFILE_SKIPPED
     """
@@ -720,8 +989,14 @@ async def reconcile_regulatory_compliance(
         "PROFILE_NO_CHANGE": [],
         "PROFILE_SKIPPED": [],
     }
-    if manual_review_codes is None:
-        manual_review_codes = set()
+    # Normalize manual_review_codes to dict[str, list[str]]
+    review_fields_map: dict[str, list[str]] = {}
+    if manual_review_codes is not None:
+        if isinstance(manual_review_codes, dict):
+            review_fields_map = manual_review_codes
+        else:
+            # Backwards compat: set of codes → default fields
+            review_fields_map = {code: ["modality"] for code in manual_review_codes}
 
     # Load all existing courses for this tenant
     result = await db.execute(select(Course).where(Course.tenant_id == tenant_id))
@@ -736,37 +1011,55 @@ async def reconcile_regulatory_compliance(
             report["PROFILE_SKIPPED"].append({"code": code, "reason": "course not found"})
             continue
 
-        force_review = code in manual_review_codes
-        blocker_reason = None
-        if force_review:
-            blocker_reason = (
-                "COURSE_FIELD_HISTORY_CONFLICT: Course field alignment blocked "
-                "by existing enrollments/certificates. Course.modality or "
-                "carga_horaria diverges from regulatory matrix."
-            )
+        force_review = code in review_fields_map
+        review_blocker_fields = review_fields_map.get(code, ["modality"])
 
-        if not dry_run:
-            profile, action = await upsert_regulatory_compliance_profile(
-                db, tenant_id, course, entry,
-                force_review_required=force_review,
-                review_blocker=blocker_reason,
+        # Load existing profile (needed for both dry-run and apply planning)
+        existing_profile = (
+            await db.execute(
+                select(CourseComplianceProfile).where(
+                    CourseComplianceProfile.tenant_id == tenant_id,
+                    CourseComplianceProfile.course_id == course.id,
+                )
             )
-            if action == "CREATED":
-                report["PROFILE_CREATED"].append({"code": code, "status": profile.status})
-            elif action == "UPDATED":
-                report["PROFILE_UPDATED"].append({"code": code})
-            elif action == "NO_CHANGE":
-                report["PROFILE_NO_CHANGE"].append({"code": code})
-            else:
-                report["PROFILE_SKIPPED"].append({"code": code, "reason": "no regulatory entry"})
-        else:
-            # Dry-run: report what would happen
-            if force_review:
-                report["PROFILE_CREATED"].append({"code": code, "dry_run": True, "status": "REVIEW_REQUIRED", "blocker": blocker_reason})
-            else:
-                reg = REGULATORY_WORKLOAD[code]
-                status = reg.get("status", ComplianceStatus.DRAFT)
-                report["PROFILE_CREATED"].append({"code": code, "dry_run": True, "status": status})
+        ).scalar_one_or_none()
+
+        # Compute plan — same logic for dry-run and apply
+        plan = plan_compliance_profile(
+            course=course,
+            entry=entry,
+            existing=existing_profile,
+            force_review_required=force_review,
+            review_blocker_fields=review_blocker_fields,
+        )
+
+        if plan.action == "SKIPPED":
+            report["PROFILE_SKIPPED"].append({"code": code, "reason": "no regulatory entry"})
+            continue
+
+        # Build report entry
+        report_entry: dict = {
+            "code": code,
+            "status": plan.target_status,
+            "compliance_blockers": plan.target_blockers,
+        }
+        if plan.changes:
+            report_entry["changes"] = plan.changes
+        if plan.blocker_changes:
+            report_entry["blocker_changes"] = plan.blocker_changes
+
+        if plan.action == "CREATED":
+            report["PROFILE_CREATED"].append(report_entry)
+        elif plan.action == "UPDATED":
+            report["PROFILE_UPDATED"].append(report_entry)
+        elif plan.action == "NO_CHANGE":
+            report["PROFILE_NO_CHANGE"].append(report_entry)
+
+        # Apply the plan only in apply mode
+        if not dry_run and plan.action in ("CREATED", "UPDATED"):
+            profile = _apply_plan_to_profile(plan, tenant_id, course.id, existing_profile)
+            if existing_profile is None:
+                db.add(profile)
 
     return report
 
@@ -942,15 +1235,21 @@ async def run_regulatory_only(
 
     This is the explicit transaction boundary for regulatory apply. The
     caller is responsible for commit (apply) or rollback (dry-run / error).
+
+    NOTE: The full import flow (``import_catalog``) has its own internal
+    ``await db.commit()`` and is therefore NOT atomically rollbackable with
+    regulatory reconciliation. ``--regulatory-only`` is the recommended
+    transactionally-safe flow for regulatory reconciliation. Do NOT assume
+    the full importer is atomic.
     """
     # Reconcile regulatory Course fields (carga_horaria, modality) for the
     # 14 priority courses — aligns Course table with REGULATORY_WORKLOAD.
     field_report = await reconcile_regulatory_course_fields(db, tenant_id, manifest, dry_run=dry_run)
-    manual_review_codes: set[str] = field_report.pop("_manual_review_codes", set())
+    manual_review_codes: dict[str, list[str]] = field_report.pop("_manual_review_codes", {})
 
     # Reconcile regulatory compliance profiles for the 14 priority courses.
     # Pass manual_review_codes so profiles for history-blocked courses are
-    # created as REVIEW_REQUIRED with a blocker reason.
+    # created as REVIEW_REQUIRED with a compliance blocker.
     profile_report = await reconcile_regulatory_compliance(
         db, tenant_id, manifest, dry_run=dry_run,
         manual_review_codes=manual_review_codes,
@@ -1022,7 +1321,7 @@ async def main():
 
                 # Regulatory reconciliation with manual-review propagation
                 field_report = await reconcile_regulatory_course_fields(db, tenant_id, manifest, dry_run=dry_run)
-                manual_review_codes = field_report.pop("_manual_review_codes", set())
+                manual_review_codes = field_report.pop("_manual_review_codes", {})
                 report.update(field_report)
 
                 reg_report = await reconcile_regulatory_compliance(
