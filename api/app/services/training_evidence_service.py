@@ -36,6 +36,32 @@ class RegulatoryEvaluation:
     last_evaluated_at: datetime
 
 
+def _has_course_profile_divergence(course: Course, profile: CourseComplianceProfile) -> bool:
+    """Detect divergence between Course table fields and the compliance profile.
+
+    Returns True if:
+    - Course.modality != profile.delivery_mode, OR
+    - profile.normative_minimum_minutes is set and
+      Course.carga_horaria * 60 < profile.normative_minimum_minutes
+
+    This divergence occurs when a regulatory Course field alignment was
+    blocked by historical records (MANUAL_REVIEW_REQUIRED). The readiness
+    gate must block official certificate issuance until it is resolved.
+    """
+    # Modality divergence
+    course_modality = course.modality.value if hasattr(course.modality, "value") else str(course.modality)
+    if course_modality != profile.delivery_mode:
+        return True
+
+    # Workload divergence: course carga_horaria below normative minimum
+    if profile.normative_minimum_minutes is not None and course.carga_horaria is not None:
+        course_minutes = int(course.carga_horaria * 60)
+        if course_minutes < profile.normative_minimum_minutes:
+            return True
+
+    return False
+
+
 async def find_active_enrollment(
     db: AsyncSession,
     *,
@@ -208,6 +234,13 @@ async def evaluate_regulatory_state(
     elif profile.status != ComplianceStatus.COMPLIANCE_READY:
         state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
         blockers.append("Course compliance profile requires review")
+    elif _has_course_profile_divergence(course, profile):
+        # Course table fields (modality, carga_horaria) diverge from the
+        # regulatory compliance profile. This happens when a Course field
+        # alignment was blocked by historical records (MANUAL_REVIEW_REQUIRED).
+        # Block official certificate issuance until the divergence is resolved.
+        state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
+        blockers.append("COURSE_FIELD_HISTORY_CONFLICT: Course fields diverge from compliance profile")
     elif profile.next_compliance_review_at and profile.next_compliance_review_at <= now:
         state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
         blockers.append("Course compliance review has expired")

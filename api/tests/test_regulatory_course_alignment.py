@@ -393,8 +393,8 @@ async def test_J_idempotency_second_run_no_updates():
 
         assert len(field_report["COURSE_FIELD_UPDATES"]) == 0
         # compliance report should not create duplicates
-        assert len(comp_report.get("CREATED_PROFILE", [])) == 0 or all(
-            not item.get("dry_run") for item in comp_report.get("CREATED_PROFILE", [])
+        assert len(comp_report.get("PROFILE_CREATED", [])) == 0 or all(
+            not item.get("dry_run") for item in comp_report.get("PROFILE_CREATED", [])
         )
 
         # Verify single profile
