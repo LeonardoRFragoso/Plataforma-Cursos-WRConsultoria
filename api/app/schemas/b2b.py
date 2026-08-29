@@ -9,9 +9,12 @@ These schemas are intentionally minimal and LGPD-safe:
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
+
+T = TypeVar("T")
 
 # ---- Pagination ----
 
@@ -37,7 +40,7 @@ class B2BContextResponse(BaseModel):
     api_version: str = "1"
 
 
-class B2BPageResponse[T](BaseModel):
+class B2BPageResponse(BaseModel, Generic[T]):
     """Typed paginated response for B2B list endpoints."""
     meta: B2BPageMeta
     data: list[T]
