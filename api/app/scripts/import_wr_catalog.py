@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.models.compliance import ComplianceStatus, CourseComplianceProfile, WorkloadSource
-from app.models.course import Course
+from app.models.course import Course, CourseModality
 from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial
 from app.models.tenant import Tenant
@@ -458,6 +458,174 @@ async def upsert_regulatory_compliance_profile(
     return profile
 
 
+async def _course_has_historical_records(db: AsyncSession, tenant_id: UUID, course_id: UUID) -> dict:
+    """Check if a course has enrollments or certificates that could be
+    retroactively reinterpreted by a Course field change.
+
+    Returns a dict with counts: {"enrollments": N, "certificates": N}.
+    Used by reconcile_regulatory_course_fields to decide whether a Course
+    field change is safe or must be flagged MANUAL_REVIEW_REQUIRED.
+    """
+    from app.models.certificate import Certificate
+    from app.models.class_model import Class
+    from app.models.enrollment import Enrollment
+
+    # Count enrollments for classes of this course
+    enr_result = await db.execute(
+        select(Enrollment.id)
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(
+            Enrollment.tenant_id == tenant_id,
+            Class.course_id == course_id,
+        )
+    )
+    enrollment_ids = [row[0] for row in enr_result.all()]
+
+    certificate_count = 0
+    if enrollment_ids:
+        cert_result = await db.execute(
+            select(Certificate.id)
+            .where(
+                Certificate.tenant_id == tenant_id,
+                Certificate.enrollment_id.in_(enrollment_ids),
+            )
+        )
+        certificate_count = len(cert_result.all())
+
+    return {"enrollments": len(enrollment_ids), "certificates": certificate_count}
+
+
+async def reconcile_regulatory_course_fields(
+    db: AsyncSession,
+    tenant_id: UUID,
+    manifest: dict,
+    dry_run: bool = True,
+) -> dict:
+    """Safely align Course.carga_horaria and Course.modality with REGULATORY_WORKLOAD.
+
+    SAFETY GUARANTEES:
+    - Only operates on course codes present in REGULATORY_WORKLOAD (the 14
+      priority courses). Other courses are never touched.
+    - Only operates on the given tenant_id.
+    - carga_horaria is aligned ONLY when workload_source == NORMATIVE_MINIMUM
+      and normative_minimum_minutes is defined. EMPLOYER_DEFINED,
+      PLH_DEFINED, and REVIEW_REQUIRED workloads are never overwritten.
+    - modality is aligned ONLY when REGULATORY_WORKLOAD[code]["modality"] is
+      not None. A None modality (NR-18-F) means "do not override".
+    - NR-18-F: neither carga_horaria nor modality is altered (workload_source
+      is REVIEW_REQUIRED, modality is None).
+    - Historical safety: if the course has existing enrollments or
+      certificates, the Course field change is flagged
+      MANUAL_REVIEW_REQUIRED and NOT applied silently. Issued certificates
+      are never retroactively recalculated.
+    - Idempotent: re-running produces 0 course updates.
+    - Transactional: the caller is responsible for committing.
+
+    Report format (per field change):
+        {
+            "code": "NR-33-SUP",
+            "field": "carga_horaria",
+            "before": 16,
+            "after": 40,
+            "source": "NORMATIVE_MINIMUM",
+            "reason": "...",
+            "action": "UPDATE",
+        }
+    """
+    report: dict = {
+        "COURSE_FIELD_UPDATES": [],
+        "MANUAL_REVIEW_REQUIRED": [],
+        "SKIPPED": [],
+        "NO_CHANGE": [],
+    }
+
+    # Load all existing courses for this tenant
+    result = await db.execute(select(Course).where(Course.tenant_id == tenant_id))
+    existing_courses = {c.code: c for c in result.scalars().all()}
+
+    for entry in manifest["courses"]:
+        code = entry["code"]
+        if code not in REGULATORY_WORKLOAD:
+            continue
+        course = existing_courses.get(code)
+        if not course:
+            report["SKIPPED"].append({"code": code, "reason": "course not found"})
+            continue
+
+        reg = REGULATORY_WORKLOAD[code]
+        workload_source = reg["workload_source"]
+        normative_minimum_minutes = reg.get("normative_minimum_minutes")
+        reg_modality = reg.get("modality")
+
+        # Determine planned changes
+        planned_changes: list[dict] = []
+
+        # carga_horaria: only for NORMATIVE_MINIMUM with a defined minimum
+        if workload_source == WorkloadSource.NORMATIVE_MINIMUM and normative_minimum_minutes:
+            target_ch = normative_minimum_minutes // 60
+            if course.carga_horaria != target_ch:
+                planned_changes.append({
+                    "field": "carga_horaria",
+                    "before": course.carga_horaria,
+                    "after": target_ch,
+                    "source": "NORMATIVE_MINIMUM",
+                    "reason": f"Matrix requires {target_ch}h normative minimum (was {course.carga_horaria}h)",
+                })
+
+        # modality: only when matrix explicitly defines an override (not None)
+        if reg_modality is not None:
+            target_modality = CourseModality(reg_modality)
+            if course.modality != target_modality:
+                planned_changes.append({
+                    "field": "modality",
+                    "before": course.modality.value,
+                    "after": reg_modality,
+                    "source": "REGULATORY_WORKLOAD",
+                    "reason": f"Matrix requires {reg_modality} modality (was {course.modality.value})",
+                })
+
+        if not planned_changes:
+            report["NO_CHANGE"].append({"code": code})
+            continue
+
+        # Historical safety check — if the course has enrollments/certificates,
+        # do NOT modify Course fields silently. Flag for manual review.
+        history = await _course_has_historical_records(db, tenant_id, course.id)
+        if history["enrollments"] > 0 or history["certificates"] > 0:
+            report["MANUAL_REVIEW_REQUIRED"].append({
+                "code": code,
+                "reason": (
+                    f"Course has {history['enrollments']} enrollment(s) and "
+                    f"{history['certificates']} certificate(s). Course field "
+                    "changes require manual review to preserve historical "
+                    "snapshot integrity."
+                ),
+                "planned_changes": planned_changes,
+                "historical_records": history,
+            })
+            continue
+
+        # Apply changes
+        for change in planned_changes:
+            change_entry = {
+                "code": code,
+                "field": change["field"],
+                "before": change["before"],
+                "after": change["after"],
+                "source": change["source"],
+                "reason": change["reason"],
+                "action": "UPDATE",
+            }
+            report["COURSE_FIELD_UPDATES"].append(change_entry)
+            if not dry_run:
+                if change["field"] == "carga_horaria":
+                    course.carga_horaria = change["after"]
+                elif change["field"] == "modality":
+                    course.modality = CourseModality(change["after"])
+
+    return report
+
+
 async def reconcile_regulatory_compliance(
     db: AsyncSession,
     tenant_id: UUID,
@@ -638,7 +806,9 @@ def print_report(report: dict, dry_run: bool):
     for action in ["CREATE_COURSE", "UPDATE_COURSE", "DEACTIVATE_COURSE",
                    "CREATE_CONTENT_PROFILE", "UPDATE_CONTENT_PROFILE",
                    "UPLOAD_MATERIAL", "SKIP_DUPLICATE_MATERIAL",
-                   "CONFLICT", "REVIEW_REQUIRED"]:
+                   "CONFLICT", "REVIEW_REQUIRED",
+                   "COURSE_FIELD_UPDATES", "MANUAL_REVIEW_REQUIRED",
+                   "CREATED_PROFILE", "UPDATED_PROFILE", "SKIPPED", "NO_CHANGE"]:
         items = report.get(action, [])
         if items:
             print(f"\n  {action} ({len(items)}):")
@@ -689,6 +859,11 @@ async def main():
             db, tenant_id, manifest, dry_run=dry_run,
             manifest_hash=manifest_hash, manifest_version=manifest_version,
         )
+
+        # Reconcile regulatory Course fields (carga_horaria, modality) for the
+        # 14 priority courses — aligns Course table with REGULATORY_WORKLOAD.
+        field_report = await reconcile_regulatory_course_fields(db, tenant_id, manifest, dry_run=dry_run)
+        report.update(field_report)
 
         # Reconcile regulatory compliance profiles for the 14 priority courses
         reg_report = await reconcile_regulatory_compliance(db, tenant_id, manifest, dry_run=dry_run)
