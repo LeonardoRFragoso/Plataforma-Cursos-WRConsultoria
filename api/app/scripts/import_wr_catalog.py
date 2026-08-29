@@ -412,17 +412,25 @@ def _merge_blockers(
 
     - ``to_add``: blockers that should be present (deduplicated by code).
     - ``to_remove_codes``: blocker codes that should be removed (resolved).
+      Only codes managed by this reconciler are removed — external blockers
+      (codes not in to_remove_codes) are always preserved.
 
     Returns (merged_blockers, blocker_changes) where blocker_changes is a
     list of ``{"action": "added"|"removed", "code": ...}`` for reporting.
     """
     by_code: dict[str, dict] = {}
     for b in existing:
-        by_code[b["code"]] = b
+        # Defensive: handle malformed blockers (non-dict or missing code)
+        if isinstance(b, dict) and "code" in b:
+            by_code[b["code"]] = b
+        else:
+            # Preserve malformed/external blockers with a synthetic key
+            # so they are not lost. They will be preserved but not managed.
+            by_code[f"__malformed_{id(b)}"] = b
 
     changes: list[dict] = []
 
-    # Remove resolved blockers
+    # Remove resolved blockers (only codes explicitly in to_remove_codes)
     for code in to_remove_codes:
         if code in by_code:
             del by_code[code]
@@ -451,19 +459,31 @@ def plan_compliance_profile(
     conflict (force_review_required). Returns a plan that can be applied
     identically by dry-run and apply.
 
+    FIELD OWNERSHIP:
+    - MATRIX-OWNED (reconciler controls): regulatory_standard, regulatory_version,
+      delivery_mode, workload_source, workload_minutes, normative_minimum_minutes,
+      requires_practical_component, requires_final_assessment.
+    - MATRIX-OWNED CONDITIONAL: validity_period_months (only when matrix defines
+      validity_months explicitly), prerequisites (only when matrix defines
+      prerequisite explicitly), compliance_blockers (only for codes managed
+      by this reconciler).
+    - MANUAL-OWNED / PRESERVE: certificate_required_fields, technical_responsible_id,
+      pedagogical_project_version_id, minimum_score, last_compliance_review_at,
+      next_compliance_review_at. Never reported as changes, never overwritten.
+
     Rules:
     - ``force_review_required=True`` → target_status=REVIEW_REQUIRED,
       COURSE_FIELD_HISTORY_CONFLICT blocker added.
-    - NR-18-F (matrix status=REVIEW_REQUIRED) → target_status=REVIEW_REQUIRED,
-      NR18_VARIANT_CONFIRMATION_REQUIRED blocker added.
-    - ARCHIVED profiles are never reactivated. If existing.status == ARCHIVED,
-      the plan reports the need for manual review but does not change status.
+    - NR-18 variant confirmation: blocker added when matrix indicates
+      REVIEW_REQUIRED (status or workload_source), NOT hardcoded by code.
+      After future matrix update (status != REVIEW_REQUIRED), blocker is
+      removed but status stays REVIEW_REQUIRED (no auto-promote).
+    - ARCHIVED profiles are never reactivated.
     - No auto-promote: once REVIEW_REQUIRED, status stays REVIEW_REQUIRED
-      even if the blocker is resolved. Only human/technical approval can
-      promote back to COMPLIANCE_READY.
+      even if the blocker is resolved.
     - Blockers are deduplicated by code (idempotent).
-    - Resolved blockers (force_review_required=False) are removed from the
-      list, but status remains REVIEW_REQUIRED.
+    - External blockers (not managed by this reconciler) are always preserved.
+    - Resolved blockers are removed from the list, but status remains REVIEW_REQUIRED.
     """
     code = entry.get("code", "")
     reg = REGULATORY_WORKLOAD.get(code)
@@ -487,15 +507,24 @@ def plan_compliance_profile(
     # Determine base status from matrix
     matrix_status = reg.get("status", ComplianceStatus.DRAFT)
 
+    # Determine if NR-18 variant confirmation is needed — based on matrix
+    # status/workload_source, NOT hardcoded by course code. This allows
+    # future matrix updates to remove the blocker after human confirmation.
+    nr18_variant_needs_review = (
+        matrix_status == ComplianceStatus.REVIEW_REQUIRED
+        or reg["workload_source"] == WorkloadSource.REVIEW_REQUIRED
+    ) and code.startswith("NR-18")
+
     # Determine target blockers
     blockers_to_add: list[dict] = []
     blockers_to_remove: set[str] = set()
 
-    is_nr18_f = code == "NR-18-F"
-
-    # NR-18-F: always has NR18_VARIANT_CONFIRMATION_REQUIRED blocker
-    if is_nr18_f:
+    # NR-18 variant confirmation blocker — only when matrix indicates review needed
+    if nr18_variant_needs_review:
         blockers_to_add.append(_build_blocker(BLOCKER_NR18_VARIANT_CONFIRMATION_REQUIRED))
+    else:
+        # Matrix no longer requires NR-18 variant review → remove blocker
+        blockers_to_remove.add(BLOCKER_NR18_VARIANT_CONFIRMATION_REQUIRED)
 
     # History conflict blocker
     if force_review_required:
@@ -509,15 +538,33 @@ def plan_compliance_profile(
         # No history conflict → remove the blocker if it was previously present
         blockers_to_remove.add(BLOCKER_COURSE_FIELD_HISTORY_CONFLICT)
 
-    # Validity period
-    validity_months = reg.get("validity_months")
+    # Validity period — matrix-owned ONLY when matrix defines validity_months explicitly
+    matrix_validity_months = reg.get("validity_months")
+    if matrix_validity_months is not None:
+        target_validity = matrix_validity_months
+    elif existing is not None:
+        # Matrix doesn't define validity → preserve existing value (manual-owned)
+        target_validity = existing.validity_period_months
+    else:
+        # New profile, matrix doesn't define → None
+        target_validity = None
 
     # Practical component
     requires_practical = reg.get("requires_practical_component", False)
 
-    # Prerequisites — academic only, NO compliance blockers mixed in
-    prerequisites = reg.get("prerequisite")
-    prerequisite_text = f"Requer conclusão do curso {prerequisites}" if prerequisites else None
+    # Prerequisites — matrix-owned ONLY when matrix defines prerequisite explicitly
+    matrix_prerequisite = reg.get("prerequisite")
+    if matrix_prerequisite is not None:
+        target_prerequisites = f"Requer conclusão do curso {matrix_prerequisite}"
+    elif existing is not None:
+        # Matrix doesn't define prerequisite → preserve existing (manual-owned)
+        target_prerequisites = existing.prerequisites
+    else:
+        # New profile, matrix doesn't define → None
+        target_prerequisites = None
+
+    # certificate_required_fields — MANUAL-OWNED, always preserve existing
+    target_cert_fields = list(existing.certificate_required_fields) if existing and existing.certificate_required_fields else []
 
     # Compute target blockers by merging with existing
     existing_blockers = list(existing.compliance_blockers) if existing and existing.compliance_blockers else []
@@ -528,24 +575,25 @@ def plan_compliance_profile(
         # New profile
         target_status = (
             ComplianceStatus.REVIEW_REQUIRED
-            if (force_review_required or is_nr18_f or matrix_status == ComplianceStatus.REVIEW_REQUIRED)
+            if (force_review_required or nr18_variant_needs_review or matrix_status == ComplianceStatus.REVIEW_REQUIRED)
             else matrix_status
         )
     elif existing.status == ComplianceStatus.ARCHIVED:
         # ARCHIVED: never reactivate. Keep status, report manual review needed.
         target_status = ComplianceStatus.ARCHIVED
-    elif force_review_required or is_nr18_f or matrix_status == ComplianceStatus.REVIEW_REQUIRED:
+    elif force_review_required or nr18_variant_needs_review or matrix_status == ComplianceStatus.REVIEW_REQUIRED:
         # Force REVIEW_REQUIRED from DRAFT, IN_REVIEW, or COMPLIANCE_READY.
         # Never auto-promote back — once REVIEW_REQUIRED, stays REVIEW_REQUIRED
         # even after blocker resolution.
         target_status = ComplianceStatus.REVIEW_REQUIRED
     else:
-        # No force, no NR-18, matrix is not REVIEW_REQUIRED.
+        # No force, no NR-18 review, matrix is not REVIEW_REQUIRED.
         # Do NOT auto-promote. Keep existing status (could be DRAFT, IN_REVIEW,
         # or COMPLIANCE_READY — reconciliation never upgrades status).
         target_status = existing.status
 
-    # Build target state
+    # Build target state — only MATRIX-OWNED fields are included for comparison.
+    # MANUAL-OWNED fields are preserved and NOT reported as changes.
     target_state = {
         "regulatory_standard": standard,
         "regulatory_version": version,
@@ -555,9 +603,9 @@ def plan_compliance_profile(
         "normative_minimum_minutes": normative_minimum_minutes,
         "requires_practical_component": requires_practical,
         "requires_final_assessment": True,
-        "validity_period_months": validity_months,
-        "prerequisites": prerequisite_text,
-        "certificate_required_fields": [],
+        "validity_period_months": target_validity,
+        "prerequisites": target_prerequisites,
+        "certificate_required_fields": target_cert_fields,
         "status": target_status,
         "compliance_blockers": merged_blockers,
     }
@@ -614,6 +662,17 @@ def _apply_plan_to_profile(
     """Apply a plan to a profile object (mutates existing or creates new).
 
     This is the ONLY place that mutates profile fields. Called by apply mode.
+
+    FIELD OWNERSHIP:
+    - MATRIX-OWNED fields are set from plan.target_state.
+    - MANUAL-OWNED fields (certificate_required_fields, technical_responsible_id,
+      pedagogical_project_version_id, minimum_score, last_compliance_review_at,
+      next_compliance_review_at) are NEVER overwritten on existing profiles.
+    - For new profiles, manual-owned fields start at their defaults (empty/null).
+    - validity_period_months and prerequisites: the planner already computed
+      the correct target (matrix value if defined, else existing value), so
+      we always set them from target_state. This is safe because the planner
+      preserves existing values when the matrix doesn't define them.
     """
     if existing is None:
         profile = CourseComplianceProfile(
@@ -629,13 +688,14 @@ def _apply_plan_to_profile(
             requires_final_assessment=plan.target_state["requires_final_assessment"],
             validity_period_months=plan.target_state["validity_period_months"],
             prerequisites=plan.target_state["prerequisites"],
-            certificate_required_fields=[],
+            certificate_required_fields=plan.target_state["certificate_required_fields"],
             compliance_blockers=plan.target_blockers,
             status=plan.target_status,
         )
         return profile
 
-    # Update existing profile — only matrix-managed fields
+    # Update existing profile — only MATRIX-OWNED fields.
+    # MANUAL-OWNED fields are NEVER touched here.
     existing.regulatory_standard = plan.target_state["regulatory_standard"]
     existing.regulatory_version = plan.target_state["regulatory_version"]
     existing.delivery_mode = plan.target_state["delivery_mode"]
@@ -644,10 +704,14 @@ def _apply_plan_to_profile(
     existing.normative_minimum_minutes = plan.target_state["normative_minimum_minutes"]
     existing.requires_practical_component = plan.target_state["requires_practical_component"]
     existing.requires_final_assessment = plan.target_state["requires_final_assessment"]
-    if plan.target_state["validity_period_months"] is not None:
-        existing.validity_period_months = plan.target_state["validity_period_months"]
+    # validity_period_months: planner already set target = existing when matrix
+    # doesn't define it, so this is safe (no clobbering of manual values).
+    existing.validity_period_months = plan.target_state["validity_period_months"]
+    # prerequisites: planner already set target = existing when matrix doesn't
+    # define it, so this is safe (no clobbering of manual values).
     existing.prerequisites = plan.target_state["prerequisites"]
     existing.compliance_blockers = plan.target_blockers
+    # certificate_required_fields: MANUAL-OWNED — NEVER overwritten.
 
     # Status: only downgrade to REVIEW_REQUIRED, never auto-promote
     if plan.target_status == ComplianceStatus.REVIEW_REQUIRED and existing.status != ComplianceStatus.ARCHIVED:
@@ -734,9 +798,14 @@ def _classify_enrollment_demo(
     if any(c.startswith(DEMO_CERTIFICATE_PREFIX) for c in cert_nums):
         evidence_codes.append("DEMO_CERTIFICATE_PREFIX")
 
-    # Evidence: user email domain is a known demo domain
-    if user_email and user_email.split("@")[-1].endswith(DEMO_EMAIL_DOMAIN):
-        evidence_codes.append("DEMO_USER_EMAIL_DOMAIN")
+    # Evidence: user email domain is a known demo domain.
+    # Exact match on "demo.local" OR subdomain ending with ".demo.local".
+    # Normalized to lowercase to be case-insensitive.
+    # This prevents false positives like "notdemo.local".
+    if user_email:
+        domain = user_email.split("@")[-1].lower()
+        if domain == DEMO_EMAIL_DOMAIN or domain.endswith(f".{DEMO_EMAIL_DOMAIN}"):
+            evidence_codes.append("DEMO_USER_EMAIL_DOMAIN")
 
     # Evidence: class location matches the known demo class marker
     if class_location == DEMO_CLASS_LOCATION:

@@ -239,7 +239,16 @@ async def evaluate_regulatory_state(
         state = RegulatoryCompletionState.CANCELLED
     elif profile_blockers:
         state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
-        blocker_codes = [b["code"] for b in profile_blockers if isinstance(b, dict)]
+        # Fail-closed: any non-empty compliance_blockers blocks, regardless
+        # of format. Extract codes defensively — malformed blockers (non-dict,
+        # missing "code" key) are reported as UNKNOWN_COMPLIANCE_BLOCKER
+        # instead of raising KeyError/500.
+        blocker_codes: list[str] = []
+        for b in profile_blockers:
+            if isinstance(b, dict) and "code" in b:
+                blocker_codes.append(b["code"])
+            else:
+                blocker_codes.append("UNKNOWN_COMPLIANCE_BLOCKER")
         blockers.append(f"Compliance blockers present: {', '.join(blocker_codes)}")
     elif profile.status != ComplianceStatus.COMPLIANCE_READY:
         state = RegulatoryCompletionState.COMPLIANCE_REVIEW_REQUIRED
