@@ -49,6 +49,11 @@ from app.models.payment import (
     PaymentWebhookEvent,
 )
 from app.models.plan import BillingCycle, Plan
+from app.models.professional_evidence import (
+    ProfessionalEvidenceStatus,
+    ProfessionalEvidenceType,
+    TrainingProfessionalEvidence,
+)
 from app.models.student import Student
 from app.models.tenant import PartnerLead, PartnerLeadStatus, Tenant, TenantStatus
 from app.models.tenant_secret import TenantSecret
@@ -127,6 +132,8 @@ __all__ = [
     "PracticalTrainingRecord",
     "PrivacyRequest",
     "ProfessionalAssignmentRole",
+    "ProfessionalEvidenceStatus",
+    "ProfessionalEvidenceType",
     "RegulatoryCompletionState",
     "RetentionPolicyStatus",
     "ReviewStatus",
@@ -141,6 +148,7 @@ __all__ = [
     "TrainingAccessEvent",
     "TrainingEventType",
     "TrainingProfessional",
+    "TrainingProfessionalEvidence",
     "TutorKnowledgeChunk",
     "TutorKnowledgeDocument",
     "TutorKnowledgeStatus",
