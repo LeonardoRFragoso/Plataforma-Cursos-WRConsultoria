@@ -111,6 +111,12 @@ NR1_EAD_CONTROLS: tuple[str, ...] = (
     "appropriate_virtual_learning_environment",
 )
 
+# The governance table stores retention as an integer number of days while the
+# source rule is calendar based (validity end + two calendar years). 731 days
+# is a deliberately conservative operational projection that covers a leap day.
+# Date-specific legal boundaries must continue to use add_calendar_years().
+CONSERVATIVE_TWO_YEAR_BUFFER_DAYS = 731
+
 
 def nr10_source_for(reference_date: date) -> RegulatorySourceVersion:
     """Return the NR-10 source version applicable on a calendar date."""
@@ -129,6 +135,13 @@ def add_calendar_years(value: date, years: int) -> date:
 def minimum_ead_access_log_retention_until(course_validity_end: date) -> date:
     """NR-01 EAD floor: keep access logs for 2 years after course validity."""
     return add_calendar_years(course_validity_end, 2)
+
+
+def operational_ead_access_log_retention_days(validity_days: int) -> int:
+    """Conservative day-based floor for the versioned operational policy."""
+    if validity_days <= 0:
+        raise ValueError("validity_days must be positive")
+    return validity_days + CONSERVATIVE_TWO_YEAR_BUFFER_DAYS
 
 
 def official_regulatory_sources() -> list[dict]:
