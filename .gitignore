@@ -68,6 +68,12 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 
+# Backups — never commit database exports or dumps
+backups/
+*.dump
+*.backup
+railway_backup_*.sql
+
 # Logs
 logs/
 *.log

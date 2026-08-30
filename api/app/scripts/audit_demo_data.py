@@ -30,6 +30,14 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import get_db_privileged
+from app.core.demo_markers import (
+    DEMO_CERTIFICATE_PREFIXES,
+    DEMO_CLASS_LOCATIONS,
+    DEMO_EMAIL_DOMAINS,
+    is_demo_certificate_number,
+    is_demo_class_location,
+    is_demo_email_domain,
+)
 from app.models.certificate import Certificate
 from app.models.class_model import Class
 from app.models.enrollment import Enrollment
@@ -37,24 +45,27 @@ from app.models.payment import Payment
 from app.models.student import Student
 from app.models.user import User
 
+# Keep backward-compatible names for the query logic below.
 DEMO_CLASS_LOCATION = "DEMO-EAD"
-DEMO_CERT_PREFIX = "DEMO-"
-DEMO_EMAIL_DOMAINS = ("@wr.demo", "@alfa.demo")
+DEMO_CERT_PREFIX = next(iter(DEMO_CERTIFICATE_PREFIXES))  # "DEMO-"
+DEMO_EMAIL_DOMAINS_LEGACY = ("@wr.demo", "@alfa.demo")
 
 
 def _is_unambiguous_demo_user(user: User) -> bool:
-    """A user is unambiguously demo if email ends with a demo domain."""
-    return any(user.email.endswith(d) for d in DEMO_EMAIL_DOMAINS)
+    """A user is unambiguously demo if email domain is a known demo domain."""
+    is_demo, _ = is_demo_email_domain(user.email)
+    return is_demo
 
 
 def _is_unambiguous_demo_class(cls: Class) -> bool:
-    """A class is unambiguously demo if location is DEMO-EAD."""
-    return cls.location == DEMO_CLASS_LOCATION
+    """A class is unambiguously demo if location is a known demo location."""
+    is_demo, _ = is_demo_class_location(cls.location)
+    return is_demo
 
 
 def _is_unambiguous_demo_cert(cert: Certificate) -> bool:
-    """A certificate is unambiguously demo if number starts with DEMO-."""
-    return cert.certificate_number.startswith(DEMO_CERT_PREFIX)
+    """A certificate is unambiguously demo if number starts with a demo prefix."""
+    return is_demo_certificate_number(cert.certificate_number)
 
 
 async def audit_demo_data(*, execute: bool = False) -> dict:
@@ -67,20 +78,23 @@ async def audit_demo_data(*, execute: bool = False) -> dict:
     - deleted: whether deletion was performed
     """
     async for db in get_db_privileged():
-        # Demo users (unambiguous)
+        # Demo users (unambiguous) — match any known demo email domain
+        from sqlalchemy import or_
+
+        email_conditions = []
+        for domain in DEMO_EMAIL_DOMAINS:
+            email_conditions.append(User.email.like(f"%@{domain}"))
+            email_conditions.append(User.email.like(f"%.{domain}"))
         demo_users = (
             await db.execute(
-                select(User).where(
-                    User.email.like(f"%{DEMO_EMAIL_DOMAINS[0]}")
-                    | User.email.like(f"%{DEMO_EMAIL_DOMAINS[1]}")
-                )
+                select(User).where(or_(*email_conditions))
             )
-        ).scalars().all()
+        ).scalars().all() if email_conditions else []
 
-        # Demo classes (unambiguous)
+        # Demo classes (unambiguous) — match any known demo class location
         demo_classes = (
             await db.execute(
-                select(Class).where(Class.location == DEMO_CLASS_LOCATION)
+                select(Class).where(Class.location.in_(list(DEMO_CLASS_LOCATIONS)))
             )
         ).scalars().all()
 

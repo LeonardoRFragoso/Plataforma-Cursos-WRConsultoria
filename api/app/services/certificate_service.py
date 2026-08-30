@@ -46,17 +46,16 @@ from app.schemas.certificate import (
 # primary_color configured.
 WR_PRIMARY_COLOR = "#047F37"
 
-DEMO_CERTIFICATE_PREFIX = "DEMO-"
+# Demo certificate prefix is centralized in app.core.demo_markers.
+from app.core.demo_markers import DEMO_CERTIFICATE_PREFIXES, is_demo_certificate_number
+
+DEMO_CERTIFICATE_PREFIX = next(iter(DEMO_CERTIFICATE_PREFIXES))  # "DEMO-"
 
 
 def is_demo_certificate(certificate: Certificate) -> bool:
     """A certificate is a demonstration record when its number is prefixed
-    with ``DEMO-``. This avoids an extra database column / migration while
-    remaining unambiguous and impossible to collide with real certificate
-    numbers (which use the ``CERT-`` prefix)."""
-    return bool(certificate.certificate_number) and certificate.certificate_number.startswith(
-        DEMO_CERTIFICATE_PREFIX
-    )
+    with a known demo prefix. Delegates to the shared demo markers module."""
+    return is_demo_certificate_number(certificate.certificate_number)
 
 
 def generate_certificate_number(*, demo: bool = False) -> str:
