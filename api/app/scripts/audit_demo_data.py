@@ -31,7 +31,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import get_db_privileged
 from app.core.demo_markers import (
-    DEMO_CERTIFICATE_PREFIXES,
+    CURRENT_DEMO_CERTIFICATE_PREFIX,
     DEMO_CLASS_LOCATIONS,
     DEMO_EMAIL_DOMAINS,
     is_demo_certificate_number,
@@ -47,7 +47,7 @@ from app.models.user import User
 
 # Keep backward-compatible names for the query logic below.
 DEMO_CLASS_LOCATION = "DEMO-EAD"
-DEMO_CERT_PREFIX = next(iter(DEMO_CERTIFICATE_PREFIXES))  # "DEMO-"
+DEMO_CERT_PREFIX = CURRENT_DEMO_CERTIFICATE_PREFIX
 DEMO_EMAIL_DOMAINS_LEGACY = ("@wr.demo", "@alfa.demo")
 
 

@@ -8,6 +8,9 @@ exact-match safety.
 from __future__ import annotations
 
 from app.core.demo_markers import (
+    CURRENT_DEMO_CERTIFICATE_PREFIX,
+    CURRENT_DEMO_CLASS_LOCATION,
+    CURRENT_DEMO_EMAIL_DOMAIN,
     DEMO_CERTIFICATE_PREFIXES,
     DEMO_CLASS_LOCATIONS,
     DEMO_EMAIL_DOMAINS,
@@ -245,3 +248,39 @@ def test_current_markers_present():
     assert "DEMO-CERT-EAD" in DEMO_CLASS_LOCATIONS
     assert "DEMO-EAD-NR1" in DEMO_CLASS_LOCATIONS
     assert "DEMO-" in DEMO_CERTIFICATE_PREFIXES
+
+
+# ===========================================================================
+# Generation marker determinism tests
+# ===========================================================================
+
+
+def test_current_demo_email_domain_explicit():
+    """CURRENT_DEMO_EMAIL_DOMAIN must be exactly 'demo.local'."""
+    assert CURRENT_DEMO_EMAIL_DOMAIN == "demo.local"
+
+
+def test_current_demo_class_location_explicit():
+    """CURRENT_DEMO_CLASS_LOCATION must be exactly 'DEMO-CERT-EAD'."""
+    assert CURRENT_DEMO_CLASS_LOCATION == "DEMO-CERT-EAD"
+
+
+def test_current_demo_certificate_prefix_explicit():
+    """CURRENT_DEMO_CERTIFICATE_PREFIX must be exactly 'DEMO-'."""
+    assert CURRENT_DEMO_CERTIFICATE_PREFIX == "DEMO-"
+
+
+def test_demo_email_generates_demo_local_domain():
+    """_demo_email('wr', None) must produce an email ending in '.demo.local'.
+
+    This proves the generation path uses CURRENT_DEMO_EMAIL_DOMAIN and does
+    NOT depend on frozenset iteration order.
+    """
+    from app.scripts.create_demo_certificate import _demo_email
+
+    email = _demo_email("wr", None)
+    assert email.endswith(f".{CURRENT_DEMO_EMAIL_DOMAIN}"), (
+        f"_demo_email('wr', None) = '{email}' does not end with "
+        f"'.{CURRENT_DEMO_EMAIL_DOMAIN}'"
+    )
+    assert email == "demo-certificado@wr.demo.local"

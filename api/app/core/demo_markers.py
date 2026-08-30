@@ -81,6 +81,18 @@ DEMO_CLASS_LOCATIONS: frozenset[str] = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# Current generation markers — explicit constants for code that GENERATES
+# new demo records. Never rely on next(iter(FROZENSET)) for generation,
+# because frozenset iteration order is NOT guaranteed across Python runs.
+# The frozensets above are for DETECTION only.
+# ---------------------------------------------------------------------------
+
+CURRENT_DEMO_EMAIL_DOMAIN = "demo.local"
+CURRENT_DEMO_CLASS_LOCATION = "DEMO-CERT-EAD"
+CURRENT_DEMO_CERTIFICATE_PREFIX = "DEMO-"
+
+
+# ---------------------------------------------------------------------------
 # Evidence code labels
 # ---------------------------------------------------------------------------
 

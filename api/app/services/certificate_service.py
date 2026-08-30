@@ -47,9 +47,9 @@ from app.schemas.certificate import (
 WR_PRIMARY_COLOR = "#047F37"
 
 # Demo certificate prefix is centralized in app.core.demo_markers.
-from app.core.demo_markers import DEMO_CERTIFICATE_PREFIXES, is_demo_certificate_number
+from app.core.demo_markers import CURRENT_DEMO_CERTIFICATE_PREFIX, is_demo_certificate_number
 
-DEMO_CERTIFICATE_PREFIX = next(iter(DEMO_CERTIFICATE_PREFIXES))  # "DEMO-"
+DEMO_CERTIFICATE_PREFIX = CURRENT_DEMO_CERTIFICATE_PREFIX
 
 
 def is_demo_certificate(certificate: Certificate) -> bool:
