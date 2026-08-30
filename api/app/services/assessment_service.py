@@ -68,120 +68,6 @@ QUESTION_BANKS = {
             "correct": 1,
         },
     ],
-    "NR-10-B": [
-        {
-            "id": "nr10b-q1",
-            "prompt": "Qual é o objetivo central das medidas de controle previstas para trabalhos com eletricidade?",
-            "options": [
-                "Apenas aumentar a velocidade de execução do serviço",
-                "Prevenir e controlar os riscos elétricos e outros riscos associados à atividade",
-                "Substituir os procedimentos de trabalho por experiência prática",
-                "Eliminar a necessidade de capacitação dos trabalhadores",
-            ],
-            "correct": 1,
-        },
-        {
-            "id": "nr10b-q2",
-            "prompt": "Antes de iniciar uma intervenção em instalação elétrica, a condição de segurança deve ser estabelecida por meio de:",
-            "options": [
-                "Procedimentos e medidas de controle compatíveis com o risco da atividade",
-                "Somente comunicação verbal entre os trabalhadores",
-                "Apenas uso de luvas, independentemente do serviço",
-                "Execução imediata para reduzir o tempo de exposição",
-            ],
-            "correct": 0,
-        },
-        {
-            "id": "nr10b-q3",
-            "prompt": "Quem pode realizar serviços em instalações elétricas dentro das atribuições previstas para a atividade?",
-            "options": [
-                "Qualquer trabalhador que esteja disponível",
-                "Trabalhadores qualificados, habilitados, capacitados ou autorizados, conforme o caso",
-                "Somente visitantes acompanhados",
-                "Apenas trabalhadores com maior tempo de empresa, sem necessidade de autorização",
-            ],
-            "correct": 1,
-        },
-        {
-            "id": "nr10b-q4",
-            "prompt": "Na prevenção dos riscos elétricos, as medidas de proteção coletiva devem:",
-            "options": [
-                "Ser consideradas prioritariamente, conforme os riscos e a atividade",
-                "Ser usadas somente depois de ocorrer um acidente",
-                "Ser substituídas sempre por equipamentos de proteção individual",
-                "Ser dispensadas quando o trabalhador tiver experiência",
-            ],
-            "correct": 0,
-        },
-        {
-            "id": "nr10b-q5",
-            "prompt": "Em caso de emergência envolvendo eletricidade, os trabalhadores devem:",
-            "options": [
-                "Improvisar o atendimento antes de qualquer avaliação de risco",
-                "Seguir os procedimentos de emergência e utilizar recursos compatíveis com o cenário",
-                "Tocar imediatamente a vítima sem verificar se a fonte de energia foi controlada",
-                "Aguardar o fim do turno para comunicar o ocorrido",
-            ],
-            "correct": 1,
-        },
-    ],
-    "NR-10-S": [
-        {
-            "id": "nr10s-q1",
-            "prompt": "Os serviços no Sistema Elétrico de Potência (SEP) exigem atenção especial porque:",
-            "options": [
-                "Envolvem riscos elétricos e condições operacionais que exigem controles específicos",
-                "São sempre executados com a instalação totalmente desenergizada",
-                "Dispensam planejamento quando realizados em equipe",
-                "Não apresentam riscos adicionais em relação a outras atividades",
-            ],
-            "correct": 0,
-        },
-        {
-            "id": "nr10s-q2",
-            "prompt": "Para atuar em serviços no SEP e em suas proximidades, o trabalhador deve:",
-            "options": [
-                "Basear-se somente em experiência informal",
-                "Atender aos requisitos de capacitação, treinamento e autorização aplicáveis à atividade",
-                "Ser autorizado apenas pelo colega mais antigo da equipe",
-                "Dispensar reciclagens quando já tiver realizado a tarefa anteriormente",
-            ],
-            "correct": 1,
-        },
-        {
-            "id": "nr10s-q3",
-            "prompt": "Durante um trabalho em equipe no SEP, a comunicação e o planejamento servem para:",
-            "options": [
-                "Coordenar as atividades e manter os controles de segurança previstos",
-                "Substituir os procedimentos formais de trabalho",
-                "Permitir alterações improvisadas sem nova avaliação de risco",
-                "Reduzir a necessidade de delimitação da área de trabalho",
-            ],
-            "correct": 0,
-        },
-        {
-            "id": "nr10s-q4",
-            "prompt": "Se houver mudança nas condições de risco durante um serviço no SEP, a equipe deve:",
-            "options": [
-                "Continuar o serviço até a próxima pausa programada",
-                "Reavaliar as condições e adequar ou interromper a atividade quando necessário",
-                "Ignorar a mudança se nenhum acidente tiver ocorrido",
-                "Acelerar a execução para concluir antes que o risco aumente",
-            ],
-            "correct": 1,
-        },
-        {
-            "id": "nr10s-q5",
-            "prompt": "O planejamento para emergências em atividades no SEP deve contemplar:",
-            "options": [
-                "Procedimentos de resposta e resgate compatíveis com os riscos identificados",
-                "Somente o contato telefônico com serviços externos",
-                "A entrada imediata de qualquer trabalhador para realizar o resgate",
-                "A dispensa de primeiros socorros quando houver equipamentos de proteção",
-            ],
-            "correct": 0,
-        },
-    ],
     "NR-12-F": [
         {
             "id": "nr12-q1",
@@ -292,6 +178,120 @@ QUESTION_BANKS = {
                 "O plano e os procedimentos de emergência e resgate definidos",
                 "Entrada imediata de qualquer colega sem proteção",
                 "Somente comunicação após o término do trabalho",
+            ],
+            "correct": 1,
+        },
+    ],
+    "NR-10-B": [
+        {
+            "id": "nr10b-q1",
+            "prompt": "A NR 10 estabelece requisitos e condições mínimas para garantir a segurança e a saúde dos trabalhadores que interajam com:",
+            "options": [
+                "Apenas equipamentos de proteção individual",
+                "Instalações elétricas e serviços em eletricidade",
+                "Máquinas e equipamentos industriais",
+                "Trabalho em altura e espaços confinados",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q2",
+            "prompt": "Entre os riscos em instalações e serviços com eletricidade abordados pela NR 10, destaca-se:",
+            "options": [
+                "Exposição a ruído contínuo",
+                "Choque elétrico, arcos elétricos e queimaduras",
+                "Vibração de membros superiores",
+                "Iluminação deficiente apenas",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q3",
+            "prompt": "Antes de intervenções em instalações elétricas, a medida de controle fundamental consiste em:",
+            "options": [
+                "Manter a instalação energizada para ganhar tempo",
+                "Desenergizar a instalação e adotar procedimentos de bloqueio e sinalização",
+                "Afastar todos os trabalhadores sem qualquer procedimento",
+                "Utilizar apenas EPI, sem desenergizar a instalação",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q4",
+            "prompt": "Em relação ao profissional que interage com instalações elétricas, a NR 10 exige que ele seja:",
+            "options": [
+                "Apenas qualificado, independentemente de treinamento",
+                "Qualificado, habilitado, capacitado ou autorizado, conforme o caso",
+                "Somente autorizado pelo empregador, sem capacitação",
+                "Habilitado exclusivamente por experiência prática",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q5",
+            "prompt": "Em acidente elétrico, a primeira ação de primeiros socorros deve ser:",
+            "options": [
+                "Tocar a vítima diretamente para avaliar o pulso",
+                "Desligar imediatamente a fonte de energia antes de qualquer contato com a vítima",
+                "Mover a vítima sem verificar a fonte de energia",
+                "Aguardar o socorro sem isolar o local",
+            ],
+            "correct": 1,
+        },
+    ],
+    "NR-10-S": [
+        {
+            "id": "nr10s-q1",
+            "prompt": "Para fins da NR 10, o Sistema Elétrico de Potência (SEP) compreende o conjunto de instalações e equipamentos destinados à:",
+            "options": [
+                "Iluminação interna de edifícios residenciais",
+                "Geração, transmissão e distribuição de energia elétrica até a medição inclusive",
+                "Acionamento de máquinas industriais de baixa tensão",
+                "Fornecimento de EPI aos trabalhadores",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q2",
+            "prompt": "Conforme a classificação de tensão adotada no treinamento de SEP, considera-se alta tensão o valor:",
+            "options": [
+                "Inferior a 50 V em corrente alternada",
+                "Superior a 1000 V em corrente alternada (ou 1500 V em corrente contínua)",
+                "Igual a 220 V em corrente alternada",
+                "Sempre inferior a 1000 V, qualquer que seja o sistema",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q3",
+            "prompt": "As técnicas de trabalho sob tensão no SEP incluem os métodos:",
+            "options": [
+                "À distância, ao contato e ao potencial",
+                "Apenas o método ao potencial",
+                "Somente o método à distância",
+                "Trabalho exclusivamente em instalações desenergizadas",
+            ],
+            "correct": 0,
+        },
+        {
+            "id": "nr10s-q4",
+            "prompt": "A emissão de PES (Permissão de Entrada e Serviço) em instalações do SEP tem como objetivo:",
+            "options": [
+                "Substituir todos os procedimentos de segurança por uma autorização verbal",
+                "Formalizar as condições e os controles necessários para a execução segura do serviço",
+                "Dispensar a análise de risco prévia",
+                "Permitir o trabalho sem EPI em situações de emergência",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q5",
+            "prompt": "Em trabalhos no SEP, a análise de risco deve ser realizada para:",
+            "options": [
+                "Apenas serviços de rotina sem exposição a risco elétrico",
+                "Identificar os riscos e definir as medidas de controle antes da execução do serviço",
+                "Substituir a necessidade de sinalização da área",
+                "Dispensar o uso de procedimentos de emergência",
             ],
             "correct": 1,
         },
