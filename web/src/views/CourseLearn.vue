@@ -232,7 +232,7 @@
         </main>
       </div>
 
-      <section v-if="assessment.required" class="premium-card overflow-hidden" data-testid="final-assessment-card">
+      <section v-if="showAssessmentSection" class="premium-card overflow-hidden" data-testid="final-assessment-card">
         <div class="border-b border-slate-100 px-5 py-5">
           <p class="premium-kicker">Etapa final</p>
           <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -249,7 +249,25 @@
         </div>
 
         <div class="p-5 sm:p-6">
-          <div v-if="assessment.certificate_id || certificateResult" class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5" data-testid="certificate-issued-state">
+          <div
+            v-if="assessmentStatus === 'error'"
+            class="rounded-2xl border border-amber-200 bg-amber-50 p-5"
+            data-testid="assessment-status-error"
+          >
+            <p class="font-bold text-amber-900">Não foi possível verificar a disponibilidade da avaliação.</p>
+            <p class="mt-1 text-sm text-amber-800/80">{{ assessmentStatusError }}</p>
+            <button
+              type="button"
+              class="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
+              data-testid="assessment-retry-button"
+              :disabled="assessmentLoading"
+              @click="retryAssessmentStatus"
+            >
+              {{ assessmentLoading ? 'Verificando…' : 'Tentar novamente' }}
+            </button>
+          </div>
+
+          <div v-else-if="assessment.certificate_id || certificateResult" class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5" data-testid="certificate-issued-state">
             <p class="text-sm font-black uppercase tracking-wide text-emerald-700">Jornada concluída</p>
             <h3 class="mt-2 text-xl font-bold text-slate-900">Certificado demo emitido</h3>
             <p class="mt-2 text-sm leading-6 text-slate-600">
@@ -432,6 +450,8 @@ const assessmentAnswers = ref({})
 const assessmentResult = ref(null)
 const assessmentBusy = ref(false)
 const assessmentError = ref('')
+const assessmentLoading = ref(false)
+const assessmentStatusError = ref('')
 const passedAttemptId = ref(null)
 const declarationAccepted = ref(false)
 const confirmationPassword = ref('')
@@ -462,6 +482,28 @@ const nextLesson = computed(() => {
 
 const certificateValidationCode = computed(
   () => certificateResult.value?.validation_code || assessment.value.certificate_validation_code || null,
+)
+
+// Explicit assessment lifecycle state so the UI never silently hides a
+// failure behind a "no assessment" appearance. States:
+//   loading       — status lookup in flight
+//   no_assessment — course has no final assessment (required=false)
+//   locked        — assessment exists but required lessons are incomplete
+//   available     — eligible to start/continue the assessment
+//   completed     — passed and/or certificate issued
+//   error         — status lookup failed (429/5xx/etc.)
+const assessmentStatus = computed(() => {
+  if (assessmentStatusError.value) return 'error'
+  if (assessmentLoading.value) return 'loading'
+  if (!assessment.value.required) return 'no_assessment'
+  if (assessment.value.certificate_id || certificateResult.value) return 'completed'
+  if (assessment.value.passed) return 'completed'
+  if (!assessment.value.lessons_complete) return 'locked'
+  return 'available'
+})
+
+const showAssessmentSection = computed(
+  () => assessment.value.required || assessmentStatus.value === 'error',
 )
 
 const getApiErrorMessage = (error, fallback) => {
@@ -506,22 +548,48 @@ const loadProgress = async () => {
   }
 }
 
+let assessmentInFlight = null
+
 const loadAssessment = async () => {
-  try {
-    const response = await api.get(`/api/v1/assessments/courses/${courseId}/status`)
-    assessment.value = response.data
-    if (response.data.passed_attempt_id) passedAttemptId.value = response.data.passed_attempt_id
-    notEnrolled.value = false
-  } catch (error) {
-    if (error.response?.status === 403) {
-      notEnrolled.value = true
-      return
+  // Deduplicate concurrent status lookups so the player never bombards
+  // /assessments/courses/{id}/status with parallel/duplicate requests
+  // (the root cause of the 429 storm). Overlapping callers share one
+  // in-flight promise.
+  if (assessmentInFlight) return assessmentInFlight
+  assessmentInFlight = (async () => {
+    assessmentLoading.value = true
+    assessmentStatusError.value = ''
+    try {
+      const response = await api.get(`/api/v1/assessments/courses/${courseId}/status`)
+      assessment.value = response.data
+      if (response.data.passed_attempt_id) passedAttemptId.value = response.data.passed_attempt_id
+      notEnrolled.value = false
+    } catch (error) {
+      if (error.response?.status === 403) {
+        notEnrolled.value = true
+        return
+      }
+      if (error.response?.status === 404) {
+        // No assessment configured for this course — distinct from an error.
+        assessment.value = { required: false, lessons_complete: false, minimum_score: 60, passed: false }
+        return
+      }
+      // 429 / 5xx / network: surface an explicit, retryable error instead
+      // of silently hiding the assessment area.
+      assessmentStatusError.value =
+        error.response?.data?.detail ||
+        (error.code === 'ECONNABORTED'
+          ? 'A conexão com o servidor excedeu o tempo limite.'
+          : 'Não foi possível verificar a disponibilidade da avaliação.')
+    } finally {
+      assessmentLoading.value = false
+      assessmentInFlight = null
     }
-    if (error.response?.status !== 404) {
-      assessmentError.value = error.response?.data?.detail || 'Não foi possível carregar a avaliação.'
-    }
-  }
+  })()
+  return assessmentInFlight
 }
+
+const retryAssessmentStatus = () => loadAssessment()
 
 const reloadStudentJourney = async () => {
   journeyLoading.value = true
@@ -598,7 +666,10 @@ const sendProgress = async (seconds, completed) => {
     : `/api/v1/lessons/${selectedLesson.value.id}/progress`
   try {
     await api.post(endpoint, payload)
-    if (completed) await Promise.all([loadProgress(), loadLessons(), loadAssessment()])
+    // Completion callers (onEnded / markComplete) reload the student
+    // journey afterwards. Refetching here as well caused a duplicate
+    // storm of progress + lessons + assessment calls on every finish,
+    // which was a primary contributor to the 429 rate-limit hits.
   } catch {
     // Playback remains available; the next heartbeat retries progress persistence.
   }

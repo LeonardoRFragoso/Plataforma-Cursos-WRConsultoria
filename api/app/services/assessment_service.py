@@ -182,6 +182,120 @@ QUESTION_BANKS = {
             "correct": 1,
         },
     ],
+    "NR-10-B": [
+        {
+            "id": "nr10b-q1",
+            "prompt": "A NR 10 estabelece requisitos e condições mínimas para garantir a segurança e a saúde dos trabalhadores que interajam com:",
+            "options": [
+                "Apenas equipamentos de proteção individual",
+                "Instalações elétricas e serviços em eletricidade",
+                "Máquinas e equipamentos industriais",
+                "Trabalho em altura e espaços confinados",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q2",
+            "prompt": "Entre os riscos em instalações e serviços com eletricidade abordados pela NR 10, destaca-se:",
+            "options": [
+                "Exposição a ruído contínuo",
+                "Choque elétrico, arcos elétricos e queimaduras",
+                "Vibração de membros superiores",
+                "Iluminação deficiente apenas",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q3",
+            "prompt": "Antes de intervenções em instalações elétricas, a medida de controle fundamental consiste em:",
+            "options": [
+                "Manter a instalação energizada para ganhar tempo",
+                "Desenergizar a instalação e adotar procedimentos de bloqueio e sinalização",
+                "Afastar todos os trabalhadores sem qualquer procedimento",
+                "Utilizar apenas EPI, sem desenergizar a instalação",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q4",
+            "prompt": "Em relação ao profissional que interage com instalações elétricas, a NR 10 exige que ele seja:",
+            "options": [
+                "Apenas qualificado, independentemente de treinamento",
+                "Qualificado, habilitado, capacitado ou autorizado, conforme o caso",
+                "Somente autorizado pelo empregador, sem capacitação",
+                "Habilitado exclusivamente por experiência prática",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10b-q5",
+            "prompt": "Em acidente elétrico, a primeira ação de primeiros socorros deve ser:",
+            "options": [
+                "Tocar a vítima diretamente para avaliar o pulso",
+                "Desligar imediatamente a fonte de energia antes de qualquer contato com a vítima",
+                "Mover a vítima sem verificar a fonte de energia",
+                "Aguardar o socorro sem isolar o local",
+            ],
+            "correct": 1,
+        },
+    ],
+    "NR-10-S": [
+        {
+            "id": "nr10s-q1",
+            "prompt": "Para fins da NR 10, o Sistema Elétrico de Potência (SEP) compreende o conjunto de instalações e equipamentos destinados à:",
+            "options": [
+                "Iluminação interna de edifícios residenciais",
+                "Geração, transmissão e distribuição de energia elétrica até a medição inclusive",
+                "Acionamento de máquinas industriais de baixa tensão",
+                "Fornecimento de EPI aos trabalhadores",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q2",
+            "prompt": "Conforme a classificação de tensão adotada no treinamento de SEP, considera-se alta tensão o valor:",
+            "options": [
+                "Inferior a 50 V em corrente alternada",
+                "Superior a 1000 V em corrente alternada (ou 1500 V em corrente contínua)",
+                "Igual a 220 V em corrente alternada",
+                "Sempre inferior a 1000 V, qualquer que seja o sistema",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q3",
+            "prompt": "As técnicas de trabalho sob tensão no SEP incluem os métodos:",
+            "options": [
+                "À distância, ao contato e ao potencial",
+                "Apenas o método ao potencial",
+                "Somente o método à distância",
+                "Trabalho exclusivamente em instalações desenergizadas",
+            ],
+            "correct": 0,
+        },
+        {
+            "id": "nr10s-q4",
+            "prompt": "A emissão de PES (Permissão de Entrada e Serviço) em instalações do SEP tem como objetivo:",
+            "options": [
+                "Substituir todos os procedimentos de segurança por uma autorização verbal",
+                "Formalizar as condições e os controles necessários para a execução segura do serviço",
+                "Dispensar a análise de risco prévia",
+                "Permitir o trabalho sem EPI em situações de emergência",
+            ],
+            "correct": 1,
+        },
+        {
+            "id": "nr10s-q5",
+            "prompt": "Em trabalhos no SEP, a análise de risco deve ser realizada para:",
+            "options": [
+                "Apenas serviços de rotina sem exposição a risco elétrico",
+                "Identificar os riscos e definir as medidas de controle antes da execução do serviço",
+                "Substituir a necessidade de sinalização da área",
+                "Dispensar o uso de procedimentos de emergência",
+            ],
+            "correct": 1,
+        },
+    ],
     "NR-35-F": [
         {
             "id": "nr35-q1",
