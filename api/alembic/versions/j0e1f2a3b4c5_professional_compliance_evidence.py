@@ -72,6 +72,11 @@ def upgrade() -> None:
             ["professional_id"],
         )
         op.create_index(
+            "ix_training_professional_evidence_evidence_type",
+            "training_professional_evidence",
+            ["evidence_type"],
+        )
+        op.create_index(
             "ix_training_professional_evidence_status",
             "training_professional_evidence",
             ["status"],
