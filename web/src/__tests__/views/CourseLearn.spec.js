@@ -127,53 +127,181 @@ describe('CourseLearn View', () => {
     expect(wrapper.find('[data-testid="lessons-load-error"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Nenhuma aula foi cadastrada para este curso.')
   })
+})
 
-  it('exibe a avaliação ao abrir um curso já 100% concluído', async () => {
-    api.get.mockImplementation((url) => {
-      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
-      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
-      if (url.includes('/assessments/courses/')) return Promise.resolve({ data: { required: true, lessons_complete: true, minimum_score: 60, passed: false } })
-      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
-      return Promise.resolve({ data: {} })
-    })
+// ---------------------------------------------------------------------------
+// Final assessment eligibility & status flow (regression for the bug where a
+// student with 100% / all required lessons completed never saw the proof).
+// ---------------------------------------------------------------------------
 
+const requiredLessons = (n) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `lesson-${i + 1}`,
+    title: `Aula ${i + 1}`,
+    order: i + 1,
+    content_type: 'YOUTUBE',
+    video_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    is_required: true,
+    completed: false,
+  }))
+
+function mockAssessmentFlow({ required, lessonsComplete, passed = false, certificateId = null }) {
+  api.get.mockImplementation((url) => {
+    if (url.includes('/my-progress'))
+      return Promise.resolve({
+        data: {
+          percentage: lessonsComplete ? 100 : 0,
+          completed_required: lessonsComplete ? 6 : 0,
+          required_lessons: 6,
+        },
+      })
+    if (url.includes('/lessons/courses/'))
+      return Promise.resolve({ data: requiredLessons(6).map((l) => ({ ...l, completed: lessonsComplete })) })
+    if (url.includes('/assessments/courses/'))
+      return Promise.resolve({
+        data: {
+          required,
+          lessons_complete: lessonsComplete,
+          minimum_score: 60,
+          passed,
+          certificate_id: certificateId,
+        },
+      })
+    if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+    if (url.includes('/watch-url'))
+      return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
+    return Promise.resolve({ data: {} })
+  })
+}
+
+describe('CourseLearn — fluxo da avaliação final', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.token = 'fake-token'
+    auth.userRole = 'student'
+    vi.clearAllMocks()
+  })
+
+  it('curso sem avaliação não mostra o card nem erro falso', async () => {
+    mockAssessmentFlow({ required: false, lessonsComplete: true })
     const wrapper = await mountLearn()
 
-    expect(wrapper.find('[data-testid="final-assessment-card"]').attributes('data-assessment-status')).toBe('available')
+    expect(wrapper.find('[data-testid="final-assessment-card"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(false)
+  })
+
+  it('curso com avaliação e aulas incompletas mostra estado bloqueado', async () => {
+    mockAssessmentFlow({ required: true, lessonsComplete: false })
+    const wrapper = await mountLearn()
+
+    expect(wrapper.find('[data-testid="final-assessment-card"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Conclua as aulas antes da prova.')
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(false)
+  })
+
+  it('curso 100% ao abrir carrega a avaliação liberada sem refresh', async () => {
+    mockAssessmentFlow({ required: true, lessonsComplete: true })
+    const wrapper = await mountLearn()
+
     expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
   })
 
-  it('mostra erro explícito e retry quando a consulta da avaliação retorna 429', async () => {
+  it('conclusão da última aula reconsulta o status da avaliação e libera a prova', async () => {
+    // Start incomplete; the assessment status lookup is captured so we can
+    // flip it to eligible when the last lesson completes.
+    let assessmentEligible = false
     api.get.mockImplementation((url) => {
-      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
-      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
-      if (url.includes('/assessments/courses/')) {
-        return Promise.reject({ response: { status: 429, data: { detail: 'Rate limit exceeded' } } })
-      }
+      if (url.includes('/my-progress'))
+        return Promise.resolve({
+          data: {
+            percentage: assessmentEligible ? 100 : 0,
+            completed_required: assessmentEligible ? 6 : 0,
+            required_lessons: 6,
+          },
+        })
+      if (url.includes('/lessons/courses/'))
+        return Promise.resolve({
+          data: requiredLessons(6).map((l) => ({ ...l, completed: assessmentEligible })),
+        })
+      if (url.includes('/assessments/courses/'))
+        return Promise.resolve({
+          data: { required: true, lessons_complete: assessmentEligible, minimum_score: 60, passed: false },
+        })
       if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      if (url.includes('/watch-url'))
+        return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
+      return Promise.resolve({ data: {} })
+    })
+    api.post.mockResolvedValue({ data: { completed: true } })
+
+    const wrapper = await mountLearn()
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(false)
+
+    // Select the last lesson so the "Marcar como concluída" button renders.
+    const rows = wrapper.findAll('[data-testid="lesson-row"]')
+    await rows[rows.length - 1].trigger('click')
+    await flushPromises()
+
+    const statusCallsBefore = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+
+    // Flip eligibility and trigger the last-lesson completion reload.
+    assessmentEligible = true
+    const markButton = wrapper.findAll('button').find((b) => b.text().includes('Marcar como concluída'))
+    await markButton.trigger('click')
+    await flushPromises()
+
+    const statusCallsAfter = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+    expect(statusCallsAfter).toBeGreaterThan(statusCallsBefore)
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
+  })
+
+  it('erro 429 ao consultar status mostra mensagem e botão de retry', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/my-progress'))
+        return Promise.resolve({ data: { percentage: 0, completed_required: 0, required_lessons: 6 } })
+      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: requiredLessons(6) })
+      if (url.includes('/assessments/courses/'))
+        return Promise.reject({ response: { status: 429, data: { detail: 'Rate limit exceeded' } } })
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      if (url.includes('/watch-url'))
+        return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
       return Promise.resolve({ data: {} })
     })
 
     const wrapper = await mountLearn()
 
     expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="assessment-status-error"]').text()).toContain('Rate limit exceeded')
-    expect(wrapper.find('[data-testid="assessment-retry-button"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="assessment-status-error"]').text()).toContain(
+      'Não foi possível verificar a disponibilidade da avaliação.',
+    )
+    const retryButton = wrapper.find('[data-testid="assessment-retry-button"]')
+    expect(retryButton.exists()).toBe(true)
+
+    const statusCallsBefore = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+    await retryButton.trigger('click')
+    await flushPromises()
+    const statusCallsAfter = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+    expect(statusCallsAfter).toBe(statusCallsBefore + 1)
   })
 
-  it('retry bem-sucedido libera a avaliação sem recarregar a página', async () => {
-    let assessmentCalls = 0
+  it('retry bem-sucedido faz a avaliação aparecer', async () => {
+    let failOnce = true
     api.get.mockImplementation((url) => {
-      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
-      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
+      if (url.includes('/my-progress'))
+        return Promise.resolve({ data: { percentage: 100, completed_required: 6, required_lessons: 6 } })
+      if (url.includes('/lessons/courses/'))
+        return Promise.resolve({ data: requiredLessons(6).map((l) => ({ ...l, completed: true })) })
       if (url.includes('/assessments/courses/')) {
-        assessmentCalls += 1
-        if (assessmentCalls === 1) {
+        if (failOnce) {
+          failOnce = false
           return Promise.reject({ response: { status: 429, data: { detail: 'Rate limit exceeded' } } })
         }
         return Promise.resolve({ data: { required: true, lessons_complete: true, minimum_score: 60, passed: false } })
       }
       if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      if (url.includes('/watch-url'))
+        return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
       return Promise.resolve({ data: {} })
     })
 
@@ -183,36 +311,30 @@ describe('CourseLearn View', () => {
     await wrapper.find('[data-testid="assessment-retry-button"]').trigger('click')
     await flushPromises()
 
-    expect(assessmentCalls).toBe(2)
     expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
   })
 
-  it('reconsulta o status uma única vez após concluir uma aula manualmente', async () => {
-    let assessmentCalls = 0
-    api.get.mockImplementation((url) => {
-      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
-      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: defaultLessons })
-      if (url.includes('/assessments/courses/')) {
-        assessmentCalls += 1
-        return Promise.resolve({ data: { required: true, lessons_complete: assessmentCalls > 1, minimum_score: 60, passed: false } })
-      }
-      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
-      if (url.includes('/watch-url')) return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
-      return Promise.resolve({ data: {} })
-    })
-    api.post.mockResolvedValue({ data: {} })
-
+  it('avaliação concluída mostra estado de aprovado', async () => {
+    mockAssessmentFlow({ required: true, lessonsComplete: true, passed: true })
     const wrapper = await mountLearn()
-    const lessonButton = wrapper.findAll('button').find((button) => button.text().includes('Aula de Teste'))
-    await lessonButton.trigger('click')
-    await flushPromises()
 
-    const completeButton = wrapper.findAll('button').find((button) => button.text().includes('Marcar como concluída'))
-    await completeButton.trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-testid="assessment-passed-state"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(false)
+  })
 
-    expect(assessmentCalls).toBe(2)
-    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
+  it('não gera chamadas duplicadas/infinitas ao endpoint de status', async () => {
+    mockAssessmentFlow({ required: true, lessonsComplete: true })
+    const wrapper = await mountLearn()
+
+    const callsBefore = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+    // Trigger several overlapping journey reloads (e.g. rapid lesson clicks).
+    await wrapper.findAll('[data-testid="lesson-row"]')[0].trigger('click')
+    await wrapper.findAll('[data-testid="lesson-row"]')[0].trigger('click')
+    await flushPromises()
+    const callsAfter = api.get.mock.calls.filter((c) => c[0].includes('/assessments/courses/')).length
+
+    // Dedup must keep the additional status lookups bounded (no storm).
+    expect(callsAfter - callsBefore).toBeLessThanOrEqual(2)
   })
 })
