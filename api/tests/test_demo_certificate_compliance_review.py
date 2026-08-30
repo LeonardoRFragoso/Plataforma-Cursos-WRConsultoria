@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from sqlalchemy import select
 
@@ -30,18 +32,20 @@ async def _pass_assessment(client, fixture):
 
 
 async def _mark_profile_review_required(fixture, *, demo_class: bool):
+    course_id = uuid.UUID(fixture["course"]["id"])
+    class_id = uuid.UUID(fixture["class"]["id"])
     async with AsyncSessionLocal() as db:
         profile = (
             await db.execute(
                 select(CourseComplianceProfile).where(
-                    CourseComplianceProfile.course_id == fixture["course"]["id"]
+                    CourseComplianceProfile.course_id == course_id
                 )
             )
         ).scalar_one()
         profile.status = ComplianceStatus.REVIEW_REQUIRED
         if demo_class:
             cls = (
-                await db.execute(select(Class).where(Class.id == fixture["class"]["id"]))
+                await db.execute(select(Class).where(Class.id == class_id))
             ).scalar_one()
             cls.location = "DEMO-EAD-ASSESSMENT"
         await db.commit()
