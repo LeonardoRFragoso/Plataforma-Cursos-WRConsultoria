@@ -35,17 +35,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
+from app.core.demo_markers import classify_demo as _classify_demo_shared
 from app.models.compliance import ComplianceStatus, CourseComplianceProfile, WorkloadSource
 from app.models.course import Course, CourseModality
 from app.models.course_content_profile import CourseContentProfile, ReviewStatus
 from app.models.course_material import CourseMaterial
 from app.models.tenant import Tenant
-
-# Demo markers reused for demo_classification. These MUST stay in sync with
-# app/scripts/create_demo_certificate.py and app/services/certificate_service.py.
-DEMO_CERTIFICATE_PREFIX = "DEMO-"
-DEMO_EMAIL_DOMAIN = "demo.local"
-DEMO_CLASS_LOCATION = "DEMO-CERT-EAD"
 
 MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "wr_course_content_manifest.json"
 
@@ -838,43 +833,22 @@ def _classify_enrollment_demo(
 ) -> tuple[str, list[str]]:
     """Classify an enrollment as demo, non-demo, or unknown.
 
-    Uses known demo markers (certificate prefix, email domain, class location)
-    as positive evidence. Returns (classification, evidence_codes).
+    Delegates to the shared ``app.core.demo_markers.classify_demo`` function,
+    which is the single source of truth for demo marker detection.
+
+    Returns (classification, evidence_codes).
 
     Classification:
     - CONFIRMED_DEMO: at least one positive demo evidence marker found.
-    - UNKNOWN: no positive demo evidence. NEVER assume NON_DEMO from absence
-      of evidence (fail-closed).
-
-    CONFIRMED_NON_DEMO is only returned when there is positive evidence of
-    operational/production origin. Since no reliable criteria for that exist
-    in the current data model, UNKNOWN is used instead.
+    - UNKNOWN: no positive demo evidence. Fail-closed.
 
     No PII is returned — only classification and evidence codes.
     """
-    evidence_codes: list[str] = []
-
-    # Evidence: certificate number prefixed with DEMO-
-    if any(c.startswith(DEMO_CERTIFICATE_PREFIX) for c in cert_nums):
-        evidence_codes.append("DEMO_CERTIFICATE_PREFIX")
-
-    # Evidence: user email domain is a known demo domain.
-    # Exact match on "demo.local" OR subdomain ending with ".demo.local".
-    # Normalized to lowercase to be case-insensitive.
-    # This prevents false positives like "notdemo.local".
-    if user_email:
-        domain = user_email.split("@")[-1].lower()
-        if domain == DEMO_EMAIL_DOMAIN or domain.endswith(f".{DEMO_EMAIL_DOMAIN}"):
-            evidence_codes.append("DEMO_USER_EMAIL_DOMAIN")
-
-    # Evidence: class location matches the known demo class marker
-    if class_location == DEMO_CLASS_LOCATION:
-        evidence_codes.append("DEMO_CLASS_LOCATION")
-
-    if evidence_codes:
-        return "CONFIRMED_DEMO", evidence_codes
-    # Fail-closed: absence of demo evidence does NOT confirm NON_DEMO.
-    return "UNKNOWN", []
+    return _classify_demo_shared(
+        cert_nums=cert_nums,
+        user_email=user_email,
+        class_location=class_location,
+    )
 
 
 async def _course_has_historical_records(db: AsyncSession, tenant_id: UUID, course_id: UUID) -> dict:

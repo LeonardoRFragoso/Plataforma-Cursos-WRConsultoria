@@ -39,6 +39,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.context import current_tenant_id
 from app.core.database import get_db_privileged
+from app.core.demo_markers import CURRENT_DEMO_CLASS_LOCATION, CURRENT_DEMO_EMAIL_DOMAIN
 from app.core.security import hash_password
 from app.core.utils import utc_now
 from app.models.certificate import Certificate
@@ -54,9 +55,12 @@ from app.services.certificate_service import (
     is_demo_certificate,
 )
 
-# Stable markers that distinguish demo records from real business records.
-DEMO_EMAIL_DOMAIN = "demo.local"
-DEMO_CLASS_LOCATION = "DEMO-CERT-EAD"
+# Demo markers are centralized in app.core.demo_markers.
+# Generation uses the explicit CURRENT_* constants (never next(iter(frozenset))).
+# Historical markers (wr.demo, alfa.demo, DEMO-EAD-ASSESSMENT) are recognized
+# for detection but not used for generating new records.
+DEMO_EMAIL_DOMAIN = CURRENT_DEMO_EMAIL_DOMAIN
+DEMO_CLASS_LOCATION = CURRENT_DEMO_CLASS_LOCATION
 DEMO_LESSON_TITLE_PREFIX = "[DEMO] "
 
 
