@@ -5,6 +5,7 @@ describe('tenantSlug resolver', () => {
 
   afterEach(() => {
     global.window = originalWindow
+    vi.unstubAllEnvs()
     vi.resetModules()
   })
 
@@ -23,6 +24,46 @@ describe('tenantSlug resolver', () => {
     global.window = { location: { hostname: 'alfa-demo.vercel.app' } }
     const mod = await importFresh()
     expect(mod.resolveFrontendTenantSlug()).toBe('alfa-demo')
+  })
+
+  it('maps the official WR Vercel project hostname to wr', async () => {
+    vi.stubEnv('VITE_TENANT_SLUG', '')
+    global.window = { location: { hostname: 'wr-cursos-demo.vercel.app' } }
+    const mod = await importFresh()
+    expect(mod.resolveFrontendTenantSlug()).toBe('wr')
+  })
+
+  it('maps immutable WR preview deployment hostnames to wr', async () => {
+    vi.stubEnv('VITE_TENANT_SLUG', '')
+    global.window = {
+      location: {
+        hostname: 'wr-cursos-demo-18cd5pci3-leonardorfragosos-projects.vercel.app',
+      },
+    }
+    const mod = await importFresh()
+    expect(mod.resolveFrontendTenantSlug()).toBe('wr')
+  })
+
+  it('maps WR branch aliases to wr', async () => {
+    vi.stubEnv('VITE_TENANT_SLUG', '')
+    global.window = {
+      location: {
+        hostname: 'wr-cursos-demo-git-fix-demo-c-f86deb-leonardorfragosos-projects.vercel.app',
+      },
+    }
+    const mod = await importFresh()
+    expect(mod.resolveFrontendTenantSlug()).toBe('wr')
+  })
+
+  it('keeps Alfa Academy Vercel previews isolated from WR', async () => {
+    vi.stubEnv('VITE_TENANT_SLUG', '')
+    global.window = {
+      location: {
+        hostname: 'alfa-academy-demo-abcd1234-leonardorfragosos-projects.vercel.app',
+      },
+    }
+    const mod = await importFresh()
+    expect(mod.resolveFrontendTenantSlug()).toBe('alfa')
   })
 
   it('returns wr for localhost', async () => {
