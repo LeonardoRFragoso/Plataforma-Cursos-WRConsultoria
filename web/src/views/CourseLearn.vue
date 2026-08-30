@@ -232,7 +232,12 @@
         </main>
       </div>
 
-      <section v-if="assessment.required" class="premium-card overflow-hidden" data-testid="final-assessment-card">
+      <section
+        v-if="showAssessmentSection"
+        class="premium-card overflow-hidden"
+        data-testid="final-assessment-card"
+        :data-assessment-status="assessmentStatus"
+      >
         <div class="border-b border-slate-100 px-5 py-5">
           <p class="premium-kicker">Etapa final</p>
           <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -249,150 +254,179 @@
         </div>
 
         <div class="p-5 sm:p-6">
-          <div v-if="assessment.certificate_id || certificateResult" class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5" data-testid="certificate-issued-state">
-            <p class="text-sm font-black uppercase tracking-wide text-emerald-700">Jornada concluída</p>
-            <h3 class="mt-2 text-xl font-bold text-slate-900">Certificado demo emitido</h3>
-            <p class="mt-2 text-sm leading-6 text-slate-600">
-              A emissão desta homologação permanece identificada como demonstração e sem validade oficial.
-            </p>
-            <p v-if="certificateResult?.certificate_number" class="mt-3 text-sm font-semibold text-slate-700">
-              Número: {{ certificateResult.certificate_number }}
-            </p>
-            <div class="mt-5 flex flex-wrap gap-3">
-              <AppLink to="/certificates" class="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white">
-                Ver meus certificados
-              </AppLink>
-              <AppLink
-                v-if="certificateValidationCode"
-                :to="`/validar-certificado?codigo=${encodeURIComponent(certificateValidationCode)}`"
-                class="rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-bold text-emerald-800"
-              >
-                Validar certificado
-              </AppLink>
-            </div>
+          <div
+            v-if="assessmentStatus === 'loading'"
+            class="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+            data-testid="assessment-loading-state"
+          >
+            <p class="font-bold text-slate-800">Verificando disponibilidade da avaliação…</p>
+            <p class="mt-1 text-sm text-slate-500">Aguarde enquanto sincronizamos seu progresso.</p>
           </div>
 
-          <div v-else-if="!assessment.lessons_complete" class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-            <p class="font-bold text-amber-900">Conclua as aulas antes da prova.</p>
-            <p class="mt-1 text-sm text-amber-800/80">
-              Progresso atual: {{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }} aulas obrigatórias.
-            </p>
-          </div>
-
-          <div v-else-if="assessmentResult && !assessmentResult.passed" class="rounded-2xl border border-red-200 bg-red-50 p-5" data-testid="assessment-failed-state">
-            <p class="text-sm font-black uppercase tracking-wide text-red-700">Resultado insatisfatório</p>
-            <p class="mt-2 text-2xl font-black text-slate-900">{{ assessmentResult.score }}%</p>
-            <p class="mt-1 text-sm text-slate-600">
-              Você acertou {{ assessmentResult.correct_answers }} de {{ assessmentResult.total_questions }} questões. Revise o conteúdo e tente novamente.
-            </p>
+          <div
+            v-else-if="assessmentStatus === 'error'"
+            class="rounded-2xl border border-amber-200 bg-amber-50 p-5"
+            data-testid="assessment-status-error"
+          >
+            <p class="font-bold text-amber-900">Não foi possível verificar a disponibilidade da avaliação.</p>
+            <p class="mt-1 text-sm text-amber-800/80">{{ assessmentStatusError }}</p>
             <button
               type="button"
-              class="mt-4 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-              :disabled="assessmentBusy"
-              @click="retryAssessment"
+              class="mt-4 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="assessment-retry-button"
+              :disabled="assessmentLoading"
+              @click="retryAssessmentStatus"
             >
-              Nova tentativa
+              {{ assessmentLoading ? 'Verificando…' : 'Tentar novamente' }}
             </button>
           </div>
 
-          <div v-else-if="assessmentResult?.passed || assessment.passed" class="space-y-5" data-testid="assessment-passed-state">
-            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-              <p class="text-sm font-black uppercase tracking-wide text-emerald-700">Resultado satisfatório</p>
-              <p class="mt-2 text-2xl font-black text-slate-900">
-                {{ assessmentResult?.score ?? assessment.best_score }}%
+          <template v-else>
+            <div v-if="assessment.certificate_id || certificateResult" class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5" data-testid="certificate-issued-state">
+              <p class="text-sm font-black uppercase tracking-wide text-emerald-700">Jornada concluída</p>
+              <h3 class="mt-2 text-xl font-bold text-slate-900">Certificado demo emitido</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600">
+                A emissão desta homologação permanece identificada como demonstração e sem validade oficial.
               </p>
-              <p class="mt-1 text-sm text-slate-600">
-                Falta apenas confirmar sua identidade e a conclusão deste treinamento.
+              <p v-if="certificateResult?.certificate_number" class="mt-3 text-sm font-semibold text-slate-700">
+                Número: {{ certificateResult.certificate_number }}
+              </p>
+              <div class="mt-5 flex flex-wrap gap-3">
+                <AppLink to="/certificates" class="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white">
+                  Ver meus certificados
+                </AppLink>
+                <AppLink
+                  v-if="certificateValidationCode"
+                  :to="`/validar-certificado?codigo=${encodeURIComponent(certificateValidationCode)}`"
+                  class="rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-bold text-emerald-800"
+                >
+                  Validar certificado
+                </AppLink>
+              </div>
+            </div>
+
+            <div v-else-if="!assessment.lessons_complete" class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <p class="font-bold text-amber-900">Conclua as aulas antes da prova.</p>
+              <p class="mt-1 text-sm text-amber-800/80">
+                Progresso atual: {{ progress.completed_required || 0 }}/{{ progress.required_lessons || 0 }} aulas obrigatórias.
               </p>
             </div>
 
-            <div class="rounded-2xl border border-slate-200 p-5">
-              <label class="flex items-start gap-3 text-sm leading-6 text-slate-700">
-                <input v-model="declarationAccepted" type="checkbox" class="mt-1 h-4 w-4" />
-                <span>
-                  Declaro que fui eu quem realizou esta capacitação e avaliação e confirmo a conclusão do treinamento.
-                </span>
-              </label>
-              <label class="mt-4 block text-sm font-bold text-slate-700" for="completion-password">
-                Confirme sua senha
-              </label>
-              <input
-                id="completion-password"
-                v-model="confirmationPassword"
-                type="password"
-                autocomplete="current-password"
-                class="mt-2 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand-primary)]"
-                placeholder="Digite sua senha"
-              />
-              <p v-if="confirmationError" class="mt-2 text-sm font-semibold text-red-600">{{ confirmationError }}</p>
+            <div v-else-if="assessmentResult && !assessmentResult.passed" class="rounded-2xl border border-red-200 bg-red-50 p-5" data-testid="assessment-failed-state">
+              <p class="text-sm font-black uppercase tracking-wide text-red-700">Resultado insatisfatório</p>
+              <p class="mt-2 text-2xl font-black text-slate-900">{{ assessmentResult.score }}%</p>
+              <p class="mt-1 text-sm text-slate-600">
+                Você acertou {{ assessmentResult.correct_answers }} de {{ assessmentResult.total_questions }} questões. Revise o conteúdo e tente novamente.
+              </p>
               <button
                 type="button"
-                data-testid="confirm-completion-button"
-                class="mt-4 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="confirmationBusy || !declarationAccepted || !confirmationPassword"
-                @click="confirmCompletion"
+                class="mt-4 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                :disabled="assessmentBusy"
+                @click="retryAssessment"
               >
-                {{ confirmationBusy ? 'Confirmando…' : 'Confirmar e emitir certificado demo' }}
+                Nova tentativa
               </button>
             </div>
-          </div>
 
-          <form v-else-if="assessmentSession" class="space-y-6" @submit.prevent="submitAssessment">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <p class="text-sm font-bold text-slate-700">Tentativa {{ assessmentSession.attempt_number }}</p>
-              <p class="text-xs text-slate-400">Responda todas as questões antes de enviar.</p>
-            </div>
-            <fieldset
-              v-for="(question, qIndex) in assessmentSession.questions"
-              :key="question.id"
-              class="rounded-2xl border border-slate-200 p-5"
-            >
-              <legend class="px-2 text-sm font-bold text-slate-900">
-                {{ qIndex + 1 }}. {{ question.prompt }}
-              </legend>
-              <div class="mt-3 space-y-2">
-                <label
-                  v-for="(option, optionIndex) in question.options"
-                  :key="`${question.id}-${optionIndex}`"
-                  class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <input
-                    v-model="assessmentAnswers[question.id]"
-                    type="radio"
-                    :name="question.id"
-                    :value="optionIndex"
-                    class="mt-0.5 h-4 w-4"
-                  />
-                  <span>{{ option }}</span>
-                </label>
+            <div v-else-if="assessmentResult?.passed || assessment.passed" class="space-y-5" data-testid="assessment-passed-state">
+              <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <p class="text-sm font-black uppercase tracking-wide text-emerald-700">Resultado satisfatório</p>
+                <p class="mt-2 text-2xl font-black text-slate-900">
+                  {{ assessmentResult?.score ?? assessment.best_score }}%
+                </p>
+                <p class="mt-1 text-sm text-slate-600">
+                  Falta apenas confirmar sua identidade e a conclusão deste treinamento.
+                </p>
               </div>
-            </fieldset>
-            <p v-if="assessmentError" class="text-sm font-semibold text-red-600">{{ assessmentError }}</p>
-            <button
-              type="submit"
-              data-testid="assessment-submit-button"
-              class="rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="assessmentBusy"
-            >
-              {{ assessmentBusy ? 'Enviando…' : 'Enviar avaliação' }}
-            </button>
-          </form>
 
-          <div v-else>
-            <p class="text-sm leading-6 text-slate-600">
-              Você concluiu as aulas obrigatórias. Inicie a avaliação final para registrar o resultado da aprendizagem.
-            </p>
-            <button
-              type="button"
-              data-testid="assessment-start-button"
-              class="mt-4 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="assessmentBusy"
-              @click="startAssessment"
-            >
-              {{ assessmentBusy ? 'Preparando…' : 'Iniciar avaliação final' }}
-            </button>
-            <p v-if="assessmentError" class="mt-2 text-sm font-semibold text-red-600">{{ assessmentError }}</p>
-          </div>
+              <div class="rounded-2xl border border-slate-200 p-5">
+                <label class="flex items-start gap-3 text-sm leading-6 text-slate-700">
+                  <input v-model="declarationAccepted" type="checkbox" class="mt-1 h-4 w-4" />
+                  <span>
+                    Declaro que fui eu quem realizou esta capacitação e avaliação e confirmo a conclusão do treinamento.
+                  </span>
+                </label>
+                <label class="mt-4 block text-sm font-bold text-slate-700" for="completion-password">
+                  Confirme sua senha
+                </label>
+                <input
+                  id="completion-password"
+                  v-model="confirmationPassword"
+                  type="password"
+                  autocomplete="current-password"
+                  class="mt-2 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand-primary)]"
+                  placeholder="Digite sua senha"
+                />
+                <p v-if="confirmationError" class="mt-2 text-sm font-semibold text-red-600">{{ confirmationError }}</p>
+                <button
+                  type="button"
+                  data-testid="confirm-completion-button"
+                  class="mt-4 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  :disabled="confirmationBusy || !declarationAccepted || !confirmationPassword"
+                  @click="confirmCompletion"
+                >
+                  {{ confirmationBusy ? 'Confirmando…' : 'Confirmar e emitir certificado demo' }}
+                </button>
+              </div>
+            </div>
+
+            <form v-else-if="assessmentSession" class="space-y-6" @submit.prevent="submitAssessment">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm font-bold text-slate-700">Tentativa {{ assessmentSession.attempt_number }}</p>
+                <p class="text-xs text-slate-400">Responda todas as questões antes de enviar.</p>
+              </div>
+              <fieldset
+                v-for="(question, qIndex) in assessmentSession.questions"
+                :key="question.id"
+                class="rounded-2xl border border-slate-200 p-5"
+              >
+                <legend class="px-2 text-sm font-bold text-slate-900">
+                  {{ qIndex + 1 }}. {{ question.prompt }}
+                </legend>
+                <div class="mt-3 space-y-2">
+                  <label
+                    v-for="(option, optionIndex) in question.options"
+                    :key="`${question.id}-${optionIndex}`"
+                    class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <input
+                      v-model="assessmentAnswers[question.id]"
+                      type="radio"
+                      :name="question.id"
+                      :value="optionIndex"
+                      class="mt-0.5 h-4 w-4"
+                    />
+                    <span>{{ option }}</span>
+                  </label>
+                </div>
+              </fieldset>
+              <p v-if="assessmentError" class="text-sm font-semibold text-red-600">{{ assessmentError }}</p>
+              <button
+                type="submit"
+                data-testid="assessment-submit-button"
+                class="rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="assessmentBusy"
+              >
+                {{ assessmentBusy ? 'Enviando…' : 'Enviar avaliação' }}
+              </button>
+            </form>
+
+            <div v-else>
+              <p class="text-sm leading-6 text-slate-600">
+                Você concluiu as aulas obrigatórias. Inicie a avaliação final para registrar o resultado da aprendizagem.
+              </p>
+              <button
+                type="button"
+                data-testid="assessment-start-button"
+                class="mt-4 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="assessmentBusy"
+                @click="startAssessment"
+              >
+                {{ assessmentBusy ? 'Preparando…' : 'Iniciar avaliação final' }}
+              </button>
+              <p v-if="assessmentError" class="mt-2 text-sm font-semibold text-red-600">{{ assessmentError }}</p>
+            </div>
+          </template>
         </div>
       </section>
     </div>
@@ -432,6 +466,8 @@ const assessmentAnswers = ref({})
 const assessmentResult = ref(null)
 const assessmentBusy = ref(false)
 const assessmentError = ref('')
+const assessmentLoading = ref(false)
+const assessmentStatusError = ref('')
 const passedAttemptId = ref(null)
 const declarationAccepted = ref(false)
 const confirmationPassword = ref('')
@@ -440,6 +476,7 @@ const confirmationError = ref('')
 const certificateResult = ref(null)
 
 let progressInterval = null
+let assessmentInFlight = null
 
 const youtubeEmbedUrl = computed(() => {
   if (!selectedLesson.value?.video_url) return ''
@@ -462,6 +499,19 @@ const nextLesson = computed(() => {
 
 const certificateValidationCode = computed(
   () => certificateResult.value?.validation_code || assessment.value.certificate_validation_code || null,
+)
+
+const assessmentStatus = computed(() => {
+  if (assessmentLoading.value) return 'loading'
+  if (assessmentStatusError.value) return 'error'
+  if (!assessment.value.required) return 'no_assessment'
+  if (assessment.value.certificate_id || certificateResult.value) return 'completed'
+  if (!assessment.value.lessons_complete) return 'locked'
+  return 'available'
+})
+
+const showAssessmentSection = computed(
+  () => assessmentLoading.value || Boolean(assessmentStatusError.value) || assessment.value.required,
 )
 
 const getApiErrorMessage = (error, fallback) => {
@@ -506,27 +556,43 @@ const loadProgress = async () => {
   }
 }
 
-const loadAssessment = async () => {
-  try {
-    const response = await api.get(`/api/v1/assessments/courses/${courseId}/status`)
-    assessment.value = response.data
-    if (response.data.passed_attempt_id) passedAttemptId.value = response.data.passed_attempt_id
-    notEnrolled.value = false
-  } catch (error) {
-    if (error.response?.status === 403) {
-      notEnrolled.value = true
-      return
+const loadAssessment = () => {
+  if (assessmentInFlight) return assessmentInFlight
+
+  assessmentLoading.value = true
+  assessmentStatusError.value = ''
+  assessmentInFlight = (async () => {
+    try {
+      const response = await api.get(`/api/v1/assessments/courses/${courseId}/status`)
+      assessment.value = response.data
+      if (response.data.passed_attempt_id) passedAttemptId.value = response.data.passed_attempt_id
+      notEnrolled.value = false
+    } catch (error) {
+      if (error.response?.status === 403) {
+        notEnrolled.value = true
+        return
+      }
+      assessmentStatusError.value = getApiErrorMessage(
+        error,
+        'Não foi possível carregar a avaliação. Tente novamente em instantes.',
+      )
     }
-    if (error.response?.status !== 404) {
-      assessmentError.value = error.response?.data?.detail || 'Não foi possível carregar a avaliação.'
-    }
-  }
+  })().finally(() => {
+    assessmentLoading.value = false
+    assessmentInFlight = null
+  })
+
+  return assessmentInFlight
+}
+
+const retryAssessmentStatus = async () => {
+  await loadAssessment()
 }
 
 const reloadStudentJourney = async () => {
   journeyLoading.value = true
   try {
-    await Promise.all([loadLessons(), loadProgress(), loadAssessment()])
+    await Promise.allSettled([loadLessons(), loadProgress(), loadAssessment()])
   } finally {
     journeyLoading.value = false
   }
@@ -598,7 +664,6 @@ const sendProgress = async (seconds, completed) => {
     : `/api/v1/lessons/${selectedLesson.value.id}/progress`
   try {
     await api.post(endpoint, payload)
-    if (completed) await Promise.all([loadProgress(), loadLessons(), loadAssessment()])
   } catch {
     // Playback remains available; the next heartbeat retries progress persistence.
   }
