@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.demo_markers import is_demo_class_location
 from app.core.security import get_current_tenant_id, get_current_user, verify_password
 from app.core.utils import utc_now
 from app.models.assessment import AssessmentAttempt, StudentSignatureEvidence
@@ -716,9 +717,21 @@ async def confirm_completion(
     if required_total == 0 or completed_required < required_total:
         raise HTTPException(status_code=409, detail="Required lessons are no longer complete")
 
+    enrollment_class = (
+        await db.execute(
+            select(Class).where(
+                Class.id == enrollment.class_id,
+                Class.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    is_confirmed_demo, _ = is_demo_class_location(
+        enrollment_class.location if enrollment_class else None
+    )
+
     profile = await _compliance_profile(db, tenant_id=tenant_id, course_id=course.id)
     evaluation = None
-    if profile:
+    if profile and not is_confirmed_demo:
         evaluation = await evaluate_regulatory_state(
             db,
             tenant_id=tenant_id,
@@ -784,6 +797,8 @@ async def confirm_completion(
                 "auth_method": evidence.auth_method,
             },
         )
+
+    if profile and not is_confirmed_demo:
         evaluation = await evaluate_regulatory_state(
             db,
             tenant_id=tenant_id,
