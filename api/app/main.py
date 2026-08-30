@@ -34,9 +34,11 @@ from app.api.routes import (
     payments,
     plans,
     privacy,
+    professional_evidence,
     reconciliation,
     regulatory_assessment_guards,
     regulatory_legacy_guards,
+    regulatory_readiness_guards,
     reports,
     sso,
     storage,
@@ -271,7 +273,15 @@ app.include_router(financial_admin.router, prefix="/api/v1/financial", tags=["fi
 app.include_router(reconciliation.router, prefix="/api/v1/financial/reconciliation", tags=["financial-reconciliation"])
 app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 app.include_router(privacy.router, prefix="/api/v1/privacy", tags=["privacy"])
+# Readiness guards must be registered before the legacy compliance router so
+# NR-10/NR-12 professional blockers are resolvable only through verified evidence.
+app.include_router(regulatory_readiness_guards.router, prefix="/api/v1/compliance")
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["nr-compliance"])
+app.include_router(
+    professional_evidence.router,
+    prefix="/api/v1/compliance",
+    tags=["nr-compliance-evidence"],
+)
 app.include_router(
     compliance_operations.router,
     prefix="/api/v1/compliance/operations",

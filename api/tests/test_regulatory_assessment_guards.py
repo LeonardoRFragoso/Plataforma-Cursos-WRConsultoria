@@ -47,7 +47,10 @@ async def test_legacy_assessment_confirmation_is_idempotent_for_regulatory_cours
     )
     assert first.status_code == 200, first.text
     assert first.json()["regulatory_state"] == "CERTIFICATE_PENDING_SIGNATURE"
-    assert first.json()["certificate_id"] is None
+    assert first.json()["certificate_id"] is not None
+    assert first.json()["certificate_number"].startswith("CERT-")
+    assert first.json()["validation_code"]
+    assert first.json()["is_demo"] is False
 
     repeated = await client.post(
         f"/api/v1/assessments/attempts/{started.json()['attempt_id']}/confirm",
@@ -56,4 +59,6 @@ async def test_legacy_assessment_confirmation_is_idempotent_for_regulatory_cours
     )
     assert repeated.status_code == 200, repeated.text
     assert repeated.json()["regulatory_state"] == "CERTIFICATE_PENDING_SIGNATURE"
-    assert repeated.json()["certificate_id"] is None
+    assert repeated.json()["certificate_id"] == first.json()["certificate_id"]
+    assert repeated.json()["certificate_number"] == first.json()["certificate_number"]
+    assert repeated.json()["validation_code"] == first.json()["validation_code"]
