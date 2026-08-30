@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -10,6 +10,20 @@ from app.models.professional_evidence import ProfessionalEvidenceStatus, Profess
 
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def _utc_naive(value: datetime | None) -> datetime | None:
+    """Normalize API timestamps for PostgreSQL DateTime columns.
+
+    Regulatory evidence accepts both offset-aware and naive inputs, while the
+    existing schema stores UTC as timezone-naive DateTime values. Normalizing
+    here prevents aware/naive comparison errors during issuance/expiry checks.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class ProfessionalEvidenceCreate(BaseModel):
@@ -42,6 +56,11 @@ class ProfessionalEvidenceCreate(BaseModel):
         if not _SHA256_RE.fullmatch(normalized):
             raise ValueError("document_sha256 must be a 64-character hexadecimal SHA-256 digest")
         return normalized
+
+    @field_validator("issued_at", "expires_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime | None) -> datetime | None:
+        return _utc_naive(value)
 
 
 class ProfessionalEvidenceDecision(BaseModel):
