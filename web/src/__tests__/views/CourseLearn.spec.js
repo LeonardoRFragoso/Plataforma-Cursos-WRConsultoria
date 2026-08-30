@@ -127,4 +127,92 @@ describe('CourseLearn View', () => {
     expect(wrapper.find('[data-testid="lessons-load-error"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Nenhuma aula foi cadastrada para este curso.')
   })
+
+  it('exibe a avaliação ao abrir um curso já 100% concluído', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
+      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
+      if (url.includes('/assessments/courses/')) return Promise.resolve({ data: { required: true, lessons_complete: true, minimum_score: 60, passed: false } })
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = await mountLearn()
+
+    expect(wrapper.find('[data-testid="final-assessment-card"]').attributes('data-assessment-status')).toBe('available')
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
+  })
+
+  it('mostra erro explícito e retry quando a consulta da avaliação retorna 429', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
+      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
+      if (url.includes('/assessments/courses/')) {
+        return Promise.reject({ response: { status: 429, data: { detail: 'Rate limit exceeded' } } })
+      }
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = await mountLearn()
+
+    expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="assessment-status-error"]').text()).toContain('Rate limit exceeded')
+    expect(wrapper.find('[data-testid="assessment-retry-button"]').exists()).toBe(true)
+  })
+
+  it('retry bem-sucedido libera a avaliação sem recarregar a página', async () => {
+    let assessmentCalls = 0
+    api.get.mockImplementation((url) => {
+      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
+      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: [{ ...defaultLessons[0], completed: true }] })
+      if (url.includes('/assessments/courses/')) {
+        assessmentCalls += 1
+        if (assessmentCalls === 1) {
+          return Promise.reject({ response: { status: 429, data: { detail: 'Rate limit exceeded' } } })
+        }
+        return Promise.resolve({ data: { required: true, lessons_complete: true, minimum_score: 60, passed: false } })
+      }
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = await mountLearn()
+    expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="assessment-retry-button"]').trigger('click')
+    await flushPromises()
+
+    expect(assessmentCalls).toBe(2)
+    expect(wrapper.find('[data-testid="assessment-status-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
+  })
+
+  it('reconsulta o status uma única vez após concluir uma aula manualmente', async () => {
+    let assessmentCalls = 0
+    api.get.mockImplementation((url) => {
+      if (url.includes('/my-progress')) return Promise.resolve({ data: { percentage: 100, completed_required: 1, required_lessons: 1 } })
+      if (url.includes('/lessons/courses/')) return Promise.resolve({ data: defaultLessons })
+      if (url.includes('/assessments/courses/')) {
+        assessmentCalls += 1
+        return Promise.resolve({ data: { required: true, lessons_complete: assessmentCalls > 1, minimum_score: 60, passed: false } })
+      }
+      if (url.includes('/courses/')) return Promise.resolve({ data: { id: 'course-1', name: 'Curso Teste' } })
+      if (url.includes('/watch-url')) return Promise.resolve({ data: { watch_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })
+      return Promise.resolve({ data: {} })
+    })
+    api.post.mockResolvedValue({ data: {} })
+
+    const wrapper = await mountLearn()
+    const lessonButton = wrapper.findAll('button').find((button) => button.text().includes('Aula de Teste'))
+    await lessonButton.trigger('click')
+    await flushPromises()
+
+    const completeButton = wrapper.findAll('button').find((button) => button.text().includes('Marcar como concluída'))
+    await completeButton.trigger('click')
+    await flushPromises()
+
+    expect(assessmentCalls).toBe(2)
+    expect(wrapper.find('[data-testid="assessment-start-button"]').exists()).toBe(true)
+  })
 })
