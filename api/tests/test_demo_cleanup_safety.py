@@ -14,14 +14,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.demo_markers import CURRENT_DEMO_EMAIL_DOMAIN
 from app.scripts.audit_demo_data import (
     DEMO_CERT_PREFIX,
     DEMO_CLASS_LOCATION,
-    DEMO_EMAIL_DOMAINS,
     _is_unambiguous_demo_cert,
     _is_unambiguous_demo_class,
     _is_unambiguous_demo_user,
 )
+
+# Use the explicit current marker for test fixtures (deterministic, not
+# dependent on frozenset iteration order).
+_DEMO_EMAIL_DOMAIN = f"@{CURRENT_DEMO_EMAIL_DOMAIN}"
 
 
 class TestUnambiguousDetection:
@@ -29,7 +33,7 @@ class TestUnambiguousDetection:
 
     def test_demo_user_detected(self):
         user = MagicMock()
-        user.email = f"student{DEMO_EMAIL_DOMAINS[0]}"
+        user.email = f"student{_DEMO_EMAIL_DOMAIN}"
         assert _is_unambiguous_demo_user(user) is True
 
     def test_real_user_not_demo(self):
@@ -168,7 +172,7 @@ class TestTransactionalDeletion:
         # Create mock demo data
         mock_user = MagicMock()
         mock_user.id = uuid.uuid4()
-        mock_user.email = f"test{DEMO_EMAIL_DOMAINS[0]}"
+        mock_user.email = f"test{_DEMO_EMAIL_DOMAIN}"
         mock_user.full_name = "Test Demo"
         mock_user.role = "STUDENT"
 
