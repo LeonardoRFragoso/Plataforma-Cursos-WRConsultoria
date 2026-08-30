@@ -78,6 +78,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(AdminAuditMiddleware)
@@ -136,10 +137,31 @@ async def integrity_error_handler(_request: Request, exc: IntegrityError):
     )
 
 
+def _rate_limit_response(request: Request, window_seconds: int) -> JSONResponse:
+    """Return a browser-safe 429 without reflecting untrusted origins."""
+    headers = {"Retry-After": str(window_seconds)}
+    origin = request.headers.get("origin")
+    if origin and origin in settings.CORS_ORIGINS:
+        headers.update(
+            {
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Vary": "Origin",
+            }
+        )
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "Rate limit exceeded"},
+        headers=headers,
+    )
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if not settings.RATE_LIMIT_ENABLED or request.url.path in (
-        "/health", "/health/live", "/health/ready", "/",
+    if (
+        not settings.RATE_LIMIT_ENABLED
+        or request.method == "OPTIONS"
+        or request.url.path in ("/health", "/health/live", "/health/ready", "/")
     ):
         return await call_next(request)
     backend = get_rate_limiter()
@@ -158,20 +180,14 @@ async def rate_limit_middleware(request: Request, call_next):
             settings.B2B_PREAUTH_RATE_LIMIT_REQUESTS,
             settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS,
         ):
-            return JSONResponse(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Rate limit exceeded"},
-            )
+            return _rate_limit_response(request, settings.B2B_PREAUTH_RATE_LIMIT_WINDOW_SECONDS)
         return await call_next(request)
     else:
         rate_key = f"ip:{get_client_ip(request)}"
         max_requests = settings.RATE_LIMIT_REQUESTS
         window_seconds = settings.RATE_LIMIT_WINDOW_SECONDS
         if not backend.is_allowed(rate_key, max_requests, window_seconds):
-            return JSONResponse(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Rate limit exceeded"},
-            )
+            return _rate_limit_response(request, window_seconds)
         return await call_next(request)
 
 
